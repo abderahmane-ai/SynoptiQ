@@ -11,7 +11,7 @@ learn manuscript-aware representations when needed.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from synoptiq.utils.types_ import TokenRecord
@@ -56,7 +56,7 @@ class KoineTokenizer:
         >>> ids = tok.encode_tokens(tokens)
     """
 
-    def __init__(self, tokenizer: Any) -> None:  # noqa: F821
+    def __init__(self, tokenizer: Any) -> None:
         self._tokenizer = tokenizer
 
     @classmethod
@@ -99,7 +99,7 @@ class KoineTokenizer:
         return len(self._tokenizer)
 
     @property
-    def tokenizer(self) -> Any:  # noqa: F821
+    def tokenizer(self) -> Any:
         """The underlying HuggingFace tokenizer."""
         return self._tokenizer
 

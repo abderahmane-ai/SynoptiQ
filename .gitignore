@@ -21,7 +21,7 @@ data/processed/
 data/external/
 
 # Model checkpoints (large binary files — upload to Modal volume)
-models/
+/models/
 
 # Outputs and figures
 outputs/
