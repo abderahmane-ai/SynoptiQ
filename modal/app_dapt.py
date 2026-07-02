@@ -80,22 +80,17 @@ def _get_volumes() -> tuple[Any, Any]:  # noqa: F821
     return data_vol, output_vol
 
 
-# ── Step 1: Upload data ────────────────────────────────────────────────────
+# ── Step 1: Upload data (runs locally) ──────────────────────────────────────
 
 
-@app.function(  # type: ignore[misc]
-    image=_build_image(),
-    volumes={"/data": modal.Volume.from_name(DATA_VOLUME, create_if_missing=True)},
-    timeout=600,
-) if modal is not None else None
+@app.local_entrypoint()  # type: ignore[misc]
 def upload_data() -> None:
     """Upload local data/raw/ to the Modal synoptiq-data volume.
 
-    Run once before training.  Skips files already present.
+    Runs on YOUR machine — copies files from the local filesystem into
+    the cloud volume.  Run once before training.  Skips files already
+    present.
     """
-    import os
-    import subprocess
-
     local_raw = Path("data/raw")
     if not local_raw.exists():
         print(f"ERROR: {local_raw} not found. Run prepare_data.py first.")
@@ -103,25 +98,23 @@ def upload_data() -> None:
 
     # Count local files
     local_files = sum(1 for _ in local_raw.rglob("*") if _.is_file())
-    print(f"Uploading {local_files} files from {local_raw} to /data/raw ...")
+    print(f"Uploading {local_files} files from {local_raw} ...")
 
-    # Use os.walk + open() to copy files into the volume.
-    # Modal volumes are writable at the mount path.
-    dest_root = Path("/data/raw")
-    dest_root.mkdir(parents=True, exist_ok=True)
+    # Use Modal CLI to batch-upload files into the volume.
+    # `modal volume put` handles large directories efficiently.
+    import subprocess
+    result = subprocess.run(
+        [
+            "modal", "volume", "put", DATA_VOLUME,
+            str(local_raw), "/raw",
+        ],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        print(f"Upload failed: {result.stderr}")
+        sys.exit(1)
 
-    copied = 0
-    for filepath in local_raw.rglob("*"):
-        if filepath.is_file():
-            rel = filepath.relative_to(local_raw)
-            dest = dest_root / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            if not dest.exists():
-                dest.write_bytes(filepath.read_bytes())
-                copied += 1
-
-    print(f"Upload complete: {copied} new files copied to Modal volume.")
-    print(f"Volume: {DATA_VOLUME} mounted at /data")
+    print(f"Upload complete. Volume: {DATA_VOLUME} (mounted at /data/raw)")
 
 
 # ── Step 2: Train (detached) ───────────────────────────────────────────────
