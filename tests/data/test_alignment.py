@@ -27,7 +27,7 @@ class TestMakeTokenKey:
 
     def test_key_tuple(self) -> None:
         t = _tk("καί", pos="C-", text="καί")
-        lemma, pos, norm = _make_token_key(t)
+        lemma, pos, _norm = _make_token_key(t)
         # _make_token_key strips accents
         assert lemma == "και"
         assert pos == "C-"
@@ -35,7 +35,7 @@ class TestMakeTokenKey:
     def test_punctuation_lemma_is_surface(self) -> None:
         t = _tk(".", pos="U-")
         t["text"] = "."
-        lemma, pos, _ = _make_token_key(t)
+        lemma, _pos, _ = _make_token_key(t)
         assert lemma == "."
 
 
