@@ -16,8 +16,11 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from pathlib import Path
+import json
+import os
 import re
+import signal
+from pathlib import Path
 from typing import Any
 import xml.etree.ElementTree as ET
 
@@ -313,110 +316,249 @@ class DAPTTrainer:
         """Training metric history (loss per step, val_loss per val step)."""
         return self._history
 
-    def run(self) -> dict[str, list[float]]:
-        """Execute the full DAPT training loop.
+    # Sentinel file written before each checkpoint save — if it exists when
+    # loading, the checkpoint is incomplete and should be skipped.
+    _INCOMPLETE_MARKER = ".incomplete"
+
+    def run(
+        self,
+        *,
+        resume: bool = True,
+        commit_volume: bool = False,
+        volume: Any = None,  # Modal Volume object
+    ) -> dict[str, list[float]]:
+        """Execute the DAPT training loop with crash-safe checkpoints.
+
+        Args:
+            resume: If True, auto-detect and resume from the latest checkpoint.
+            commit_volume: If True, call ``volume.commit()`` after each save
+                           (Modal persistence — survives spot preemption).
+            volume: Modal Volume object (required if *commit_volume* is True).
 
         Returns:
             Dict of metric histories (``loss``, ``val_loss``).
         """
         model = self._model
         config = self._config
+        output_dir = config.output_dir
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # ── Resume or fresh start ──────────────────────────────────────
+        start_step = 0
+        if resume:
+            start_step = self._find_latest_checkpoint()
+            if start_step > 0:
+                _LOG.info(f"resuming from step {start_step}")
+                self._load_training_state(output_dir / f"step-{start_step}")
+            else:
+                _LOG.info("no checkpoint found — starting fresh")
 
         model.enable_dapt()
         peft_model = model.model
 
-        self._optimizer = AdamW(peft_model.parameters(), lr=config.learning_rate)
-        self._scheduler = CosineAnnealingLR(self._optimizer, T_max=config.max_steps)
+        if self._optimizer is None:
+            self._optimizer = AdamW(peft_model.parameters(), lr=config.learning_rate)
+        if self._scheduler is None:
+            self._scheduler = CosineAnnealingLR(self._optimizer, T_max=config.max_steps)
 
         dataset = DAPTIterableDataset(
-            self._data_dir,
-            self._tokenizer,
-            max_length=config.max_length,
+            self._data_dir, self._tokenizer, max_length=config.max_length,
         )
         data_iter = iter(dataset)
+
+        # Skip ahead to resume point (replay data stream).
+        for _ in range(start_step):
+            next(data_iter)
+
+        use_amp = config.use_amp and self._device.startswith("cuda")
+        scaler = torch.amp.GradScaler("cuda") if use_amp else None
+
+        # ── SIGTERM handler (spot preemption) ──────────────────────────
+        interrupted = False
+
+        def _handle_sigterm(signum: int, frame: Any) -> None:
+            nonlocal interrupted
+            _LOG.warning("SIGTERM received — saving emergency checkpoint")
+            interrupted = True
+
+        prev_handler = signal.signal(signal.SIGTERM, _handle_sigterm)
 
         _LOG.info(
             "DAPT training starting",
             extra={
+                "start_step": start_step,
                 "max_steps": config.max_steps,
                 "batch_size": config.batch_size,
                 "lr": config.learning_rate,
                 "device": self._device,
+                "amp": use_amp,
             },
         )
-
-        # AMP: automatic mixed precision for ~2× speedup on supported GPUs.
-        use_amp = config.use_amp and self._device.startswith("cuda")
-        scaler = torch.amp.GradScaler("cuda") if use_amp else None
 
         accum_loss = 0.0
         model.train()
 
-        for step in range(1, config.max_steps + 1):
-            self._optimizer.zero_grad()
-            micro_loss = 0.0
+        try:
+            for step in range(start_step + 1, config.max_steps + 1):
+                if interrupted:
+                    self._save_checkpoint(step, scaler, commit_volume, volume, emergency=True)
+                    break
 
-            for _ in range(config.grad_accum_steps):
-                sample = next(data_iter)
-                input_ids = sample["input_ids"].unsqueeze(0).to(self._device)
-                labels = sample["labels"].unsqueeze(0).to(self._device)
-                attention_mask = torch.ones_like(input_ids)
+                self._optimizer.zero_grad()
+                micro_loss = 0.0
 
-                with torch.amp.autocast("cuda") if use_amp else torch.no_grad():
-                    outputs = peft_model(
-                        input_ids=input_ids,
-                        attention_mask=attention_mask,
-                        labels=labels,
-                    )
-                loss = outputs.loss / config.grad_accum_steps
+                for _ in range(config.grad_accum_steps):
+                    sample = next(data_iter)
+                    input_ids = sample["input_ids"].unsqueeze(0).to(self._device)
+                    labels = sample["labels"].unsqueeze(0).to(self._device)
+                    attention_mask = torch.ones_like(input_ids)
+
+                    with torch.amp.autocast("cuda") if use_amp else torch.no_grad():
+                        outputs = peft_model(
+                            input_ids=input_ids, attention_mask=attention_mask, labels=labels,
+                        )
+                    loss = outputs.loss / config.grad_accum_steps
+                    if scaler is not None:
+                        scaler.scale(loss).backward()
+                    else:
+                        loss.backward()
+                    micro_loss += loss.item()
+
                 if scaler is not None:
-                    scaler.scale(loss).backward()
+                    scaler.step(self._optimizer)
+                    scaler.update()
                 else:
-                    loss.backward()
-                micro_loss += loss.item()
+                    self._optimizer.step()
+                self._scheduler.step()
 
-            if scaler is not None:
-                scaler.step(self._optimizer)
-                scaler.update()
-            else:
-                self._optimizer.step()
-            self._scheduler.step()
+                self._history["loss"].append(micro_loss)
+                accum_loss += micro_loss
 
-            current_loss = micro_loss
-            accum_loss += current_loss
-            self._history["loss"].append(current_loss)
+                if step % 100 == 0:
+                    avg_loss = accum_loss / 100
+                    lr = self._scheduler.get_last_lr()[0]
+                    _LOG.info(f"step {step}/{config.max_steps}", extra={
+                        "loss": f"{avg_loss:.4f}", "lr": f"{lr:.2e}",
+                    })
+                    accum_loss = 0.0
 
-            # ── Logging ─────────────────────────────────────────────────
-            if step % 100 == 0:
-                avg_loss = accum_loss / 100
-                lr = self._scheduler.get_last_lr()[0]
-                _LOG.info(
-                    f"step {step}/{config.max_steps}",
-                    extra={"loss": f"{avg_loss:.4f}", "lr": f"{lr:.2e}"},
-                )
-                accum_loss = 0.0
+                if step % config.val_steps == 0:
+                    val_loss = self._validate(num_samples=20)
+                    self._history["val_loss"].append(val_loss)
+                    _LOG.info(f"validation @ {step}", extra={"val_loss": f"{val_loss:.4f}"})
+                    model.train()
 
-            # ── Validation ──────────────────────────────────────────────
-            if step % config.val_steps == 0:
-                val_loss = self._validate(num_samples=20)
-                self._history["val_loss"].append(val_loss)
-                _LOG.info(
-                    f"validation @ step {step}",
-                    extra={"val_loss": f"{val_loss:.4f}"},
-                )
-                model.train()  # restore training mode
+                if step % config.save_steps == 0 and step > start_step:
+                    self._save_checkpoint(step, scaler, commit_volume, volume)
 
-            # ── Checkpoint ──────────────────────────────────────────────
-            if step % config.save_steps == 0:
-                ckpt_dir = config.output_dir / f"step-{step}"
-                model.save_adapters(ckpt_dir)
+        finally:
+            signal.signal(signal.SIGTERM, prev_handler)
 
-        # Final save
-        final_dir = config.output_dir / "final"
-        model.save_adapters(final_dir)
-        _LOG.info("DAPT training complete", extra={"final_path": str(final_dir)})
+        # Final save (only if not interrupted)
+        if not interrupted:
+            self._save_checkpoint(config.max_steps, scaler, commit_volume, volume, final=True)
+            _LOG.info("DAPT training complete", extra={"final_path": str(output_dir / "final")})
+        else:
+            _LOG.info("DAPT training interrupted — checkpoint saved, resume later")
 
         return self._history
+
+    # ── Checkpoint persistence ───────────────────────────────────────────
+
+    def _find_latest_checkpoint(self) -> int:
+        """Return the highest completed checkpoint step, or 0 if none."""
+        output_dir = self._config.output_dir
+        if not output_dir.exists():
+            return 0
+        steps = []
+        for d in output_dir.iterdir():
+            if d.is_dir() and d.name.startswith("step-"):
+                try:
+                    s = int(d.name.split("-")[1])
+                    # Skip incomplete checkpoints
+                    if not (d / self._INCOMPLETE_MARKER).exists():
+                        # Verify adapter file exists and is non-empty
+                        adapter = d / "adapter_model.safetensors"
+                        if adapter.exists() and adapter.stat().st_size > 1000:
+                            steps.append(s)
+                except (ValueError, IndexError):
+                    continue
+        return max(steps) if steps else 0
+
+    def _save_checkpoint(
+        self,
+        step: int,
+        scaler: Any,
+        commit_volume: bool,
+        volume: Any,
+        *,
+        emergency: bool = False,
+        final: bool = False,
+    ) -> None:
+        """Save adapters + full training state to a crash-safe checkpoint."""
+        output_dir = self._config.output_dir
+        label = "final" if final else f"step-{step}"
+        ckpt_dir = output_dir / label
+
+        # Mark as incomplete before writing (crash-safe).
+        marker = ckpt_dir / self._INCOMPLETE_MARKER
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
+        marker.write_text("")
+
+        # Save adapters.
+        self._model.save_adapters(ckpt_dir)
+
+        # Save full training state for exact resume.
+        state = {
+            "step": step,
+            "optimizer": self._optimizer.state_dict() if self._optimizer else None,
+            "scheduler": self._scheduler.state_dict() if self._scheduler else None,
+            "scaler": scaler.state_dict() if scaler else None,
+            "history": self._history,
+        }
+        torch.save(state, ckpt_dir / "training_state.pt")
+
+        # Remove incomplete marker — checkpoint is now valid.
+        marker.unlink()
+
+        # Commit Modal volume so checkpoint survives spot preemption.
+        if commit_volume and volume is not None:
+            try:
+                volume.commit()
+            except Exception as exc:
+                _LOG.warning(f"volume commit failed: {exc}")
+
+        tag = "emergency" if emergency else ("final" if final else "")
+        _LOG.info(f"checkpoint saved {tag}", extra={"step": step, "path": str(ckpt_dir)})
+
+    def _load_training_state(self, ckpt_dir: Path) -> None:
+        """Restore optimizer, scheduler, scaler, and history from a checkpoint."""
+        state_path = ckpt_dir / "training_state.pt"
+        if not state_path.exists():
+            _LOG.warning("no training state found — optimizer reset")
+            return
+
+        state = torch.load(state_path, map_location=self._device, weights_only=False)
+
+        # Restore adapters
+        self._model.load_adapters(ckpt_dir)
+
+        # Restore optimizer
+        if state.get("optimizer") and self._model.model is not None:
+            self._optimizer = AdamW(self._model.model.parameters(), lr=self._config.learning_rate)
+            self._optimizer.load_state_dict(state["optimizer"])
+
+        # Restore scheduler
+        if state.get("scheduler") and self._optimizer:
+            self._scheduler = CosineAnnealingLR(self._optimizer, T_max=self._config.max_steps)
+            if hasattr(self._scheduler, "load_state_dict"):
+                self._scheduler.load_state_dict(state["scheduler"])
+
+        # Restore history
+        if state.get("history"):
+            self._history = state["history"]
+
+        _LOG.info("training state restored", extra={"step": state.get("step", "?")})
 
     def _validate(self, *, num_samples: int = 20) -> float:
         """Compute mean loss on *num_samples* fresh chunks."""
