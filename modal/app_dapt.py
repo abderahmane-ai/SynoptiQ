@@ -63,6 +63,7 @@ def _build_image() -> Any:  # noqa: F821
     # Copy the project source into the image and install it.
     image = image.add_local_dir("synoptiq", "/app/synoptiq", copy=True)
     image = image.add_local_file("pyproject.toml", "/app/pyproject.toml", copy=True)
+    image = image.add_local_file("README.md", "/app/README.md", copy=True)
     image = image.run_commands("pip install /app/")
     return image
 
