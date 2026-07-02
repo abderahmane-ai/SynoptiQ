@@ -75,7 +75,8 @@ def main() -> int:
         _LOG.info("=== ZERO-SHOT GRETA ===")
         model = KoineFormer.from_pretrained(device=device)
         tokenizer = AutoTokenizer.from_pretrained(model.model_id)
-        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+        model.model.resize_token_embeddings(len(tokenizer))
 
         pos_result = evaluate_pos_tagging(model, corpus, tokenizer, split="test", device=device)
         results["GreTa (zero-shot)"] = {
@@ -90,7 +91,8 @@ def main() -> int:
         model = KoineFormer.from_pretrained(device=device)
         model.load_adapters(args.dapt_checkpoint)
         tokenizer = AutoTokenizer.from_pretrained(model.model_id)
-        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+        model.model.resize_token_embeddings(len(tokenizer))
 
         pos_result = evaluate_pos_tagging(model, corpus, tokenizer, split="test", device=device)
         results["KoineFormer (DAPT)"] = {

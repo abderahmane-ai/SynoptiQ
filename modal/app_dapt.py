@@ -201,6 +201,98 @@ def start_training() -> None:
     print(f"{'='*50}")
 
 
+# ── Step 3: Ablation (LoRA vs full fine-tune) ──────────────────────────────
+
+
+@app.function(  # type: ignore[misc]
+    gpu=GPU_TYPE,
+    image=_build_image(),
+    volumes={
+        "/data": modal.Volume.from_name(DATA_VOLUME, create_if_missing=True),
+        "/outputs": modal.Volume.from_name(OUTPUT_VOLUME, create_if_missing=True),
+    },
+    timeout=3600,
+) if modal is not None else None
+def run_ablation(n_steps: int = 2_000) -> None:
+    """Run LoRA vs full fine-tune ablation on Modal GPU.
+
+    Trains both variants for *n_steps* and saves loss curves to the output
+    volume.  Full FT typically collapses after 1-2K steps on 1M-token data.
+    """
+    import json
+
+    import torch
+    from torch.optim import AdamW
+    from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+    from synoptiq.models.koineformer import KoineFormer
+    from synoptiq.training.dapt import DAPTIterableDataset
+
+    data_dir = Path("/data/raw")
+    output_dir = Path("/outputs/ablation")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    device = "cuda"
+
+    tokenizer = AutoTokenizer.from_pretrained("bowphs/GreTa")
+    tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+
+    def _train(model_obj, label, steps):
+        ds = DAPTIterableDataset(data_dir, tokenizer, max_length=512)
+        it = iter(ds)
+        opt = AdamW(model_obj.parameters(), lr=1e-4)
+        losses = []
+        model_obj.train()
+        for s in range(1, steps + 1):
+            sample = next(it)
+            input_ids = sample["input_ids"].unsqueeze(0).to(device)
+            labels = sample["labels"].unsqueeze(0).to(device)
+            mask = torch.ones_like(input_ids)
+            opt.zero_grad()
+            with torch.amp.autocast("cuda"):
+                out = model_obj(input_ids=input_ids, attention_mask=mask, labels=labels)
+            out.loss.backward()
+            opt.step()
+            losses.append(out.loss.item())
+            if s % 200 == 0:
+                print(f"  [{label}] step {s}/{steps}: loss={out.loss.item():.4f}")
+        return losses
+
+    # Variant 1: LoRA
+    print("=== LoRA DAPT ===")
+    lora_model = KoineFormer.from_pretrained(device=device)
+    lora_model.enable_dapt()
+    peft_m = lora_model.model
+    peft_m.resize_token_embeddings(len(tokenizer))
+    lora_losses = _train(peft_m, "LoRA", n_steps)
+
+    # Variant 2: Full fine-tune (raw GreTa)
+    print("=== Full Fine-Tune ===")
+    raw = AutoModelForSeq2SeqLM.from_pretrained("bowphs/GreTa", torch_dtype=torch.float32).to(device)
+    if hasattr(raw.config, "tie_word_embeddings"):
+        raw.config.tie_word_embeddings = False
+    raw.resize_token_embeddings(len(tokenizer))
+    ft_losses = _train(raw, "Full FT", n_steps)
+
+    # Report
+    lora_end = lora_losses[-1]
+    ft_end = ft_losses[-1]
+    print(f"\n{'='*50}")
+    print(f"  LoRA final loss: {lora_end:.4f}")
+    print(f"  Full FT final loss: {ft_end:.4f}")
+    print(f"  {'✓ LoRA wins' if lora_end < ft_end else 'Full FT lower loss'}")
+
+    results = {
+        "steps": n_steps,
+        "lora_losses": lora_losses,
+        "lora_final": lora_end,
+        "fullft_losses": ft_losses,
+        "fullft_final": ft_end,
+        "verdict": "lora_wins" if lora_end < ft_end else "fullft_lower",
+    }
+    (output_dir / "ablation_results.json").write_text(json.dumps(results, indent=2))
+    print(f"Results: /outputs/ablation/ablation_results.json")
+
+
 # ── Local entrypoint ───────────────────────────────────────────────────────
 
 
