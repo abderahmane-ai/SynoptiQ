@@ -100,21 +100,30 @@ def upload_data() -> None:
     local_files = sum(1 for _ in local_raw.rglob("*") if _.is_file())
     print(f"Uploading {local_files} files from {local_raw} ...")
 
-    # Use Modal CLI to batch-upload files into the volume.
-    # `modal volume put` handles large directories efficiently.
+    # Upload raw corpora.
     import subprocess
     result = subprocess.run(
-        [
-            "modal", "volume", "put", DATA_VOLUME,
-            str(local_raw), "/raw",
-        ],
+        ["modal", "volume", "put", "--force", DATA_VOLUME, str(local_raw), "/raw"],
         capture_output=True, text=True,
     )
     if result.returncode != 0:
-        print(f"Upload failed: {result.stderr}")
+        print(f"Raw upload failed: {result.stderr}")
         sys.exit(1)
+    print(f"Raw data uploaded.")
 
-    print(f"Upload complete. Volume: {DATA_VOLUME} (mounted at /data/raw)")
+    # Also upload processed Parquet files (needed for eval on Modal).
+    local_proc = Path("data/processed")
+    if local_proc.exists():
+        result = subprocess.run(
+            ["modal", "volume", "put", DATA_VOLUME, str(local_proc), "/processed"],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            print(f"Processed upload failed: {result.stderr}")
+        else:
+            print(f"Processed data uploaded.")
+
+    print(f"Upload complete. Volume: {DATA_VOLUME}")
 
 
 # ── Step 2: Train (detached) ───────────────────────────────────────────────
@@ -291,6 +300,218 @@ def run_ablation(n_steps: int = 2_000) -> None:
     }
     (output_dir / "ablation_results.json").write_text(json.dumps(results, indent=2))
     print(f"Results: /outputs/ablation/ablation_results.json")
+
+
+# ── Step 4: Full FT DAPT + downstream eval ────────────────────────────────
+
+
+@app.function(  # type: ignore[misc]
+    gpu=GPU_TYPE,
+    image=_build_image(),
+    volumes={
+        "/data": modal.Volume.from_name(DATA_VOLUME, create_if_missing=True),
+        "/outputs": modal.Volume.from_name(OUTPUT_VOLUME, create_if_missing=True),
+    },
+    timeout=TIMEOUT_SECONDS,
+) if modal is not None else None
+def train_and_eval_full_ft() -> None:
+    """Train full fine-tune DAPT and evaluate downstream POS accuracy.
+
+    Trains GreTa without LoRA on Koine DAPT for 20K steps, then evaluates
+    POS tagging accuracy using the same linear-probe protocol used for the
+    zero-shot and LoRA models.  Saves results to /outputs/full_ft/.
+    """
+    import json
+    from collections import defaultdict
+
+    import torch
+    from torch.optim import AdamW
+    from torch.optim.lr_scheduler import CosineAnnealingLR
+    from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+    from synoptiq.training.dapt import DAPTIterableDataset
+
+    device = "cuda"
+    bsz, n_steps = 8, 20_000
+    output_dir = Path("/outputs/full_ft")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # ── Load model + tokenizer ─────────────────────────────────────────
+    print("Loading raw GreTa (no LoRA) for full fine-tune...")
+    model = AutoModelForSeq2SeqLM.from_pretrained("bowphs/GreTa", torch_dtype=torch.float32).to(device)
+    if hasattr(model.config, "tie_word_embeddings"):
+        model.config.tie_word_embeddings = False
+
+    tokenizer = AutoTokenizer.from_pretrained("bowphs/GreTa")
+    tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+    model.resize_token_embeddings(len(tokenizer))
+
+    trainable = sum(p.numel() for p in model.parameters())
+    print(f"Trainable params: {trainable:,}")
+
+    # ── Train ──────────────────────────────────────────────────────────
+    ds = DAPTIterableDataset(Path("/data/raw"), tokenizer, max_length=512)
+    it = iter(ds)
+    opt = AdamW(model.parameters(), lr=1e-4)
+    sched = CosineAnnealingLR(opt, T_max=n_steps)
+    scaler = torch.amp.GradScaler("cuda")
+
+    model.train()
+    losses: list[float] = []
+    best_loss = float("inf")
+
+    print(f"Training full FT DAPT: {n_steps} steps, batch={bsz}")
+    for step in range(1, n_steps + 1):
+        opt.zero_grad()
+        for _ in range(1):  # grad accum = 1
+            sample = next(it)
+            input_ids = sample["input_ids"].unsqueeze(0).to(device)
+            labels = sample["labels"].unsqueeze(0).to(device)
+            mask = torch.ones_like(input_ids)
+            with torch.amp.autocast("cuda"):
+                outputs = model(input_ids=input_ids, attention_mask=mask, labels=labels)
+            scaler.scale(outputs.loss).backward()
+        scaler.step(opt)
+        scaler.update()
+        sched.step()
+
+        losses.append(outputs.loss.item())
+        if step % 500 == 0:
+            avg = sum(losses[-100:]) / min(100, len(losses))
+            print(f"  step {step}/{n_steps}: loss={avg:.4f}  lr={sched.get_last_lr()[0]:.2e}")
+
+        if step % 2_000 == 0:
+            ckpt = output_dir / f"step-{step}"
+            ckpt.mkdir(parents=True, exist_ok=True)
+            model.save_pretrained(str(ckpt))
+
+    # Final save
+    final_dir = output_dir / "final"
+    model.save_pretrained(str(final_dir))
+    print(f"Full FT DAPT complete. Final loss: {losses[-1]:.4f}")
+
+    # ── Evaluate downstream POS accuracy ──────────────────────────────
+    print("Evaluating downstream POS tagging...")
+
+    # We need the SynoptiQ Corpus.  Load it from /data/processed/ or
+    # reconstruct from the raw data that was uploaded.  Since we uploaded
+    # data/raw/ only, we load the tokenizer-based probe directly from
+    # the encoder hidden states.
+
+    # Build a simple POS tag set from the encoder's behavior.
+    # We evaluate by extracting hidden states on test verses and training
+    # a linear probe on train verses — same protocol as local eval.
+    from synoptiq.training.dapt import _extract_text_from_dir
+
+    # We need the processed corpus.  Reconstruct via the Corpus API
+    # using the Parquet files if they exist on the volume, otherwise
+    # fall back to a head-only probe.
+    import sys
+    sys.path.insert(0, "/app")
+    from synoptiq.data.corpus import Corpus
+
+    processed = Path("/data/processed")
+    if processed.exists():
+        corpus = Corpus.from_parquet(
+            processed / "tokens.parquet",
+            processed / "pericopes.parquet",
+            alignments_path=processed / "alignments.json",
+            splits_path=processed / "splits.json",
+        )
+    else:
+        print("No processed corpus on volume — cannot evaluate POS. "
+              "Run upload_data with processed/ files too.")
+        return
+
+    # POS tag vocabulary
+    pos_to_idx: dict[str, int] = {}
+    for token in corpus.get_tokens(split="train"):
+        p = token.get("pos", "")
+        if p and p not in pos_to_idx:
+            pos_to_idx[p] = len(pos_to_idx)
+    n_classes = len(pos_to_idx)
+    print(f"POS classes: {n_classes}")
+
+    # Extract per-word hidden states
+    encoder = model.encoder
+    encoder.eval()
+
+    def _extract(data_split, max_verses=500):
+        all_h, all_l = [], []
+        n_v = 0
+        for book in ("Matthew", "Mark", "Luke"):
+            tokens = corpus.get_tokens(book=book, split=data_split)
+            verses = defaultdict(list)
+            for t in tokens:
+                if n_v >= max_verses:
+                    break
+                verses[(int(t["chapter"]), int(t["verse"]))].append(t)
+            for vref, vt in verses.items():
+                if n_v >= max_verses or len(vt) < 3:
+                    continue
+                n_v += 1
+                text = " ".join(str(t["text"]) for t in vt)
+                enc = tokenizer(text, max_length=128, truncation=True,
+                                padding="max_length", return_tensors="pt")
+                ids = enc["input_ids"].to(device)
+                am = enc["attention_mask"].to(device)
+                with torch.no_grad():
+                    h = encoder(input_ids=ids, attention_mask=am).last_hidden_state[0]
+                stoks = tokenizer.convert_ids_to_tokens(ids[0])
+                boundaries = [si for si, st in enumerate(stoks)
+                              if st.startswith("▁") or si == 0 or st == "[PAD]"]
+                for wi, ws in enumerate(boundaries):
+                    if wi >= len(vt):
+                        break
+                    we = boundaries[wi + 1] if wi + 1 < len(boundaries) else len(stoks)
+                    we = min(we, am.sum().item())
+                    if ws >= we:
+                        continue
+                    wh = h[ws:we].mean(dim=0)
+                    p = vt[wi].get("pos", "")
+                    if p in pos_to_idx:
+                        all_h.append(wh.cpu())
+                        all_l.append(pos_to_idx[p])
+        if not all_h:
+            return torch.zeros(0, 768), torch.zeros(0, dtype=torch.long)
+        return torch.stack(all_h), torch.tensor(all_l, dtype=torch.long)
+
+    X_train, y_train = _extract("train")
+    X_test, y_test = _extract("test")
+    print(f"Train: {len(X_train)} tokens, Test: {len(X_test)} tokens")
+
+    # Linear probe
+    probe = torch.nn.Linear(768, n_classes).to(device)
+    opt_p = torch.optim.AdamW(probe.parameters(), lr=1e-3)
+    crit = torch.nn.CrossEntropyLoss()
+    Xt, yt = X_train.to(device), y_train.to(device)
+    probe.train()
+    for ep in range(10):
+        perm = torch.randperm(len(Xt))
+        for i in range(0, len(Xt), 128):
+            idx = perm[i:i + 128]
+            opt_p.zero_grad()
+            crit(probe(Xt[idx]), yt[idx]).backward()
+            opt_p.step()
+    probe.eval()
+    with torch.no_grad():
+        preds = probe(X_test.to(device)).argmax(dim=1)
+        acc = (preds == y_test.to(device)).sum().item() / len(y_test)
+    print(f"\n  Full FT DAPT POS accuracy: {acc:.2%} ({acc*100:.1f}%)")
+
+    # Save results
+    results = {
+        "model": "GreTa full fine-tune DAPT (20K steps)",
+        "pos_accuracy": acc,
+        "n_test_tokens": len(y_test),
+        "final_training_loss": losses[-1],
+        "best_training_loss": min(losses),
+    }
+    (output_dir / "results.json").write_text(json.dumps(results, indent=2, ensure_ascii=False))
+    print(f"\n{'='*50}")
+    print(f"Full FT POS accuracy: {acc:.2%}")
+    print(f"Results saved: /outputs/full_ft/results.json")
+    print(f"{'='*50}")
 
 
 # ── Local entrypoint ───────────────────────────────────────────────────────
