@@ -50,7 +50,7 @@ _REQUIREMENTS = [
 
 
 def _build_image() -> Any:  # noqa: F821
-    """Build the Modal container image."""
+    """Build the Modal container image with SynoptiQ installed."""
     if modal is None:
         msg = "Modal not installed — run with `modal run`"
         raise RuntimeError(msg)
@@ -58,8 +58,12 @@ def _build_image() -> Any:  # noqa: F821
     image = modal.Image.debian_slim(python_version=IMAGE_PYTHON)
     for req in _REQUIREMENTS:
         image = image.pip_install(req)
-    # Install SynoptiQ from the project root.
-    image = image.pip_install(".")
+    # Also install core SynoptiQ deps that aren't in the GPU list.
+    image = image.pip_install("pandas", "pyarrow", "biopython", "pyyaml", "tqdm", "numpy")
+    # Copy the project source into the image and install it.
+    image = image.add_local_dir("synoptiq", "/app/synoptiq", copy=True)
+    image = image.add_local_file("pyproject.toml", "/app/pyproject.toml", copy=True)
+    image = image.run_commands("pip install /app/")
     return image
 
 
