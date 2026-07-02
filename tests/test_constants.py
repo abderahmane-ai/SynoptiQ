@@ -6,7 +6,6 @@ These tests validate spot-checks against the print Synopsis.
 
 from __future__ import annotations
 
-
 from synoptiq.utils.constants import (
     ALAND_PERICOPES,
     GOODACRE_FATIGUE_PERICOPES,

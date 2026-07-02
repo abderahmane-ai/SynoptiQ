@@ -42,29 +42,31 @@ SynoptiQ/
 Before every commit, in this exact order:
 
 ```bash
-# 1. Clean all caches
+# 1. Lint and auto-fix
+python3 -m ruff check synoptiq/ tests/ scripts/ --fix
+python3 -m ruff format synoptiq/ tests/ scripts/
+
+# 2. Run full test suite
+python3 -m pytest tests/ -q --tb=short
+
+# 3. Clean all caches
 find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
 find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null
 find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null
 find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null
 find . -name "*.pyc" -delete
 
-# 2. Run full test suite
-python3 -m pytest tests/ -q --tb=short
-
-# 3. Lint
-python3 -m ruff check synoptiq/ tests/ scripts/
-
-# 4. Format
-python3 -m ruff format synoptiq/ tests/ scripts/
+# 4. Commit
+git add -A
+git commit -m "<message>"
 ```
 
-All tests must pass. Ruff should show zero F or E level errors.
-(TC, UP, RUF, ANN, B90 warnings are cosmetic and can be deferred.)
+All tests must pass. Ruff should show zero F or E level errors (TC, UP, RUF, ANN, B90 warnings are cosmetic).
+Tests run FIRST, caches cleaned AFTER (so cached .pyc files don't pollute the commit).
 
 Or use the Makefile shortcut:
 ```bash
-make check   # lint + format check + typecheck + test
+make check   # ruff format + ruff check + mypy + pytest
 ```
 
 ## Architecture summary

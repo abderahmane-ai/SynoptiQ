@@ -30,8 +30,8 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 from synoptiq.utils.constants import SBLGNT_BOOK_IDS
-from synoptiq.utils.logging_ import get_logger
 from synoptiq.utils.greek import normalize_greek
+from synoptiq.utils.logging_ import get_logger
 from synoptiq.utils.types_ import Book
 
 _LOG = get_logger(__name__)

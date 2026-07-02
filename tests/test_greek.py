@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 from synoptiq.utils.greek import (
     is_greek,
     normalize_greek,

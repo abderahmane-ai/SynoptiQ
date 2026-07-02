@@ -26,8 +26,8 @@ Go/No-Go validation:
 
 from __future__ import annotations
 
-from pathlib import Path
 import argparse
+from pathlib import Path
 import sys
 
 # Ensure scripts/ dir is on path when running from project root
