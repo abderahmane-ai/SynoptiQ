@@ -1,0 +1,39 @@
+# Base model (confirmed HuggingFace ID — bowphs/GreTa, T5-base architecture)
+base_model: bowphs/GreTa
+model_type: t5-base
+max_seq_length: 512
+hidden_dim: 768
+num_attention_heads: 12
+num_encoder_layers: 12
+num_decoder_layers: 12
+
+# Regularization
+hidden_dropout_prob: 0.1
+attention_probs_dropout_prob: 0.1
+
+# LoRA (Phases 2–5: task-specific adapters only; backbone frozen)
+lora_rank: 16
+lora_alpha: 32
+lora_dropout: 0.05
+lora_target_modules:
+  - q
+  - k
+  - v
+  - o
+
+# Direction scorer head (Phase 3)
+direction_num_classes: 3      # A→B, B→A, independent
+cross_attn_num_heads: 8
+asymmetry_mlp_hidden: 512
+asymmetry_num_features: 8
+
+# Adversarial de-biasing (GRL — Phase 3)
+num_author_classes: 3         # Matthew, Mark, Luke
+lambda_adversarial: 0.1
+
+# Q reconstruction (FiD — Phase 5)
+fid_num_beams: 5
+fid_temperature: 1.0
+fid_max_generation_length: 512
+fid_min_generation_length: 3
+fid_vocab_size: 32128         # GreTa SentencePiece: 32K base + 128 sentinels

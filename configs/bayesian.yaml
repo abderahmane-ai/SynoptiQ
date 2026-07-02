@@ -1,0 +1,23 @@
+# Bayesian model comparison configuration (Phase 6)
+
+# MCMC (PyMC NUTS sampler)
+num_chains: 4
+num_warmup: 500
+num_samples: 2000
+target_accept: 0.90
+random_seed: 42
+
+# Bridge sampling (via rpy2 → R bridgesampling package)
+bridge_n_iterations: 50000
+
+# Prior sensitivity analysis
+# Grid sweep over Gamma(alpha, beta) priors
+prior_alpha_range: [1.0, 5.0, 5]   # [start, stop, n_steps]
+prior_beta_range:  [1.0, 5.0, 5]
+
+# Convergence thresholds
+r_hat_threshold: 1.01   # Must be < 1.01 for all parameters
+min_ess: 400            # Minimum effective sample size
+
+# Uncertainty estimation via MC Dropout (input to Bayesian model)
+mc_dropout_passes: 20   # Forward passes per pericope

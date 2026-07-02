@@ -1,0 +1,190 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "synoptiq"
+version = "0.1.0"
+description = "A multi-task neural source criticism framework for the Synoptic Problem"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "SynoptiQ Contributors" }]
+requires-python = ">=3.12"
+keywords = ["nlp", "ancient-greek", "synoptic-problem", "biblical-studies", "deep-learning"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Linguistic",
+]
+
+# Core dependencies (always required)
+dependencies = [
+    "pandas>=2.2",
+    "pyarrow>=16.0",        # Parquet I/O
+    "biopython>=1.85",      # Needleman-Wunsch (Bio.Align.PairwiseAligner)
+    "pyyaml>=6.0",
+    "tqdm>=4.67",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+# Data pipeline
+data = [
+    "requests>=2.32",
+    "lxml>=5.0",            # Faster XML parsing (PROIEL TEI, First1KGreek)
+]
+
+# ML training (Phases 2–5)
+train = [
+    "torch>=2.6",
+    "transformers>=4.51",
+    "peft>=0.15",
+    "datasets>=3.3",
+    "accelerate>=1.3",
+    "sentencepiece>=0.2",
+    "scikit-learn>=1.6",
+    "wandb>=0.19",
+]
+
+# Bayesian comparison (Phase 6)
+bayesian = [
+    "pymc>=5.16",
+    "arviz>=0.19",
+    "rpy2>=3.5",            # Bridge sampling via R bridgesampling package
+]
+
+# Interpretability (Phase 7)
+interp = [
+    "shap>=0.46",
+    "bertviz>=1.4",
+    "matplotlib>=3.9",
+    "seaborn>=0.13",
+]
+
+# Modal (cloud training)
+modal = [
+    "modal>=0.67",
+]
+
+# Development toolchain
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "types-PyYAML",
+    "pandas-stubs",
+    "synoptiq[data]",      # Data pipeline needed for tests
+]
+
+# All optional dependencies (useful for local full-stack dev)
+all = [
+    "synoptiq[data,train,bayesian,interp,modal,dev]",
+]
+
+[project.scripts]
+synoptiq-prepare = "scripts.prepare_data:main"
+synoptiq-eval = "scripts.eval_all:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["synoptiq"]
+
+# ── Ruff (linter + formatter) ─────────────────────────────────────────────────
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["synoptiq", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "UP",   # pyupgrade
+    "RUF",  # Ruff-specific rules
+    "TID",  # flake8-tidy-imports
+    "TCH",  # flake8-type-checking
+    "PIE",  # flake8-pie
+    "N",    # pep8-naming
+    "ANN",  # flake8-annotations (partial — exclude return type of __init__)
+]
+ignore = [
+    "ANN101",  # Missing type annotation for `self`
+    "ANN102",  # Missing type annotation for `cls`
+    "ANN204",  # Missing return type annotation for special method
+    "E501",    # Line too long (handled by formatter)
+]
+unfixable = ["F401"]  # Unused imports — remove manually to avoid deleting needed re-exports
+
+[tool.ruff.lint.isort]
+known-first-party = ["synoptiq"]
+force-sort-within-sections = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+
+# ── Mypy (static type checker) ────────────────────────────────────────────────
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_any_generics = false   # Too noisy for research code
+ignore_missing_imports = true   # Many ML libs lack stubs
+no_implicit_reexport = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = ["Bio.*", "wandb", "modal.*", "pymc.*", "arviz.*", "rpy2.*", "shap.*"]
+ignore_missing_imports = true
+
+# ── Pytest ────────────────────────────────────────────────────────────────────
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+    "--tb=short",
+    "--strict-markers",
+    "-q",
+]
+markers = [
+    "slow: marks tests that are slow (deselect with '-m not slow')",
+    "gpu: marks tests that require a GPU",
+    "downloads: marks tests that require internet access",
+    "integration: marks integration tests (require full corpus)",
+]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:biopython",
+    "ignore::FutureWarning:transformers",
+]
+
+# ── Coverage ─────────────────────────────────────────────────────────────────
+
+[tool.coverage.run]
+source = ["synoptiq"]
+omit = [
+    "synoptiq/utils/tokenization.py",   # Requires HF model download
+    "synoptiq/data/_download.py",        # Requires network
+]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]

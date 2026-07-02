@@ -1,0 +1,24 @@
+# Modal deployment configuration (Phases 2–5, 7)
+
+# GPU types (Modal tier names)
+gpu_t4: t4      # $0.47/hr — default: source detection, direction, editorial, SHAP
+gpu_a10g: a10g  # $1.30/hr — DAPT, FiD reconstruction
+
+# Timeout (seconds)
+timeout_dapt: 43200      # 12 hours (DAPT on A10G)
+timeout_train: 21600     # 6 hours  (fine-tuning on T4)
+timeout_eval: 3600       # 1 hour   (evaluation)
+
+# Container idle timeout (seconds)
+container_idle_timeout: 300
+
+# Persistent volumes
+data_volume: synoptiq-data
+models_volume: synoptiq-models
+outputs_volume: synoptiq-outputs
+
+# Modal secret name (see modal/secrets.toml.example)
+secret_name: synoptiq-secrets
+
+# W&B project name (must match setup_wandb call)
+wandb_project: synoptiq

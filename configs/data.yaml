@@ -1,0 +1,23 @@
+raw_dir: data/raw
+processed_dir: data/processed
+external_dir: data/external
+
+# Token alignment
+alignment_method: needleman_wunsch
+gap_open_penalty: -5.0
+gap_extend_penalty: -0.5
+lemma_match_score: 2.0
+surface_match_bonus: 1.0
+pos_match_bonus: 0.5
+
+# Pericope splits (atomic: never split a pericope across train/val/test)
+train_frac: 0.60
+val_frac: 0.20
+test_frac: 0.20
+random_seed: 42
+
+# Augmentation
+n_bootstrap_samples: 100
+moving_window_size: 5
+moving_window_stride: 2
+scribal_error_rate: 0.01
