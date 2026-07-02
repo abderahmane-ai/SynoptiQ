@@ -153,26 +153,56 @@ class DAPTIterableDataset(IterableDataset):
             tokenizer.pad_token = tokenizer.eos_token
 
     def __iter__(self) -> Iterator[dict[str, torch.Tensor]]:
-        """Yield training samples endlessly."""
-        # Build fresh iterators each epoch so ordering varies.
+        """Yield training samples with full-length sequences.
+
+        Concatenates text chunks to fill ``max_length`` tokens, applies
+        T5 span-corruption noise, and yields (input_ids, labels) pairs.
+        This ensures the model trains on long contexts rather than
+        30-100 token fragments.
+        """
         koine_stream = self._stream_sources(KOINE_SOURCES)
         classical_stream = self._stream_sources(CLASSICAL_SOURCES)
 
-        while True:
-            # Interleave Koine and Classical at the configured ratio.
-            for source_stream in [koine_stream, classical_stream]:
-                n_koine = max(1, int(10 * self._koine_ratio))
-                n_classical = max(1, int(10 * (1 - self._koine_ratio)))
-                n_from_this = n_koine if source_stream is koine_stream else n_classical
+        # Token buffer: collect tokens until we have enough for one sample.
+        buffer: list[int] = []
 
-                for _ in range(n_from_this):
-                    try:
-                        chunk = next(source_stream)
-                    except StopIteration:
-                        return
-                    tokenised = self._tokenize_with_noise(chunk)
-                    if tokenised is not None:
-                        yield tokenised
+        def _fill_buffer(source_iter: Iterator[str], target_total: int) -> None:
+            """Pull chunks until buffer reaches *target_total* tokens."""
+            nonlocal buffer
+            while len(buffer) < target_total:
+                try:
+                    chunk = next(source_iter)
+                except StopIteration:
+                    return
+                ids = self._tokenizer.encode(
+                    chunk, add_special_tokens=False, max_length=self._max_length,
+                    truncation=True,
+                )
+                buffer.extend(ids)
+
+        while True:
+            # 70/30 mix: 7 Koine then 3 Classical, cycling.
+            for source_iter, n_blocks in [(koine_stream, 7), (classical_stream, 3)]:
+                for _ in range(n_blocks):
+                    _fill_buffer(source_iter, self._max_length)
+
+                    if len(buffer) < 8:  # not enough tokens
+                        continue
+
+                    # Take a full-length slice from the buffer.
+                    seq = buffer[:self._max_length]
+                    buffer = buffer[self._max_length:]
+
+                    # Apply span-corruption noise.
+                    input_ids = torch.tensor(seq, dtype=torch.long)
+                    labels = input_ids.clone()
+                    n_tokens = len(seq)
+                    n_noise = max(1, int(n_tokens * self._noise_density))
+                    noise_idx = torch.randperm(n_tokens)[:n_noise]
+                    sentinel = getattr(self._tokenizer, "mask_token_id", None) or 4
+                    input_ids[noise_idx] = sentinel
+
+                    yield {"input_ids": input_ids, "labels": labels}
 
     def _stream_sources(self, sources: list[str]) -> Iterator[str]:
         """Yield text chunks from the given source directories, cycled forever."""
@@ -229,6 +259,7 @@ class DAPTConfig:
         save_steps: Save adapter checkpoint every N steps.
         grad_accum_steps: Gradient accumulation steps (effective batch multiplier).
         max_length: Maximum token length for input sequences.
+        use_amp: Enable Automatic Mixed Precision (FP16) for ~2× speedup.
         output_dir: Directory for checkpoints and logs.
     """
 
@@ -240,6 +271,7 @@ class DAPTConfig:
     save_steps: int = 2_000
     grad_accum_steps: int = 1
     max_length: int = 512
+    use_amp: bool = True
     output_dir: Path = field(default_factory=lambda: Path("outputs/dapt"))
 
 
@@ -313,11 +345,14 @@ class DAPTTrainer:
             },
         )
 
+        # AMP: automatic mixed precision for ~2× speedup on supported GPUs.
+        use_amp = config.use_amp and self._device.startswith("cuda")
+        scaler = torch.amp.GradScaler("cuda") if use_amp else None
+
         accum_loss = 0.0
         model.train()
 
         for step in range(1, config.max_steps + 1):
-            # Accumulate gradients across grad_accum_steps micro-batches.
             self._optimizer.zero_grad()
             micro_loss = 0.0
 
@@ -327,16 +362,24 @@ class DAPTTrainer:
                 labels = sample["labels"].unsqueeze(0).to(self._device)
                 attention_mask = torch.ones_like(input_ids)
 
-                outputs = peft_model(
-                    input_ids=input_ids,
-                    attention_mask=attention_mask,
-                    labels=labels,
-                )
+                with torch.amp.autocast("cuda") if use_amp else torch.no_grad():
+                    outputs = peft_model(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        labels=labels,
+                    )
                 loss = outputs.loss / config.grad_accum_steps
-                loss.backward()
+                if scaler is not None:
+                    scaler.scale(loss).backward()
+                else:
+                    loss.backward()
                 micro_loss += loss.item()
 
-            self._optimizer.step()
+            if scaler is not None:
+                scaler.step(self._optimizer)
+                scaler.update()
+            else:
+                self._optimizer.step()
             self._scheduler.step()
 
             current_loss = micro_loss
