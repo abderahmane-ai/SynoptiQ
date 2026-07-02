@@ -48,7 +48,7 @@ DEFAULT_LEMMA_POS_MATCH: Final = 2.5
 DEFAULT_LEMMA_MATCH: Final = 2.0
 DEFAULT_POS_MATCH: Final = 0.5
 DEFAULT_SURFACE_BONUS: Final = 0.5
-DEFAULT_MISMATCH: Final = -1.0
+DEFAULT_MISMATCH: Final = -100.0
 
 # Maximum sequence length before we warn (NW is O(n*m))
 NW_WARN_LENGTH: Final = 300
@@ -245,58 +245,36 @@ def align_tokens(
     keys_a = [_make_token_key(t) for t in tokens_a]
     keys_b = [_make_token_key(t) for t in tokens_b]
 
-    # Build scoring function for PairwiseAligner
-    # We use a closure-based approach: represent tokens as unique chars
-    # and build a custom substitution matrix
-    unique_pairs: dict[tuple[str, str], str] = {}
-    codepoint = 0xE000
+    # Encode each unique (lemma, pos) pair as a single character.
+    # We use a simple character encoding rather than a substitution matrix
+    # because Bio.Align.PairwiseAligner with a custom matrix is fragile
+    # for non-trivial alphabets (mismatched dimensions, shape errors).
+    char_map: dict[tuple[str, str], str] = {}
+    codepoint = 0xE000  # Private Use Area — doesn't conflict with real text
+    max_codepoint = 0xF8FF
 
     def _encode_key(lemma: str, pos: str) -> str:
-        """Encode (lemma, pos) pair as a single Unicode character."""
         k = (lemma, pos)
-        if k not in unique_pairs:
-            unique_pairs[k] = chr(codepoint + len(unique_pairs))
-        return unique_pairs[k]
+        if k not in char_map:
+            if codepoint + len(char_map) > max_codepoint:
+                # Fallback: reuse characters for exotic POS combinations
+                char_map[k] = chr(codepoint + (len(char_map) % (max_codepoint - codepoint)))
+            else:
+                char_map[k] = chr(codepoint + len(char_map))
+        return char_map[k]
 
     seq_a = "".join(_encode_key(k[0], k[1]) for k in keys_a)
     seq_b = "".join(_encode_key(k[0], k[1]) for k in keys_b)
 
-    # Build substitution matrix
-    all_chars = sorted(set(seq_a + seq_b))
-
-    # Reverse map: char → (lemma, pos) for scoring
-    char_to_pair: dict[str, tuple[str, str]] = {v: k for k, v in unique_pairs.items()}
-
-    # Build NxN score array
-    n = len(all_chars)
-    scores: list[list[float]] = [[mismatch] * n for _ in range(n)]
-    for i, ci in enumerate(all_chars):
-        for j, cj in enumerate(all_chars):
-            l1, p1 = char_to_pair.get(ci, ("", ""))
-            l2, p2 = char_to_pair.get(cj, ("", ""))
-            if l1 == l2 and l1 and p1 == p2:
-                scores[i][j] = lemma_pos_match
-            elif l1 == l2 and l1:
-                scores[i][j] = lemma_match
-            elif p1 == p2 and p1:
-                scores[i][j] = pos_match
-
-    # Convert to BioPython Array format (needs shape (n, n), not flat)
-    import numpy as np
-
-    alphabet_str = "".join(all_chars)
-    flat_data = np.array([scores[i][j] for i in range(n) for j in range(n)], dtype=float)
-    data_matrix = flat_data.reshape(n, n)
-    subst_matrix = Align.substitution_matrices.Array(
-        alphabet=alphabet_str,
-        dims=2,
-        data=data_matrix,
-    )
-
-    # Configure PairwiseAligner (Needleman-Wunsch global alignment)
+    # Configure PairwiseAligner with simple match/mismatch scoring.
+    # Each unique (lemma, pos) pair maps to a single character.
+    # Same character = exact match → match_score.
+    # Different character = no match → mismatch_score.
+    # No substitution matrix — just character identity.
     aligner = Align.PairwiseAligner()
     aligner.mode = "global"
-    aligner.substitution_matrix = subst_matrix
+    aligner.match_score = lemma_pos_match
+    aligner.mismatch_score = mismatch
     aligner.open_gap_score = gap_open
     aligner.extend_gap_score = gap_extend
 

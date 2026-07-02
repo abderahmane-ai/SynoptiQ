@@ -29,15 +29,28 @@ from __future__ import annotations
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-from synoptiq.utils.constants import SBLGNT_BOOK_IDS
 from synoptiq.utils.greek import normalize_greek
 from synoptiq.utils.logging_ import get_logger
 from synoptiq.utils.types_ import Book
 
 _LOG = get_logger(__name__)
 
-# Books to parse for synoptic analysis (only synoptic gospels in core pipeline)
-SYNOPTIC_BOOK_IDS: frozenset[str] = frozenset(SBLGNT_BOOK_IDS.keys())
+# Mapping: SBLGNT XML <book id="..."> attribute → canonical Book name
+_SBLGNT_ID_TO_BOOK: dict[str, Book] = {
+    "Mt": "Matthew",
+    "Mk": "Mark",
+    "Lk": "Luke",
+    "Lu": "Luke",
+    "Jn": "John",
+}
+
+# Mapping: canonical Book name → XML filename in the SBLGNT repo
+_BOOK_TO_FILENAME: dict[Book, str] = {
+    "Matthew": "Matt.xml",
+    "Mark": "Mark.xml",
+    "Luke": "Luke.xml",
+    "John": "John.xml",
+}
 
 
 def _parse_sblgnt_book(
@@ -66,13 +79,16 @@ def _parse_sblgnt_book(
             text = (child.text or "").strip()
 
             if tag == "verse-number":
-                # id attribute is like "1:1" or "14:1"
+                # id attribute is like "1:1", "Matt 1:1", or "Mark 1:1"
                 verse_id = child.get("id", "1:1")
                 try:
-                    ch_str, vs_str = verse_id.split(":")
+                    # Handle both "chapter:verse" and "Book chapter:verse" formats
+                    parts = verse_id.split()
+                    ref = parts[-1] if parts else verse_id  # take last token
+                    ch_str, vs_str = ref.split(":")
                     current_chapter = int(ch_str)
                     current_verse = int(vs_str)
-                except ValueError:
+                except (ValueError, IndexError):
                     _LOG.warning(
                         "malformed verse-number id",
                         extra={"book": book_name, "id": verse_id},
@@ -115,54 +131,55 @@ def parse_sblgnt(
 ) -> dict[Book, list[dict[str, object]]]:
     """Parse SBLGNT XML files for the specified books.
 
-    Looks for ``sblgnt.xml`` in ``sblgnt_dir/`` (the main file in
-    the Faithlife/SBLGNT repository contains all books in one XML file).
-    Falls back to per-book files if the monolithic file is absent.
+    The Faithlife/SBLGNT repo stores each book as a separate XML file
+    in ``data/sblgnt/xml/`` (e.g., ``Matt.xml``, ``Mark.xml``, ``Luke.xml``).
+    Each file contains a single ``<book id="Mt">`` element with the text.
 
     Args:
         sblgnt_dir: Path to the cloned Faithlife/SBLGNT repository.
-        books: List of books to parse. If None, parses Matthew, Mark, Luke.
+        books: List of canonical book names. Defaults to Matt, Mark, Luke.
 
     Returns:
-        Dict mapping book name → list of token dicts.
+        Dict mapping canonical book name → list of token dicts.
 
     Raises:
-        FileNotFoundError: If no SBLGNT XML file can be found.
-        ET.ParseError: If the XML is malformed.
+        FileNotFoundError: If a requested book's XML file cannot be found.
     """
     target_books: list[Book] = books or ["Matthew", "Mark", "Luke"]
 
-    # The Faithlife repo has sblgnt.xml at the root
-    xml_file = sblgnt_dir / "sblgnt.xml"
-    if not xml_file.exists():
-        # Some forks split by book; try per-book file
-        xml_file = sblgnt_dir / "text" / "sblgnt.xml"
-    if not xml_file.exists():
-        msg = f"SBLGNT XML file not found in {sblgnt_dir}. Expected sblgnt.xml or text/sblgnt.xml"
+    # Look for individual book files in data/sblgnt/xml/
+    xml_dir = sblgnt_dir / "data" / "sblgnt" / "xml"
+    if not xml_dir.exists():
+        xml_dir = sblgnt_dir / "xml"  # some layouts
+
+    if not xml_dir.exists():
+        msg = f"SBLGNT XML directory not found in {sblgnt_dir}"
         raise FileNotFoundError(msg)
 
-    _LOG.info("parsing SBLGNT XML", extra={"file": str(xml_file)})
-    tree = ET.parse(xml_file)
-    root = tree.getroot()
-
     result: dict[Book, list[dict[str, object]]] = {}
+    found_book_ids: set[str] = set()
 
-    for book_elem in root.findall("book"):
-        book_id = book_elem.get("id", "")
-        if book_id not in {b: b for b in target_books}:
+    # Walk all XML files in the directory
+    for xml_file in sorted(xml_dir.glob("*.xml")):
+        try:
+            tree = ET.parse(xml_file)
+        except ET.ParseError:
             continue
 
-        book_name = book_id  # In SBLGNT XML, id is the full name
-        if book_name not in SYNOPTIC_BOOK_IDS:
+        root = tree.getroot()
+        if root.tag != "book":
             continue
 
-        _LOG.info("parsing book", extra={"book": book_name})
-        records = _parse_sblgnt_book(book_elem, book_name=book_name)  # type: ignore[arg-type]
-        result[book_name] = records  # type: ignore[index]
-        _LOG.info(
-            "book parsed",
-            extra={"book": book_name, "n_tokens": len(records)},
-        )
+        book_id = root.get("id", "")
+        book_name = _SBLGNT_ID_TO_BOOK.get(book_id)
+        if book_name is None or book_name not in target_books:
+            continue
+
+        _LOG.info("parsing book", extra={"book": book_name, "file": str(xml_file.name)})
+        records = _parse_sblgnt_book(root, book_name=book_name)
+        result[book_name] = records
+        found_book_ids.add(book_id)
+        _LOG.info("book parsed", extra={"book": book_name, "n_tokens": len(records)})
 
     # Validate all requested books were found
     missing = set(target_books) - set(result)

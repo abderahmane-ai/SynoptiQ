@@ -33,7 +33,16 @@ from synoptiq.utils.types_ import MorphRecord
 
 _LOG = get_logger(__name__)
 
-# MorphGNT book abbreviations for the four gospels
+# MorphGNT numeric book codes (2-digit prefix in BCV field)
+# Format: BBCCVV where BB=book, CC=chapter, VV=verse
+_MORPHGNT_BOOK_MAP: dict[str, str] = {
+    "01": "Matthew",
+    "02": "Mark",
+    "03": "Luke",
+    "04": "John",
+}
+
+# MorphGNT book abbreviations (fallback for older format)
 MORPHGNT_GOSPEL_ABBREVS: dict[str, str] = {
     "MAT": "Matthew",
     "MRK": "Mark",
@@ -43,47 +52,53 @@ MORPHGNT_GOSPEL_ABBREVS: dict[str, str] = {
 
 
 def _parse_bcv(bcv: str) -> tuple[str, int, int, int]:
-    """Parse a MorphGNT BCV field like "MAT 1:1/1".
+    """Parse a MorphGNT BCV field into book, chapter, verse, position.
+
+    Supports two formats:
+    1. Numeric: "010101" → book=01, chapter=01, verse=01
+    2. Legacy: "MAT 1:1/1" → book=MAT, chapter=1, verse=1, position=1
+
+    For the numeric format, position is always 0 (adjusted by caller).
 
     Args:
-        bcv: A string like "MAT 1:1/1" or "MAT 1:1" (without position).
+        bcv: BCV field string.
 
     Returns:
         Tuple of (book_name, chapter, verse, position).
 
     Raises:
-        ValueError: If the BCV field is malformed.
+        ValueError: If the BCV field cannot be parsed.
     """
-    # Split on space: ["MAT", "1:1/1"]
-    parts = bcv.strip().split()
-    if len(parts) < 2:
-        msg = f"Malformed BCV field: {bcv!r}"
-        raise ValueError(msg)
+    bcv = bcv.strip()
 
-    book_abbr = parts[0]
-    book = BOOK_ABBREV_TO_FULL.get(book_abbr, book_abbr)
+    # Format 1: Numeric "BBCCVV" (6 digits, no spaces)
+    if bcv.isdigit() and len(bcv) == 6:
+        book_code = bcv[:2]
+        book = _MORPHGNT_BOOK_MAP.get(book_code, book_code)
+        chapter = int(bcv[2:4])
+        verse = int(bcv[4:6])
+        return book, chapter, verse, 0
 
-    # Parse "chapter:verse/position"
-    ref = parts[1]
-    if "/" in ref:
-        cv_part, pos_str = ref.split("/", 1)
-        position = int(pos_str) - 1  # Convert 1-indexed to 0-indexed
-    else:
-        cv_part = ref
-        position = 0
+    # Format 2: Legacy "BOOK_ABBR C:V/POS"
+    parts = bcv.split()
+    if len(parts) >= 2:
+        book_abbr = parts[0]
+        book = BOOK_ABBREV_TO_FULL.get(book_abbr.upper(), book_abbr)
+        ref_and_pos = parts[1].split("/")
+        ref = ref_and_pos[0]
+        position = int(ref_and_pos[1]) - 1 if len(ref_and_pos) > 1 else 0
+        ch_str, vs_str = ref.split(":")
+        return book, int(ch_str), int(vs_str), position
 
-    ch_str, vs_str = cv_part.split(":", 1)
-    chapter = int(ch_str)
-    verse = int(vs_str)
-
-    return book, chapter, verse, position
+    msg = f"Malformed BCV field: {bcv!r}"
+    raise ValueError(msg)
 
 
 def _parse_morphgnt_line(line: str) -> MorphRecord | None:
     """Parse a single TSV line from MorphGNT into a MorphRecord.
 
     Args:
-        line: A single tab-separated line from a MorphGNT file.
+        line: A single space-separated line from a MorphGNT file.
 
     Returns:
         MorphRecord dict if the line is valid, None if it's a header/blank.
@@ -92,7 +107,7 @@ def _parse_morphgnt_line(line: str) -> MorphRecord | None:
     if not line or line.startswith("#"):
         return None
 
-    cols = line.split("\t")
+    cols = line.split()  # Space-delimited, not tab
     if len(cols) < 7:
         _LOG.warning("short MorphGNT line", extra={"line": line[:80]})
         return None
@@ -122,17 +137,31 @@ def _parse_morphgnt_line(line: str) -> MorphRecord | None:
 def _iter_morphgnt_file(path: Path) -> Iterator[MorphRecord]:
     """Iterate over MorphRecord entries from a MorphGNT TSV file.
 
+    Handles per-verse position tracking: since the numeric BCV format
+    ("010101") lacks a position component, we track token order within
+    each (chapter, verse) pair.
+
     Args:
         path: Path to a MorphGNT TSV file.
 
     Yields:
-        MorphRecord dicts (skipping blank lines and headers).
+        MorphRecord dicts with correct 0-indexed position-within-verse.
     """
+    verse_positions: dict[tuple[int, int], int] = {}  # (chapter, verse) → next position
+
     with path.open(encoding="utf-8") as f:
         for line in f:
             record = _parse_morphgnt_line(line)
-            if record is not None:
-                yield record
+            if record is None:
+                continue
+
+            ch, vs = record["chapter"], record["verse"]
+            key = (ch, vs)
+            position = verse_positions.get(key, 0)
+            record["position"] = position
+            verse_positions[key] = position + 1
+
+            yield record
 
 
 def parse_morphgnt(

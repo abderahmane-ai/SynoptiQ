@@ -335,7 +335,9 @@ class Corpus:
             pericope_tokens = self._token_df[token_mask]
 
             book_tokens: dict[Book, list[TokenRecord]] = defaultdict(list)
-            for _, token_row in pericope_tokens.sort_values("position").iterrows():
+            for _, token_row in pericope_tokens.sort_values(
+                ["chapter", "verse", "position"]
+            ).iterrows():
                 book: Book = token_row["book"]  # type: ignore[assignment]
                 book_tokens[book].append(token_row.to_dict())  # type: ignore[arg-type]
 
@@ -442,7 +444,9 @@ class Corpus:
             & (self._token_df["verse"] == verse)
         )
         return (
-            self._token_df[mask].sort_values("position").to_dict(orient="records")  # type: ignore[return-value]
+            self._token_df[mask]
+            .sort_values(["chapter", "verse", "position"])
+            .to_dict(orient="records")  # type: ignore[return-value]
         )
 
     # ── I/O ───────────────────────────────────────────────────────────────────

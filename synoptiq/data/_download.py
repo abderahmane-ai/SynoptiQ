@@ -59,9 +59,9 @@ CORPORA: dict[str, dict[str, str]] = {
         "license": "CC-BY 4.0",
     },
     "lxx": {
-        "url": "https://github.com/biblicalhumanities/Septuagint",
-        "description": "Septuagint (Rahlfs LXX) plain text for Koine DAPT",
-        "license": "CC-BY-SA",
+        "url": "https://github.com/CenterBLC/LXX",
+        "description": "Rahlfs Septuagint in TextFabric format (CenterBLC, MIT license)",
+        "license": "MIT",
     },
 }
 
@@ -150,7 +150,7 @@ def download_corpus(
         shutil.rmtree(target)
 
     if target.exists() and _is_git_repo(target):
-        _LOG.info("corpus already downloaded — pulling latest", extra={"name": name})
+        _LOG.info("corpus already downloaded — pulling latest", extra={"corpus": name})
         _git_pull(target)
     else:
         target.mkdir(parents=True, exist_ok=True)
@@ -162,7 +162,7 @@ def download_corpus(
 
     _LOG.info(
         "corpus ready",
-        extra={"name": name, "description": info["description"], "path": str(target)},
+        extra={"corpus": name, "description": info["description"], "path": str(target)},
     )
     return target
 
@@ -193,7 +193,7 @@ def download_all(
         except Exception as e:
             _LOG.error(
                 "corpus download failed",
-                extra={"name": name, "error": str(e)},
+                extra={"corpus": name, "error": str(e)},
             )
             raise
 

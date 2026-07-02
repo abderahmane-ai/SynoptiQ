@@ -88,8 +88,8 @@ def validate_corpus(corpus: Corpus) -> bool:  # noqa: F821
     """
     passed = True
 
-    # Check 1: Token count
-    min_tokens, max_tokens = 130_000, 145_000
+    # Check 1: Token count (synoptic gospels only: Mt + Mk + Lk ≈ 49K)
+    min_tokens, max_tokens = 45_000, 52_000
     if not (min_tokens <= corpus.n_tokens <= max_tokens):
         _LOG.error(
             "token count out of expected range",
