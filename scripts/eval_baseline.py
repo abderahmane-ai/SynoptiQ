@@ -1,0 +1,135 @@
+"""Paper A baseline evaluation pipeline.
+
+Evaluates KoineFormer (after DAPT) against zero-shot GreTa on the
+SynoptiQ test set.  Produces the comparison tables for Paper A.
+
+Usage:
+    # Evaluate zero-shot GreTa (before DAPT — always available):
+    python scripts/eval_baseline.py --zero-shot
+
+    # Evaluate DAPT'd KoineFormer:
+    python scripts/eval_baseline.py --dapt-checkpoint outputs/dapt/final
+
+    # Full comparison (both):
+    python scripts/eval_baseline.py --dapt-checkpoint outputs/dapt/final --zero-shot
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import sys
+
+_ROOT = Path(__file__).parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from transformers import AutoTokenizer  # type: ignore[import-untyped]
+
+from synoptiq.data.corpus import Corpus  # noqa: E402
+from synoptiq.evaluation import evaluate_pos_tagging  # noqa: E402
+from synoptiq.models.koineformer import KoineFormer  # noqa: E402
+from synoptiq.utils.logging_ import get_logger  # noqa: E402
+
+_LOG = get_logger(__name__)
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Paper A baseline evaluation",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("--data-dir", type=Path, default=Path("data"),
+                        help="Root data directory")
+    parser.add_argument("--output-dir", type=Path, default=Path("outputs/eval"),
+                        help="Directory for evaluation results")
+    parser.add_argument("--dapt-checkpoint", type=Path, default=None,
+                        help="Path to DAPT LoRA adapters")
+    parser.add_argument("--zero-shot", action="store_true",
+                        help="Evaluate zero-shot GreTa (no DAPT)")
+    parser.add_argument("--device", type=str, default=None,
+                        help="Torch device")
+    return parser
+
+
+def main() -> int:
+    parser = _build_parser()
+    args = parser.parse_args()
+    data_dir: Path = args.data_dir.resolve()
+    output_dir: Path = args.output_dir.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    device = args.device or _detect_device()
+
+    processed = data_dir / "processed"
+    corpus = Corpus.from_parquet(
+        processed / "tokens.parquet",
+        processed / "pericopes.parquet",
+        alignments_path=processed / "alignments.json",
+        splits_path=processed / "splits.json",
+    )
+
+    results: dict[str, dict[str, float]] = {}
+
+    if args.zero_shot:
+        _LOG.info("=== ZERO-SHOT GRETA ===")
+        model = KoineFormer.from_pretrained(device=device)
+        tokenizer = AutoTokenizer.from_pretrained(model.model_id)
+        tokenizer.pad_token = tokenizer.eos_token
+
+        pos_result = evaluate_pos_tagging(model, corpus, tokenizer, split="test", device=device)
+        results["GreTa (zero-shot)"] = {
+            "model": pos_result.model_name,
+            "pos_accuracy": pos_result.value,
+            "n_samples": pos_result.n_samples,
+        }
+        _LOG.info(f"zero-shot POS accuracy: {pos_result.value:.2%}")
+
+    if args.dapt_checkpoint:
+        _LOG.info("=== DAPT KOINEFORMER ===")
+        model = KoineFormer.from_pretrained(device=device)
+        model.load_adapters(args.dapt_checkpoint)
+        tokenizer = AutoTokenizer.from_pretrained(model.model_id)
+        tokenizer.pad_token = tokenizer.eos_token
+
+        pos_result = evaluate_pos_tagging(model, corpus, tokenizer, split="test", device=device)
+        results["KoineFormer (DAPT)"] = {
+            "model": pos_result.model_name,
+            "pos_accuracy": pos_result.value,
+            "n_samples": pos_result.n_samples,
+        }
+        _LOG.info(f"DAPT POS accuracy: {pos_result.value:.2%}")
+
+    # Write results
+    results_path = output_dir / "baseline_results.json"
+    results_path.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
+    _LOG.info("results saved", extra={"path": str(results_path)})
+
+    # Print comparison table
+    if len(results) == 2:
+        zs = results["GreTa (zero-shot)"]["pos_accuracy"]
+        dapt = results["KoineFormer (DAPT)"]["pos_accuracy"]
+        delta = dapt - zs
+        print(f"\n  {'Model':<25s} {'POS Acc':>8s}  {'Δ':>8s}")
+        print(f"  {'─'*25} {'─'*8}  {'─'*8}")
+        print(f"  {'GreTa (zero-shot)':<25s} {zs:>7.2%}")
+        print(f"  {'KoineFormer (DAPT)':<25s} {dapt:>7.2%}  {delta:>+7.2%}")
+        if delta > 0.02:
+            print(f"\n  ✓ DAPT improves POS accuracy by {delta:.1%}")
+        else:
+            print(f"\n  ⚠ DAPT gain is marginal ({delta:.1%}) — check training")
+
+    return 0
+
+
+def _detect_device() -> str:
+    import torch
+    if torch.cuda.is_available():
+        return "cuda"
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
+if __name__ == "__main__":
+    sys.exit(main())

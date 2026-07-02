@@ -17,8 +17,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import torch
 from peft import LoraConfig, PeftModel, TaskType, get_peft_model
+import torch
 from transformers import AutoModelForSeq2SeqLM
 
 from synoptiq.utils.logging_ import get_logger
