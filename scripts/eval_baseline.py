@@ -28,7 +28,7 @@ if str(_ROOT) not in sys.path:
 from transformers import AutoTokenizer  # type: ignore[import-untyped]
 
 from synoptiq.data.corpus import Corpus  # noqa: E402
-from synoptiq.evaluation import evaluate_pos_tagging  # noqa: E402
+from synoptiq.evaluation import evaluate_lemmatization, evaluate_pos_tagging  # noqa: E402
 from synoptiq.models.koineformer import KoineFormer  # noqa: E402
 from synoptiq.utils.logging_ import get_logger  # noqa: E402
 
@@ -79,12 +79,15 @@ def main() -> int:
         model.model.resize_token_embeddings(len(tokenizer))
 
         pos_result = evaluate_pos_tagging(model, corpus, tokenizer, split="test", device=device)
+        lemma_result = evaluate_lemmatization(model, corpus, tokenizer, split="test", device=device)
         results["GreTa (zero-shot)"] = {
             "model": pos_result.model_name,
             "pos_accuracy": pos_result.value,
-            "n_samples": pos_result.n_samples,
+            "lemma_accuracy": lemma_result.value,
+            "n_pos_samples": pos_result.n_samples,
+            "n_lemma_samples": lemma_result.n_samples,
         }
-        _LOG.info(f"zero-shot POS accuracy: {pos_result.value:.2%}")
+        _LOG.info(f"zero-shot POS: {pos_result.value:.2%}  |  Lemma: {lemma_result.value:.2%}")
 
     if args.dapt_checkpoint:
         _LOG.info("=== DAPT KOINEFORMER ===")
@@ -95,12 +98,15 @@ def main() -> int:
         model.model.resize_token_embeddings(len(tokenizer))
 
         pos_result = evaluate_pos_tagging(model, corpus, tokenizer, split="test", device=device)
+        lemma_result = evaluate_lemmatization(model, corpus, tokenizer, split="test", device=device)
         results["KoineFormer (DAPT)"] = {
             "model": pos_result.model_name,
             "pos_accuracy": pos_result.value,
-            "n_samples": pos_result.n_samples,
+            "lemma_accuracy": lemma_result.value,
+            "n_pos_samples": pos_result.n_samples,
+            "n_lemma_samples": lemma_result.n_samples,
         }
-        _LOG.info(f"DAPT POS accuracy: {pos_result.value:.2%}")
+        _LOG.info(f"DAPT POS: {pos_result.value:.2%}  |  Lemma: {lemma_result.value:.2%}")
 
     # Write results
     results_path = output_dir / "baseline_results.json"
@@ -109,17 +115,17 @@ def main() -> int:
 
     # Print comparison table
     if len(results) == 2:
-        zs = results["GreTa (zero-shot)"]["pos_accuracy"]
-        dapt = results["KoineFormer (DAPT)"]["pos_accuracy"]
-        delta = dapt - zs
-        print(f"\n  {'Model':<25s} {'POS Acc':>8s}  {'Δ':>8s}")
+        zs_pos = results["GreTa (zero-shot)"]["pos_accuracy"]
+        dapt_pos = results["KoineFormer (DAPT)"]["pos_accuracy"]
+        zs_lemma = results["GreTa (zero-shot)"]["lemma_accuracy"]
+        dapt_lemma = results["KoineFormer (DAPT)"]["lemma_accuracy"]
+        pos_delta = dapt_pos - zs_pos
+        lemma_delta = dapt_lemma - zs_lemma
+        print(f"\n  {'Model':<25s} {'POS':>8s}  {'Lemma':>8s}")
         print(f"  {'─'*25} {'─'*8}  {'─'*8}")
-        print(f"  {'GreTa (zero-shot)':<25s} {zs:>7.2%}")
-        print(f"  {'KoineFormer (DAPT)':<25s} {dapt:>7.2%}  {delta:>+7.2%}")
-        if delta > 0.02:
-            print(f"\n  ✓ DAPT improves POS accuracy by {delta:.1%}")
-        else:
-            print(f"\n  ⚠ DAPT gain is marginal ({delta:.1%}) — check training")
+        print(f"  {'GreTa (zero-shot)':<25s} {zs_pos:>7.2%}  {zs_lemma:>7.2%}")
+        print(f"  {'KoineFormer (DAPT)':<25s} {dapt_pos:>7.2%}  {dapt_lemma:>7.2%}")
+        print(f"  {'Δ':<25s} {pos_delta:>+7.2%}  {lemma_delta:>+7.2%}")
 
     return 0
 
