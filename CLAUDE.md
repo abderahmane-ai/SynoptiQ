@@ -90,7 +90,7 @@ costs 66× less, and produces a 14 MB checkpoint. Lemma is flat — DAPT improve
 but not vocabulary.
 
 ### DAPT corpus
-- Koine (70%): SBLGNT full NT (~656K tokens) + Apostolic Fathers (~683K tokens) ≈ 1.34M tokens
+- Koine (70%): SBLGNT full NT (~773K tokens) + Apostolic Fathers (~732K tokens) ≈ 1.5M tokens
 - Classical replay (30%): First1KGreek (Homer, Plato, Xenophon)
 - LXX not yet loaded — TextFabric repo contains converter code but no text data
 
@@ -192,7 +192,7 @@ All tests must pass. Ruff should show zero F or E level errors (TC, UP, RUF, ANN
 
 ## Architecture summary
 
-**KoineFormer** = GreTa (T5 encoder-decoder, 220M params, Classical Greek) after PEFT-DAPT on Koine corpus (SBLGNT full NT + Apostolic Fathers ~1.34M tokens). LoRA adapters only (~3.7M trainable params, r=16, α=32). 70/30 Koine/Classical replay buffer (First1KGreek). Trained 20K steps, 58 min on A10G, $0.35. 96.62% POS accuracy, 81.34% lemma accuracy. 14 MB checkpoint.
+**KoineFormer** = GreTa (T5 encoder-decoder, 220M params, Classical Greek) after PEFT-DAPT on Koine corpus (SBLGNT full NT + Apostolic Fathers ~1.5M tokens). LoRA adapters only (~3.7M trainable params, r=16, α=32, targeting W_q, W_v, W_o in attention + W_o in FFN). 70/30 Koine/Classical replay buffer (First1KGreek). Trained 20K steps, 58 min on A10G. 96.62% POS accuracy, 81.34% lemma accuracy. 14 MB checkpoint.
 
 **Direction Scorer** (Phase 3) = Cross-attention asymmetry between parallel passages → 8 asymmetry features → 3-way classification (A→B, B→A, independent). Adversarial GRL head strips authorship style. Trained on triple tradition (known direction: Mark → Matthew, Mark → Luke).
 
