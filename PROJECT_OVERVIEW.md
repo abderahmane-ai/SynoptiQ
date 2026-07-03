@@ -57,7 +57,7 @@ fine-tuning.
 - Paper: `paper/main.tex`
 - Model: [hf.co/ainouche-abderahmane/koineformer](https://huggingface.co/ainouche-abderahmane/koineformer)
 - Dataset: [hf.co/datasets/ainouche-abderahmane/synoptiq-corpus](https://huggingface.co/datasets/ainouche-abderahmane/synoptiq-corpus)
-- Code: [github.com/ainouche-abderahmane/SynoptiQ](https://github.com/ainouche-abderahmane/SynoptiQ)
+- Code: [github.com/abderahmane-ai/SynoptiQ](https://github.com/abderahmane-ai/SynoptiQ)
 
 ---
 
@@ -167,11 +167,11 @@ SynoptiQ operates at a deeper level:
 | KoineFormer model | [hf.co/ainouche-abderahmane/koineformer](https://huggingface.co/ainouche-abderahmane/koineformer) | CC-BY-SA 4.0 |
 | Synoptiq Corpus | [hf.co/datasets/ainouche-abderahmane/synoptiq-corpus](https://huggingface.co/datasets/ainouche-abderahmane/synoptiq-corpus) | CC-BY-SA 4.0 |
 | Paper A manuscript | `paper/main.tex` (this repo) | CC-BY-SA 4.0 |
-| Full codebase | [github.com/ainouche-abderahmane/SynoptiQ](https://github.com/ainouche-abderahmane/SynoptiQ) | CC-BY-SA 4.0 |
+| Full codebase | [github.com/abderahmane-ai/SynoptiQ](https://github.com/abderahmane-ai/SynoptiQ) | CC-BY-SA 4.0 |
 
 ---
 
 ## Contact
 
 Abderahmane Ainouche
-GitHub: [@ainouche-abderahmane](https://github.com/ainouche-abderahmane)
+GitHub: [@abderahmane-ai](https://github.com/abderahmane-ai)
