@@ -50,7 +50,7 @@ SynoptiQ/
 |-------|--------|------------|
 | Phase 0 | ✓ Foundation | Types, constants, Greek utils, project skeleton |
 | Phase 1 | ✓ Data Pipeline | SynoptiQ Corpus: 49,061 tokens, 170 pericopes, 235 alignments, 84 tests |
-| Phase 2A | ✓ DAPT | KoineFormer trained: 96.62% POS, 81.34% lemma, $0.35, 14 MB |
+| Phase 2A | ✓ DAPT | KoineFormer trained: 96.62% POS, 81.34% lemma, 14 MB |
 | Phase 2B | ○ Multi-task | Code ready, not yet trained |
 | Phase 3 | ○ Direction Scorer | Not started |
 | Phase 4 | ○ Editorial Drift | Not started |
@@ -79,14 +79,14 @@ SynoptiQ/
 
 ### POS + Lemma tagging (linear probe, SynoptiQ test set)
 
-| Model | POS Acc. | Lemma Acc. | Params | Checkpoint | GPU Cost |
-|-------|----------|------------|--------|------------|----------|
-| GreTa zero-shot | 95.32% | 82.37% | 0 | 880 MB | $0.00 |
-| Full fine-tune (220M) | 96.11% | — | 220M | 880 MB | ~$23 |
-| **KoineFormer LoRA** | **96.62%** | 81.34% | **3.7M** | **14 MB** | **$0.35** |
+| Model | POS Acc. | Lemma Acc. | Params | Checkpoint |
+|-------|----------|------------|--------|------------|
+| GreTa zero-shot | 95.32% | 82.37% | 0 | 880 MB |
+| Full fine-tune (220M) | 96.11% | — | 220M | 880 MB |
+| **KoineFormer LoRA** | **96.62%** | 81.34% | **3.7M** | **14 MB** |
 
 Headline: LoRA DAPT eliminates 28% of POS errors vs zero-shot, beats full FT on accuracy,
-costs 66× less, and produces a 14 MB checkpoint. Lemma is flat — DAPT improves syntax
+and produces a 14 MB checkpoint. Lemma is flat — DAPT improves syntax
 but not vocabulary.
 
 ### DAPT corpus
@@ -217,7 +217,7 @@ Paper A is complete (draft in `paper/main.tex`). Paper B can proceed with Ancien
 ## Tech stack
 
 - Python 3.12+, PyTorch 2.6+, HuggingFace transformers 4.51+
-- PEFT (LoRA adapters), Modal (GPU cloud, A10G, ~$0.45/hr spot)
+- PEFT (LoRA adapters), Modal (GPU cloud, A10G)
 - BioPython (token alignment), PyMC + ArviZ (Bayesian), SHAP + BERTViz (interpretability)
 - ruff (linting), pytest (testing), XeLaTeX (paper)
 - Data sources: SBLGNT (CC-BY), MorphGNT (CC-BY-SA), Apostolic Fathers, First1KGreek (CC-BY-SA)
