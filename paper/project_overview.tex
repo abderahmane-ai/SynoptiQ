@@ -5,6 +5,8 @@
 % ── Core packages ───────────────────────────────────────────────────
 \usepackage[utf8]{inputenc}
 \usepackage{fontspec}
+\usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage{microtype}
 \usepackage{booktabs}
 \usepackage{graphicx}
@@ -136,11 +138,11 @@ active development.
 \renewcommand{\arraystretch}{1}
 \setlength{\tabcolsep}{7pt}
 \begin{tabular}{P{0.18\linewidth}P{0.18\linewidth}P{0.18\linewidth}P{0.18\linewidth}P{0.18\linewidth}}
-\statcard{96.62\%}{POS accuracy}
-& \statcard{14~MB}{Model size}
-& \statcard{49{,}061}{Tokens annotated}
-& \statcard{170}{Aland pericopes}
-& \statcard{3}{Papers planned}
+\statcard{3}{Papers}
+& \statcard{7}{Phases}
+& \statcard{49{,}061}{Annotated tokens}
+& \statcard{170}{Pericopes}
+& \statcard{Open}{Source}
 \end{tabular}
 \end{center}
 \vspace{0.6em}
@@ -189,9 +191,9 @@ stratified train/validation/test splits.
 KoineFormer is a domain-adapted T5 encoder-decoder trained on 1.5M tokens
 of Koine Greek (SBLGNT + Apostolic Fathers) with a Classical Greek replay
 buffer.  Using LoRA adapters---only 3.7M of the 220M parameters are
-trained---KoineFormer achieves 96.62\% POS tagging accuracy on the
-SynoptiQ test set, a 28\% error reduction over the zero-shot Classical
-Greek baseline.  The full adapter checkpoint is 14 MB.
+trained---KoineFormer substantially outperforms the zero-shot Classical
+Greek baseline on part-of-speech tagging while producing a compact 14 MB
+checkpoint.  The accompanying paper provides full evaluation and analysis.
 
 \medskip
 \begin{tcolorbox}[
@@ -207,7 +209,6 @@ Greek baseline.  The full adapter checkpoint is 14 MB.
 \midrule
 KoineFormer model & hf.co/ainouche-abderahmane/koineformer & CC-BY-SA 4.0 \\
 Synoptiq Corpus & hf.co/datasets/ainouche-abderahmane/synoptiq-corpus & CC-BY-SA 4.0 \\
-Paper A manuscript & Attached (\texttt{main.tex}) & CC-BY-SA 4.0 \\
 Full codebase & github.com/abderahmane-ai/SynoptiQ & CC-BY-SA 4.0 \\
 \bottomrule
 \end{tabular}
@@ -226,13 +227,13 @@ Training uses triple-tradition pericopes where the direction is known
 (Mark$\rightarrow$Matthew, Mark$\rightarrow$Luke under the consensus
 view).
 
-\textbf{Editorial Fatigue Model.}  Position-weighted consistency loss
+\textbf{Editorial Fatigue Model.}  A position-weighted consistency measure
 quantifies the well-documented phenomenon that a copying author tends to
-revert to their own stylistic norms over the course of a pericope:
-\(L_{\text{fatigue}} = \sum w(i) \cdot D_{\text{KL}}(\text{edit}_i \,\|\,
-\text{source}_i)\), where \(w(i) = \exp(-\lambda \cdot i/N)\) decays
-exponentially with position.  This provides converging evidence from an
-independent signal.
+revert to their own stylistic norms over the course of a pericope---the
+model assigns greater weight to early verses, where fidelity to the
+source is highest, and tracks the divergence as the author's own habits
+reassert themselves.  This provides converging evidence from a signal
+independent of the direction scorer.
 
 \subsection{Paper C --- Q Reconstruction \& Bayesian Comparison \hfill \textit{Planned}}
 
@@ -243,13 +244,13 @@ Training proceeds in two stages: first on triple tradition (Matthew +
 Luke $\rightarrow$ reconstruct Mark, where we have ground truth), then
 transferred to double tradition for the hypothesized Q material.
 
-\textbf{Bayesian Model Comparison.}  Direction scorer outputs pass
-through MC Dropout ($T = 20$) to produce per-pericope uncertainty
-estimates ($\mu_i, \sigma^2_i$).  These feed PyMC Beta hierarchical
-models representing the four major hypotheses: Two-Source (2SH),
-Farrer--Goulder (FGH), Augustinian, and Griesbach.  Bridge sampling
-yields Bayes factors for formal model comparison with full uncertainty
-quantification.
+\textbf{Bayesian Model Comparison.}  Direction scorer outputs---with
+per-pericope uncertainty estimates obtained via Monte Carlo
+dropout---feed hierarchical Bayesian models representing the four major
+hypotheses: Two-Source (2SH), Farrer--Goulder (FGH), Augustinian, and
+Griesbach.  Bridge sampling yields Bayes factors for formal model
+comparison, treating the Synoptic Problem as a probabilistic question
+rather than a binary debate.
 
 \section{What Distinguishes This Work}
 
