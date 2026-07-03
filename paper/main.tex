@@ -315,25 +315,67 @@ The results demonstrate four key findings:
 
 \subsection{Qualitative Analysis}
 
+To complement the quantitative evaluation, we test each model's ability to
+fill a missing word in a verse.  A comma replaces the target word in the
+input, and the model generates a continuation.  Table~\ref{tab:qual} reports
+the actual Greek output from each model.
+
 \begin{table}[H]
 \centering
 \small
-\begin{tabular}{L{2.3cm}L{2.2cm}L{5cm}L{5cm}}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{L{1.5cm}L{2.6cm}L{4.25cm}L{4.25cm}}
 \toprule
-\tblhead\textbf{Verse} & \textbf{Target} & \textbf{Zero-Shot GreTa} & \textbf{KoineFormer} \\
+\tblhead\textbf{Verse} & \textbf{Input (masked)} & \textbf{Zero-Shot GreTa} & \textbf{KoineFormer (DAPT)} \\
 \midrule
-\textbf{Magnificat} (Luke 1:47) & \gk{swt'hri} \newline \textit{savior} & ``, and my spirit rejoices in God my Savior.'' & ``the Lord, and my spirit rejoices in God my Savior.'' \\
+\textbf{Mark 1:1}
+& \gk{Ἀρχὴ τοῦ, Ἰησοῦ Χριστοῦ υἱοῦ θεοῦ.}
+\newline Target: \gk{εὐαγγελίου} \textit{(gospel)}
+& \gk{θεοῦ.}
+\newline\textit{Collapse to one word}
+& \gk{πρώτην τοῦ εὐαγγελίου ἰησοῦ χριστοῦ υἱοῦ θεοῦ.}
+\newline\textit{Restores gospel + correct prefix} \\
 \midrule
-\rowcolor{papyrus}\textbf{Mark 1:1} & \gk{e'uaggel'ioy} \newline \textit{gospel} & ``God.'' & ``first of the gospel of Jesus Christ, Son of God.'' \\
+\rowcolor{papyrus}
+\textbf{Luke 1:47}
+& \gk{...ἐπὶ τῷ θεῷ τῷ, μου}
+\newline Target: \gk{σωτῆρί} \textit{(savior)}
+& \gk{, καὶ ἠγαλλίασεν... τῷ σωτῆρί μου.}
+\newline\textit{Gets word; retains comma noise}
+& \gk{τὸν κύριον, καὶ ἠγαλλίασεν... τῷ σωτῆρί μου.}
+\newline\textit{Clean, fluent clause} \\
 \midrule
-\textbf{Fruit of the Spirit} (Galatians 5:22) & \gk{makrojum'ia} \newline \textit{patience} & ``faithfulness, gentleness, self-control.'' & ``goodness, kindness, goodness, kindness'' \\
+\textbf{Gen 1:1}
+& \gk{Ἐν ἀρχῇ, ὁ θεὸς τὸν οὐρανὸν...}
+\newline Target: \gk{ἐποίησεν} \textit{(created)}
+& \gk{ἐν ἀρχῇ ἐποίησεν ὁ θεὸς...}
+\newline\textit{Perfect (\gk{ἐποίησεν})}
+& \gk{ἐν ἀρχῇ ἦν ὁ θεὸς...}
+\newline\textit{John 1:1 override (\gk{ἦν} for \gk{ἐποίησεν})} \\
+\midrule
+\textbf{Gal 5:22}
+& \gk{...εἰρήνη, χρηστότης ἀγαθωσύνη}
+\newline Target: \gk{μακροθυμία} \textit{(patience)}
+& \gk{πίστις πραότης, ἐγκράτεια.}
+\newline\textit{Skips masked slot}
+& \gk{ἀγαθωσύνη ἀγαθωσύνη χρηστότης...}
+\newline\textit{Loops on nearby words} \\
 \bottomrule
 \end{tabular}
-\caption{\textbf{Qualitative comparison of model outputs.}  A word is removed from a verse and each model generates a continuation.  In Mark~1:1, KoineFormer correctly restores \textit{euangelion} (gospel) where the zero-shot model collapses to a single token---a demonstration that the adapted encoder captures Koine-specific vocabulary and syntax that Classical-only training misses.  In the Magnificat, KoineFormer's completion is grammatically cleaner.  Both models struggle with list-structured contexts (Galatians~5:22), a known limitation of span-corruption training.  The ability to restore missing words from context enables automated textual reconstruction---a critical task in manuscript studies where scholars must infer damaged or illegible text from surrounding material.}
+\caption{\textbf{Qualitative fill-in-the-blank evaluation.}  A comma replaces the target word in the input; each model generates a continuation.  In Mark~1:1, the zero-shot model collapses to a single token (\gk{θεοῦ}), while KoineFormer correctly restores \gk{εὐαγγελίου} (gospel) with a grammatical modifier---a direct demonstration of domain adaptation correcting a baseline failure.  In Luke~1:47, both models recover \gk{σωτῆρί} (savior), but KoineFormer produces a clean clause while the zero-shot model retains input noise.  Genesis~1:1 reveals an interesting interference effect: DAPT reinforcement of the Johannine prologue causes KoineFormer to substitute \gk{ἦν} (was) for \gk{ἐποίησεν} (created)---a theological prior overwriting the Septuagintal reading.  Both models struggle with the list-structured Galatians~5:22 context, a known limitation of span-corruption training.}
 \label{tab:qual}
 \end{table}
 
-To complement the quantitative evaluation, we present a qualitative comparison of model outputs in Table~\ref{tab:qual}. In this analysis, a word is removed from a verse, and the model is tasked with generating a continuation. KoineFormer consistently produces more contextually appropriate completions, demonstrating its ability to capture the nuances of Koine Greek syntax and morphology.
+These examples illustrate three patterns.  First, KoineFormer's domain
+adaptation enables recovery where the zero-shot model fails entirely
+(Mark~1:1).  Second, even when both models succeed, the adapted model
+produces cleaner, more grammatical output (Luke~1:47).  Third,
+domain-adaptive pre-training can introduce interpretive bias---the
+Genesis~1:1 case shows the model's training distribution favouring a
+distinctly Christian textual memory over a Septuagintal one.  This
+honest failure mode is methodologically important: it demonstrates
+that DAPT alters the model's generative priors, which downstream
+applications must account for.
 
 \section{Discussion}
 \label{sec:discussion}
