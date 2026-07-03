@@ -18,9 +18,9 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 import json
 import os
+from pathlib import Path
 import re
 import signal
-from pathlib import Path
 from typing import Any
 import xml.etree.ElementTree as ET
 
