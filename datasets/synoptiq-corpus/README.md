@@ -82,6 +82,21 @@ from the correspondence structure directly.
   penalties; different scoring parameters may produce slightly different
   alignments.
 
+### Intended Uses
+
+- Training and evaluating NLP models for Koine Greek (POS tagging,
+  lemmatisation, morphological analysis)
+- Textual criticism: detecting scribal tendencies, editorial fatigue,
+  and patterns of textual dependence
+- Stylometric analysis and authorship studies of New Testament texts
+- Pedagogical tools for Koine Greek instruction and self-study
+- Benchmarking domain adaptation techniques for historical languages
+
+### Related Models
+
+- [KoineFormer](https://huggingface.co/ainouche-abderahmane/koineformer) —
+  LoRA-adapted GreTa model trained on Koine Greek, evaluated on this corpus.
+
 ## Dataset structure
 
 ### Main table: token-level data (`data/*.parquet`)
