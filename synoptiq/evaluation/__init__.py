@@ -2,6 +2,8 @@
 
 Evaluates frozen encoder representations by training linear probes
 on top of per-token hidden states for POS tagging and lemmatisation.
+
+Results are reproducible with a fixed random seed (42).
 """
 
 from __future__ import annotations
@@ -155,6 +157,7 @@ def evaluate_pos_tagging(
     hidden_dim = X_train.shape[1]
 
     # ── Train linear probe ─────────────────────────────────────────────
+    torch.manual_seed(42)
     probe = torch.nn.Linear(hidden_dim, n_classes).to(device)
     opt = torch.optim.AdamW(probe.parameters(), lr=1e-3)
     criterion = torch.nn.CrossEntropyLoss()
@@ -295,6 +298,7 @@ def evaluate_lemmatization(
                                value=0.0, n_samples=0)
 
     hidden_dim = X_train.shape[1]
+    torch.manual_seed(42)
     probe = torch.nn.Linear(hidden_dim, n_classes).to(device)
     opt = torch.optim.AdamW(probe.parameters(), lr=1e-3)
     criterion = torch.nn.CrossEntropyLoss()

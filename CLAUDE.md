@@ -50,7 +50,7 @@ SynoptiQ/
 |-------|--------|------------|
 | Phase 0 | ✓ Foundation | Types, constants, Greek utils, project skeleton |
 | Phase 1 | ✓ Data Pipeline | SynoptiQ Corpus: 49,061 tokens, 170 pericopes, 235 alignments, 84 tests |
-| Phase 2A | ✓ DAPT | KoineFormer trained: 96.54% POS acc, $0.35, 14 MB |
+| Phase 2A | ✓ DAPT | KoineFormer trained: 96.62% POS, 81.34% lemma, $0.35, 14 MB |
 | Phase 2B | ○ Multi-task | Code ready, not yet trained |
 | Phase 3 | ○ Direction Scorer | Not started |
 | Phase 4 | ○ Editorial Drift | Not started |
@@ -77,16 +77,17 @@ SynoptiQ/
 
 ## Phase 2A results (Paper A)
 
-### POS tagging (linear probe, SynoptiQ test set)
+### POS + Lemma tagging (linear probe, SynoptiQ test set)
 
-| Model | POS Acc. | Error | Params | Checkpoint | GPU Cost |
-|-------|----------|-------|--------|------------|----------|
-| GreTa zero-shot | 95.24% | 4.76% | 0 | 880 MB | $0.00 |
-| Full fine-tune (220M) | 96.11% | 3.89% | 220M | 880 MB | ~$23 |
-| **KoineFormer LoRA** | **96.54%** | **3.46%** | **3.7M** | **14 MB** | **$0.35** |
+| Model | POS Acc. | Lemma Acc. | Params | Checkpoint | GPU Cost |
+|-------|----------|------------|--------|------------|----------|
+| GreTa zero-shot | 95.32% | 82.37% | 0 | 880 MB | $0.00 |
+| Full fine-tune (220M) | 96.11% | — | 220M | 880 MB | ~$23 |
+| **KoineFormer LoRA** | **96.62%** | 81.34% | **3.7M** | **14 MB** | **$0.35** |
 
-Headline: LoRA DAPT eliminates 27% of errors vs zero-shot, beats full FT on accuracy,
-costs 66× less, and produces a 14 MB checkpoint.
+Headline: LoRA DAPT eliminates 28% of POS errors vs zero-shot, beats full FT on accuracy,
+costs 66× less, and produces a 14 MB checkpoint. Lemma is flat — DAPT improves syntax
+but not vocabulary.
 
 ### DAPT corpus
 - Koine (70%): SBLGNT full NT (~656K tokens) + Apostolic Fathers (~683K tokens) ≈ 1.34M tokens
@@ -191,7 +192,7 @@ All tests must pass. Ruff should show zero F or E level errors (TC, UP, RUF, ANN
 
 ## Architecture summary
 
-**KoineFormer** = GreTa (T5 encoder-decoder, 220M params, Classical Greek) after PEFT-DAPT on Koine corpus (SBLGNT full NT + Apostolic Fathers ~1.34M tokens). LoRA adapters only (~3.7M trainable params, r=16, α=32). 70/30 Koine/Classical replay buffer (First1KGreek). Trained 20K steps, 58 min on A10G, $0.35. 96.54% POS accuracy. 14 MB checkpoint.
+**KoineFormer** = GreTa (T5 encoder-decoder, 220M params, Classical Greek) after PEFT-DAPT on Koine corpus (SBLGNT full NT + Apostolic Fathers ~1.34M tokens). LoRA adapters only (~3.7M trainable params, r=16, α=32). 70/30 Koine/Classical replay buffer (First1KGreek). Trained 20K steps, 58 min on A10G, $0.35. 96.62% POS accuracy, 81.34% lemma accuracy. 14 MB checkpoint.
 
 **Direction Scorer** (Phase 3) = Cross-attention asymmetry between parallel passages → 8 asymmetry features → 3-way classification (A→B, B→A, independent). Adversarial GRL head strips authorship style. Trained on triple tradition (known direction: Mark → Matthew, Mark → Luke).
 

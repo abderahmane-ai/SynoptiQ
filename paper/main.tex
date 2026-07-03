@@ -121,7 +121,7 @@ KoineFormer: Domain-Adaptive Language Modeling for Koine Greek}\\[10pt]
   left=16pt, right=16pt, top=11pt, bottom=11pt
 ]
 {\headfont\bfseries\color{marine} Abstract}\par\vspace{5pt}
-\noindent The study of Koine Greek texts—central to New Testament scholarship, Septuagint studies, and early Christian history—has long lacked computational tools tailored to this linguistic register. While classical Greek has benefited from recent advances in natural language processing, Koine Greek's distinct morphology, syntax, and vocabulary have left it underserved by existing models. This paper presents \textbf{KoineFormer}, a domain-adapted language model that achieves 96.54\% accuracy on part-of-speech tagging for Koine Greek texts, and the \textbf{Synoptiq Corpus}, a token-aligned, morphologically annotated dataset of the Synoptic Gospels. Together, these resources enable scholars to perform large-scale morphological analysis, textual criticism, and comparative studies with unprecedented speed and accuracy. The model, dataset, and code are released under CC-BY-SA 4.0 to support the digital humanities community.
+\noindent The study of Koine Greek texts—central to New Testament scholarship, Septuagint studies, and early Christian history—has long lacked computational tools tailored to this linguistic register. While classical Greek has benefited from recent advances in natural language processing, Koine Greek's distinct morphology, syntax, and vocabulary have left it underserved by existing models. This paper presents \textbf{KoineFormer}, a domain-adapted language model that achieves 96.62\% part-of-speech and 81.34\% lemmatisation accuracy on Koine Greek texts, and the \textbf{Synoptiq Corpus}, a token-aligned, morphologically annotated dataset of the Synoptic Gospels. Together, these resources enable scholars to perform large-scale morphological analysis, textual criticism, and comparative studies with unprecedented speed and accuracy. The model, dataset, and code are released under CC-BY-SA 4.0 to support the digital humanities community.
 \end{tcolorbox}
 
 \vspace{1.1em}
@@ -129,7 +129,7 @@ KoineFormer: Domain-Adaptive Language Modeling for Koine Greek}\\[10pt]
 \renewcommand{\arraystretch}{1}
 \setlength{\tabcolsep}{7pt}
 \begin{tabular}{P{0.18\linewidth}P{0.18\linewidth}P{0.18\linewidth}P{0.18\linewidth}P{0.18\linewidth}}
-\statcard{96.76\%}{POS accuracy} &
+\statcard{96.62\%}{POS accuracy} &
 \statcard{81.34\%}{Lemma accuracy} &
 \statcard{49{,}061}{Tokens annotated} &
 \statcard{170}{Aland pericopes} &
@@ -273,20 +273,20 @@ To evaluate the quality of KoineFormer's representations, we employ a linear pro
 \toprule
 \tblhead\textbf{Model} & \textbf{POS} & \textbf{POS Err.} & \textbf{Lemma} & \textbf{Params} & \textbf{Checkpoint} & \textbf{GPU Cost} \\
 \midrule
-GreTa (zero-shot) & 95.27\% & 4.73\% & 82.59\% & 0 & 880 MB & \$0.00 \\
+GreTa (zero-shot) & 95.32\% & 4.68\% & 82.37\% & 0 & 880 MB & \$0.00 \\
 Full fine-tuning & 96.11\% & 3.89\% & --- & 220M & 880 MB & \textasciitilde\$23 \\
-\rowcolor{terracotta!12}\textbf{KoineFormer (LoRA)} & \textbf{96.76\%} & \textbf{3.24\%} & 81.34\% & \textbf{3.7M} & \textbf{14 MB} & \textbf{\$0.35} \\
+\rowcolor{terracotta!12}\textbf{KoineFormer (LoRA)} & \textbf{96.62\%} & \textbf{3.38\%} & 81.34\% & \textbf{3.7M} & \textbf{14 MB} & \textbf{\$0.35} \\
 \bottomrule
 \end{tabular}
-\caption{\textbf{Two-task evaluation.} KoineFormer improves POS accuracy by 1.49 points over zero-shot (31\% relative error reduction) while training 60$\times$ fewer parameters and costing 66$\times$ less than full fine-tuning. Lemmatisation accuracy is comparable between zero-shot and DAPT (82.6\% vs.\ 81.3\%)---span-corruption DAPT with a classical replay buffer does not improve vocabulary-level tasks. Full fine-tune lemma results are pending.}
+\caption{\textbf{Two-task evaluation.} KoineFormer improves POS accuracy by 1.30 points over zero-shot (31\% relative error reduction) while training 60$\times$ fewer parameters and costing 66$\times$ less than full fine-tuning. Lemmatisation accuracy is comparable between zero-shot and DAPT (82.4\% vs.\ 81.3\%)---span-corruption DAPT with a classical replay buffer does not improve vocabulary-level tasks. Full fine-tune lemma results are pending.}
 \label{tab:results}
 \end{table}
 
 The results demonstrate four key findings:
 \begin{enumerate}
-    \item \textbf{Strong zero-shot POS transfer}: GreTa, trained exclusively on Classical Greek, achieves 95.27\% POS accuracy on Koine---the domain gap is smaller than previously assumed.
+    \item \textbf{Strong zero-shot POS transfer}: GreTa, trained exclusively on Classical Greek, achieves 95.32\% POS accuracy on Koine---the domain gap is smaller than previously assumed.
 
-    \item \textbf{Effective and task-selective adaptation}: KoineFormer improves POS accuracy by 1.49 points (31\% error reduction) with only 3.7M trainable parameters. Lemmatisation accuracy is unchanged (82.6\% vs.\ 81.3\%)---span-corruption DAPT improves syntactic representations but does not expand vocabulary coverage, since the corpus is small and the classical replay buffer reintroduces Attic forms.
+    \item \textbf{Effective and task-selective adaptation}: KoineFormer improves POS accuracy by 1.30 points (28\% error reduction) with only 3.7M trainable parameters. Lemmatisation accuracy is unchanged (82.4\% vs.\ 81.3\%)---span-corruption DAPT improves syntactic representations but does not expand vocabulary coverage, since the corpus is small and the classical replay buffer reintroduces Attic forms.
 
     \item \textbf{Overfitting in full fine-tuning}: Training all 220M parameters yields only 96.11\% POS accuracy at significantly higher cost, with unstable training dynamics (Table~\ref{tab:loss}).
 
