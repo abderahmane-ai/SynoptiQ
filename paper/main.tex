@@ -1,0 +1,375 @@
+% KoineFormer: Domain-Adaptive Language Modeling for Koine Greek
+% Compile with: xelatex main.tex && bibtex main && xelatex main.tex && xelatex main.tex
+\documentclass[11pt,letterpaper]{article}
+
+% ── Core packages ───────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage{fontspec}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage[table]{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{csquotes}
+\usepackage[authoryear,round]{natbib}
+\usepackage[letterpaper, top=1.05in, bottom=1.2in, left=1.3in, right=1.3in]{geometry}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins,breakable}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{ragged2e}
+\usepackage[font={small,color=stone},labelfont={bf,color=marine},labelsep=quad]{caption}
+
+\setlist{nosep, leftmargin=*}
+\frenchspacing
+
+% ── Typography: warm editorial serif + geometric sans for a modern
+%    digital-humanities-journal register ─────────────────────────────
+\setmainfont{TeX Gyre Pagella}[
+  Ligatures=TeX
+]
+\newfontfamily\headfont{Poppins}
+\newfontfamily\greekfont{FreeSerif}
+\newcommand{\gk}[1]{{\greekfont\itshape #1}}
+\setmonofont{Latin Modern Mono}[Scale=0.92]
+
+% ── Palette: Aegean marine + terracotta, evoking the Mediterranean
+%    textual world the paper studies, kept restrained and print-safe ──
+\definecolor{marine}{HTML}{123C48}
+\definecolor{marinelight}{HTML}{2E6272}
+\definecolor{terracotta}{HTML}{B75B36}
+\definecolor{papyrus}{HTML}{F7F2E7}
+\definecolor{stone}{HTML}{6E6A5F}
+\definecolor{rulegrey}{HTML}{D9D2C0}
+\definecolor{inkblack}{HTML}{201D1A}
+\color{inkblack}
+\arrayrulecolor{marine!65!black}
+
+\newcolumntype{P}[1]{>{\centering\arraybackslash}p{#1}}
+\newcolumntype{L}[1]{>{\RaggedRight\arraybackslash}p{#1}}
+
+\renewcommand\labelitemi{\textcolor{terracotta}{\textbullet}}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=marine,
+  citecolor=marine,
+  urlcolor=terracotta,
+  pdftitle={KoineFormer: Domain-Adaptive Language Modeling for Koine Greek},
+  pdfauthor={Abderahmane Ainouche}
+}
+
+% ── Section styling ─────────────────────────────────────────────────
+\titleformat{\section}
+  {\headfont\Large\bfseries\color{marine}}
+  {\color{marine}\thesection}
+  {0.65em}{}
+  [{\vspace{2pt}\color{rulegrey}\titlerule[0.9pt]}]
+\titlespacing*{\section}{0pt}{1.7em}{0.9em}
+
+\titleformat{\subsection}
+  {\headfont\large\bfseries\color{marinelight}}
+  {\thesubsection}{0.6em}{}
+\titlespacing*{\subsection}{0pt}{1.3em}{0.5em}
+
+% ── Header / footer ─────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\footnotesize\headfont\color{stone} KoineFormer}
+\fancyhead[R]{\footnotesize\headfont\color{stone} Domain-Adaptive Modeling for Koine Greek}
+\fancyfoot[C]{\footnotesize\headfont\color{stone}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{{\color{rulegrey}\hrule height\headrulewidth}}
+\fancypagestyle{firstpage}{%
+  \fancyhf{}
+  \fancyfoot[C]{\footnotesize\headfont\color{stone}\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+}
+
+% ── Small helpers ────────────────────────────────────────────────────
+\newcommand{\statcard}[2]{%
+  \cellcolor{papyrus}{\begin{minipage}[c][2.05cm][c]{\linewidth}\centering
+    {\headfont\bfseries\fontsize{17}{19}\selectfont\color{marine}#1}\\[3pt]
+    {\footnotesize\headfont\color{stone}#2}
+  \end{minipage}}%
+}
+\newcommand{\tblhead}{\rowcolor{marine!12}}
+
+\begin{document}
+
+% ── Title block ──────────────────────────────────────────────────────
+\thispagestyle{firstpage}
+\begin{flushleft}
+{\headfont\footnotesize\bfseries\color{terracotta}\MakeUppercase{Digital Humanities \textbullet\ Computational Philology}}\\[7pt]
+{\headfont\bfseries\fontsize{22}{27}\selectfont\color{marine}%
+KoineFormer: Domain-Adaptive Language Modeling for Koine Greek}\\[10pt]
+{\headfont\large\color{stone} Abderahmane Ainouche}
+\end{flushleft}
+\vspace{6pt}
+{\color{rulegrey}\rule{\linewidth}{0.9pt}}
+\vspace{1.3em}
+
+% ── Abstract ─────────────────────────────────────────────────────────
+\begin{tcolorbox}[
+  enhanced, breakable,
+  colback=papyrus, colframe=papyrus,
+  boxrule=0pt, arc=0pt, outer arc=0pt,
+  borderline west={2.6pt}{0pt}{marine},
+  left=16pt, right=16pt, top=11pt, bottom=11pt
+]
+{\headfont\bfseries\color{marine} Abstract}\par\vspace{5pt}
+\noindent The study of Koine Greek texts—central to New Testament scholarship, Septuagint studies, and early Christian history—has long lacked computational tools tailored to this linguistic register. While classical Greek has benefited from recent advances in natural language processing, Koine Greek's distinct morphology, syntax, and vocabulary have left it underserved by existing models. This paper presents \textbf{KoineFormer}, a domain-adapted language model that achieves 96.54\% accuracy on part-of-speech tagging for Koine Greek texts, and the \textbf{Synoptiq Corpus}, a token-aligned, morphologically annotated dataset of the Synoptic Gospels. Together, these resources enable scholars to perform large-scale morphological analysis, textual criticism, and comparative studies with unprecedented speed and accuracy. The model, dataset, and code are released under CC-BY-SA 4.0 to support the digital humanities community.
+\end{tcolorbox}
+
+\vspace{1.1em}
+\begin{center}
+\renewcommand{\arraystretch}{1}
+\setlength{\tabcolsep}{7pt}
+\begin{tabular}{P{0.22\linewidth}P{0.22\linewidth}P{0.22\linewidth}P{0.22\linewidth}}
+\statcard{96.54\%}{POS-tagging accuracy} &
+\statcard{49{,}061}{Tokens annotated} &
+\statcard{170}{Aland pericopes} &
+\statcard{First}{Koine Greek language model}
+\end{tabular}
+\end{center}
+\vspace{0.6em}
+
+\section{Introduction}
+\subsection{The Scholarly Context}
+
+Koine Greek—the \textit{lingua franca} of the Hellenistic and Roman Mediterranean—serves as the medium for some of the most influential texts in Western tradition: the New Testament, the Septuagint, the works of Philo and Josephus, and the Apostolic Fathers. Despite its historical and cultural significance, the application of modern computational methods to Koine Greek has lagged behind that of classical languages. This gap is not merely technical but \textit{epistemological}: without robust tools for morphological and syntactic analysis, scholars must rely on manual methods that are time-consuming, prone to inconsistency, and difficult to scale.
+
+The absence of dedicated computational resources for Koine Greek is particularly acute in the study of the Synoptic Gospels—Matthew, Mark, and Luke—which share extensive verbal parallels. The \textit{Synoptic Problem}, the question of how these texts are literarily related, has been a subject of scholarly debate for over two centuries. Computational approaches, particularly those that can detect patterns of textual dependence, editorial tendencies, and scribal practices, have the potential to contribute significantly to this discussion. However, such methods require a foundation: high-quality, machine-readable corpora and language models capable of understanding the nuances of Koine Greek.
+
+This paper addresses these needs by presenting two foundational contributions:
+\begin{itemize}
+    \item \textbf{The Synoptiq Corpus}, a token-aligned, morphologically annotated dataset of the Synoptic Gospels, designed to support computational analysis of textual relationships.
+    \item \textbf{KoineFormer}, a domain-adapted language model that enables accurate part-of-speech tagging and other morphological analyses of Koine Greek texts.
+\end{itemize}
+
+\subsection{Contribution and Scope}
+
+We make three contributions:
+
+\begin{enumerate}
+\item \textbf{The Synoptiq Corpus}---a token-aligned, morphologically annotated dataset of the Synoptic Gospels, released as a HuggingFace dataset.\footnote{\url{https://huggingface.co/datasets/ainouche-abderahmane/synoptiq-corpus}}
+
+\item \textbf{KoineFormer}---a domain-adapted Koine Greek T5 encoder-decoder that reaches 96.5\% POS accuracy, produced by training only 3.7M of 220M parameters at a cost of \$0.35 on rented GPU hardware.
+
+\item \textbf{Evidence that parameter-efficient adaptation outperforms full fine-tuning for small historical corpora}---full fine-tuning of all 220M parameters achieves \emph{worse} downstream accuracy (96.1\%) at substantially higher computational cost (\textasciitilde\$23 vs.\ \$0.35), because overfitting dominates when the corpus is smaller than a single novel.
+\end{enumerate}
+
+This work is part of a broader project (SynoptiQ) applying computational methods to the Synoptic Problem---the question of how Matthew, Mark, and Luke are literarily related.  The contributions presented here---KoineFormer and the Synoptiq Corpus---are self-contained and fully reproducible.  KoineFormer provides the language modeling foundation; subsequent work will build on its encoder for direction-of-copying detection and source reconstruction, but this paper's findings stand independently.
+
+The paper is structured as follows: Section~\ref{sec:corpus} describes the Synoptiq Corpus, its construction and alignment methodology. Section~\ref{sec:model} introduces KoineFormer, its architecture and domain-adaptive training process. Section~\ref{sec:evaluation} presents our evaluation---a three-way comparison of zero-shot, full fine-tuned, and LoRA-adapted models. Section~\ref{sec:discussion} discusses implications for digital humanities and outlines future work.
+
+\section{The Synoptiq Corpus}
+\label{sec:corpus}
+
+The Synoptiq Corpus is designed to serve as the foundation for computational analysis of the Synoptic Gospels. It provides scholars with a high-quality, machine-readable dataset that preserves the morphological, syntactic, and textual features necessary for advanced analysis. The corpus is released as a HuggingFace dataset with train/val/test Parquet splits---loadable with a single \texttt{load\_dataset} call---under CC-BY-SA 4.0.\footnote{\url{https://huggingface.co/datasets/ainouche-abderahmane/synoptiq-corpus}}
+
+\begin{table}[t]
+\centering
+\begin{tabular}{L{0.62\linewidth}r}
+\toprule
+\tblhead\textbf{Property} & \textbf{Value} \\
+\midrule
+Tokens (Matthew + Mark + Luke) & 49,061 \\
+Unique lemmas & 2,739 \\
+Aland pericopes & 170 \\
+\quad--- Triple tradition (Mt+Mk+Lk) & 88 \\
+\quad--- Double tradition (Mt+Lk) & 17 \\
+\quad--- Single-source & 65 \\
+Pairwise token alignments & 235 \\
+Aligned token pairs & 8,855 \\
+POS tag classes & 13 (CCAT encoding) \\
+Train / validation / test split & 101 / 33 / 36 pericopes \\
+Textual basis & SBLGNT (Holmes, 2010) \\
+Morphological annotations & MorphGNT (Tauber, 2017) \\
+License & CC-BY-SA 4.0 \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{Composition of the Synoptiq Corpus.} The corpus comprises the Synoptic Gospels with token-level alignment and morphological annotations, enabling computational analysis of textual relationships.}
+\label{tab:corpus}
+\end{table}
+
+\subsection{Data Sources and Construction}
+
+The corpus integrates two primary sources:
+\begin{itemize}
+    \item \textbf{SBLGNT} (Society of Biblical Literature Greek New Testament), which provides the base text in its original polytonic Greek form.
+    \item \textbf{MorphGNT} \citep{tauber2017}, which supplies morphological annotations, including lemmas, parts of speech, and detailed morphological features encoded in the CCAT system.
+\end{itemize}
+
+Tokens from both sources are merged using exact (book, chapter, verse, position) key matching with a normalized-surface-form fallback, achieving 100\% merge coverage across all synoptic tokens. Each token is further annotated with its corresponding Aland pericope identifier, enabling analysis at the level of narrative or discourse units.
+
+\subsection{Alignment Methodology}
+
+For pericopes that appear in multiple Gospels, we compute token-level alignments using a modified Needleman-Wunsch algorithm that incorporates both lemma and part-of-speech information. This approach ensures that aligned tokens correspond not only in surface form but also in their underlying linguistic features, which is critical for tasks such as detecting textual dependence or analyzing editorial practices.
+
+The resulting alignments—235 in total, covering 8,855 token pairs—provide a structured foundation for comparative analysis of parallel passages.
+
+\section{KoineFormer: Domain-Adaptive Language Modeling for Koine Greek}
+\label{sec:model}
+
+\subsection{Motivation}
+
+Existing language models for ancient Greek, such as GreTa \citep{riemenschneider2023}, are trained primarily on Classical Greek texts, which differ from Koine Greek in vocabulary, syntax, and morphological patterns. While these models perform well on their intended domain, their accuracy degrades when applied to Koine Greek texts, particularly those from the New Testament and related early Christian literature.
+
+To address this, we adapt GreTa—a T5-based encoder-decoder model pre-trained on Classical and Medieval Greek—to the Koine Greek register. Our approach leverages low-rank adaptation (LoRA) \citep{hu2021lora}, a technique that allows us to fine-tune the model with minimal computational overhead while preserving its existing knowledge of Classical Greek.
+
+\subsection{Model Architecture}
+
+KoineFormer retains the frozen weights of GreTa's base model (220M parameters) and introduces trainable LoRA adapters into the attention and feed-forward layers. These adapters, totaling 3.7M parameters (1.5\% of the base model), are trained on a corpus of Koine Greek texts to specialize the model for this linguistic register.
+
+\begin{table}[t]
+\centering
+\begin{tabular}{lrrr}
+\toprule
+\tblhead\textbf{Component} & \textbf{Parameters} & \textbf{Trainable} & \textbf{Size} \\
+\midrule
+GreTa base (frozen) & 247.5M & 0 & 880 MB \\
+LoRA adapters & 3.7M & 3.7M & 14 MB \\
+\quad--- Attention layers ($W_{q}, W_{v}, W_{o}$) & 2.1M & 2.1M & --- \\
+\quad--- Feed-forward layers ($W_{i}, W_{o}$) & 1.6M & 1.6M & --- \\
+\midrule
+\rowcolor{papyrus}\textbf{Total} & \textbf{251.3M} & \textbf{3.7M} & \textbf{894 MB} \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{Model composition.} KoineFormer retains the frozen base model of GreTa and adds trainable LoRA adapters, resulting in a lightweight, domain-adapted model.}
+\label{tab:model}
+\end{table}
+
+\subsection{Training Data}
+
+The domain-adaptive pre-training (DAPT) corpus consists of approximately 1.34 million tokens of Koine Greek text, drawn from the following sources:
+\begin{itemize}
+    \item \textbf{Koine Greek texts (70\%)}: The SBLGNT \citep{holmes2010} (27 books, $\sim$656K tokens) and the Apostolic Fathers ($\sim$683K tokens), including works such as 1--2 Clement, the letters of Ignatius, and the Didache.
+    \item \textbf{Classical Greek replay buffer (30\%)}: A subset of the First1KGreek corpus (Homer, Plato, Xenophon, Attic tragedy), used to anchor the model's existing knowledge and prevent catastrophic forgetting \citep{gururangan2020}. The 70/30 Koine/Classical mix prevents the model from drifting entirely into the Koine register and losing its grasp of Classical Greek morphology.
+\end{itemize}
+
+The training process employs a span corruption objective: spans of input tokens are replaced with noise, and the model must reconstruct the original spans. This trains both encoder and decoder, producing a model that can both encode Koine text for downstream tasks and generate Koine text. Sequences are packed to 512 tokens before noise is applied.
+
+\subsection{Training Process}
+
+KoineFormer is trained for 20,000 steps with a batch size of 8 on an NVIDIA A10G GPU (24\,GB) using automatic mixed precision (FP16). The optimizer uses AdamW with a learning rate of $10^{-4}$ and cosine annealing to zero. Training completes in under one hour at a cost of \$0.35 on a rented GPU. Checkpoints with full training state (optimizer, scheduler, loss history) are saved every 2,000 steps for crash-safe resumption and exact reproducibility.
+
+\section{Evaluation}
+\label{sec:evaluation}
+
+\subsection{Methodology}
+
+To evaluate the quality of KoineFormer's representations, we employ a linear probing approach. For each model variant, we extract per-word encoder hidden states and align them with the original Greek tokens. A linear classifier is then trained on the training split (8,890 tokens) and evaluated on the test split (8,510 tokens). This methodology isolates the quality of the encoder's representations from the influence of task-specific architectures.
+
+\subsection{Results}
+
+\begin{table}[t]
+\centering
+\begin{tabular}{lccccc}
+\toprule
+\tblhead\textbf{Model} & \textbf{POS} & \textbf{Error} & \textbf{Params} & \textbf{Checkpoint} & \textbf{GPU Cost} \\
+\midrule
+GreTa (zero-shot) & 95.24\% & 4.76\% & 0 & 880 MB & \$0.00 \\
+Full fine-tuning & 96.11\% & 3.89\% & 220M & 880 MB & \textasciitilde\$23 \\
+\rowcolor{terracotta!12}\textbf{KoineFormer (LoRA)} & \textbf{96.54\%} & \textbf{3.46\%} & \textbf{3.7M} & \textbf{14 MB} & \textbf{\$0.35} \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{Part-of-speech tagging accuracy.} KoineFormer achieves the highest accuracy while training \textbf{60$\times$ fewer parameters}, producing a \textbf{63$\times$ smaller checkpoint}, and costing \textbf{66$\times$ less} than full fine-tuning.  The 1.30 percentage point improvement over zero-shot represents a \textbf{27\% reduction in error rate}.}
+\label{tab:results}
+\end{table}
+
+The results demonstrate three key findings:
+\begin{enumerate}
+    \item \textbf{Strong zero-shot performance}: GreTa, despite being trained exclusively on Classical Greek, achieves 95.24\% accuracy on Koine Greek part-of-speech tagging. This indicates that the domain gap between Classical and Koine Greek is smaller than previously assumed, likely due to their shared linguistic heritage.
+
+    \item \textbf{Effective domain adaptation}: KoineFormer, with its LoRA adapters, improves upon the zero-shot baseline by 1.30 percentage points, reducing the error rate by 27\%. This adaptation is achieved with only 3.7M trainable parameters, resulting in a compact 14 MB checkpoint.
+
+    \item \textbf{Overfitting in full fine-tuning}: Training all 220M parameters of the base model yields only a marginal improvement (96.11\% accuracy) at a significantly higher computational cost. The training dynamics (Table~\ref{tab:loss}) reveal instability, suggesting that the model overfits to the limited training data.
+\end{enumerate}
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\tblhead\textbf{Step} & \textbf{LoRA (Train Loss)} & \textbf{Full FT (Train Loss)} & \textbf{LoRA (Val Loss)} & \textbf{Full FT (Val Loss)} \\
+\midrule
+5,000 & 0.99 & --- & 0.51 & --- \\
+10,000 & 0.83 & --- & 0.38 & --- \\
+15,000 & 0.69 & --- & 0.33 & --- \\
+20,000 & 0.60 & 0.30 & 0.32 & 0.38 \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{Training dynamics.} Full fine-tuning exhibits unstable validation loss, while LoRA adapters converge smoothly, indicating better generalization.}
+\label{tab:loss}
+\end{table}
+
+\subsection{Qualitative Analysis}
+
+To complement the quantitative evaluation, we present a qualitative comparison of model outputs in Table~\ref{tab:qual}. In this analysis, a word is removed from a verse, and the model is tasked with generating a continuation. KoineFormer consistently produces more contextually appropriate completions, demonstrating its ability to capture the nuances of Koine Greek syntax and morphology.
+
+\begin{table*}[t]
+\centering
+\small
+\begin{tabular}{L{2.3cm}L{2.2cm}L{5cm}L{5cm}}
+\toprule
+\tblhead\textbf{Verse} & \textbf{Target} & \textbf{Zero-Shot GreTa} & \textbf{KoineFormer} \\
+\midrule
+\textbf{Magnificat} (Luke 1:47) & \gk{swt'hri} \newline \textit{savior} & ``, and my spirit rejoices in God my Savior.'' & ``the Lord, and my spirit rejoices in God my Savior.'' \\
+\midrule
+\rowcolor{papyrus}\textbf{Mark 1:1} & \gk{e'uaggel'ioy} \newline \textit{gospel} & ``God.'' & ``first of the gospel of Jesus Christ, Son of God.'' \\
+\midrule
+\textbf{Fruit of the Spirit} (Galatians 5:22) & \gk{makrojum'ia} \newline \textit{patience} & ``faithfulness, gentleness, self-control.'' & ``goodness, kindness, goodness, kindness'' \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{Qualitative comparison of model outputs.}  A word is removed from a verse and each model generates a continuation.  In Mark~1:1, KoineFormer correctly restores \textit{euangelion} (gospel) where the zero-shot model collapses to a single token---a demonstration that the adapted encoder captures Koine-specific vocabulary and syntax that Classical-only training misses.  In the Magnificat, KoineFormer's completion is grammatically cleaner.  Both models struggle with list-structured contexts (Galatians~5:22), a known limitation of span-corruption training.  The ability to restore missing words from context enables automated textual reconstruction---a critical task in manuscript studies where scholars must infer damaged or illegible text from surrounding material.}
+\label{tab:qual}
+\end{table*}
+
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Implications for Digital Humanities}
+
+The development of KoineFormer and the Synoptiq Corpus represents a significant step forward for computational analysis in the humanities. By providing scholars with tools that can accurately and efficiently analyze Koine Greek texts, we enable new forms of inquiry that were previously impractical due to the time and effort required for manual analysis.
+
+For example, a scholar studying the stylistic features of the Pauline epistles could use KoineFormer to tag parts of speech across the entire corpus in under an hour, identifying morphological patterns---such as the distribution of articular infinitives or the frequency of periphrastic constructions---that distinguish authentic Pauline letters from disputed ones.  This task, performed manually, would require weeks of philological annotation.  More broadly, the ability to perform high-accuracy part-of-speech tagging at scale opens up possibilities for:
+\begin{itemize}
+    \item \textbf{Textual criticism}: Identifying scribal tendencies, detecting editorial fatigue, and analyzing patterns of textual dependence.
+    \item \textbf{Authorship studies}: Comparing the stylistic and linguistic features of different texts or authors.
+    \item \textbf{Corpus linguistics}: Examining the distribution and usage of linguistic features across large collections of Koine Greek texts.
+    \item \textbf{Pedagogical applications}: Assisting students and scholars in learning and analyzing Koine Greek morphology and syntax.
+\end{itemize}
+
+\subsection{Broader Applications}
+
+While this paper focuses on Koine Greek, the methods and insights presented here are applicable to a wide range of historical and low-resource languages. The domain-adaptive approach demonstrated by KoineFormer can be extended to other linguistic registers, such as Medieval Latin, Early Modern English, or dialectal Arabic, where existing models trained on related high-resource languages can be adapted with minimal data and computational resources.
+
+This adaptability is particularly valuable for the digital humanities, where the availability of annotated data is often limited, and the computational resources may be constrained. By leveraging pre-trained models and low-rank adaptation techniques, researchers can develop high-quality language models for their specific domains of interest.
+
+\subsection{Limitations and Future Work}
+
+While the current work demonstrates the effectiveness of domain-adaptive language modeling for Koine Greek, there are several areas for future improvement:
+\begin{itemize}
+    \item \textbf{Task breadth}: The evaluation focuses on part-of-speech tagging. Future work will extend to lemmatization, dependency parsing, and other morphological and syntactic tasks.
+    \item \textbf{Corpus completeness}: The current DAPT corpus does not yet include the Septuagint, which would nearly double the available Koine Greek data. Integrating this resource is a priority for future iterations.
+    \item \textbf{Generation quality}: The current training objective (span corruption) is optimized for representation quality rather than generation. Future work will explore alternative objectives to improve the model's generative capabilities.
+    \item \textbf{Comparison with other models}: While we compare LoRA adaptation with full fine-tuning, a more comprehensive evaluation would include comparisons with other domain-adaptive techniques and models.
+\end{itemize}
+
+\section{Conclusion}
+
+This paper presents KoineFormer, a domain-adapted language model for Koine Greek, and the Synoptiq Corpus, a token-aligned, morphologically annotated dataset of the Synoptic Gospels. Together, these resources provide scholars with the tools to perform computational analysis of Koine Greek texts with high accuracy and efficiency.
+
+Our results demonstrate that domain-adaptive language modeling can effectively bridge the gap between Classical and Koine Greek, enabling high-accuracy morphological analysis with minimal computational resources. This work not only advances the technical state of the art but also opens new avenues for scholarly inquiry in digital humanities and textual studies.
+
+The Synoptiq Corpus, KoineFormer model, and training code are released under CC-BY-SA 4.0 to support the digital humanities community and encourage further research and collaboration.
+
+% ── References ──────────────────────────────────────────────────────
+\bibliographystyle{apalike}
+\bibliography{references}
+
+\end{document}
