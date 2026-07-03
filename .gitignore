@@ -70,3 +70,5 @@ datasets/synoptiq-corpus/data/
 datasets/synoptiq-corpus/alignments.json
 datasets/synoptiq-corpus/pericopes.parquet
 *.zip
+SYNOPTIQ_MASTER_PLAN.md
+IMPLEMENTATION_PLAN.md
