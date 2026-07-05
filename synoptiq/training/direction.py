@@ -7,9 +7,12 @@ GRL annealing.
 
 from __future__ import annotations
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from pathlib import Path
 import signal
+from typing import TYPE_CHECKING
 
 import torch
 import torch.nn as nn
@@ -22,6 +25,9 @@ from synoptiq.data.corpus import Corpus
 from synoptiq.models.direction import DirectionScorer
 from synoptiq.utils.logging_ import get_logger
 from synoptiq.utils.types_ import Book
+
+if TYPE_CHECKING:
+    from transformers import AutoTokenizer
 
 _LOG = get_logger(__name__)
 

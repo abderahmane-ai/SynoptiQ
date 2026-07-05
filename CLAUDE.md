@@ -8,15 +8,18 @@ to determine the literary relationships among Matthew, Mark, and Luke.
 
 ```
 SynoptiQ/
-├── synoptiq/               # Python package (installable via pip install -e .)
-│   ├── data/               # Corpus loading, parsing, alignment, splits
-│   ├── models/             # KoineFormer, MultiTaskEncoder, DirectionScorer, Editor, QReconstructor
+├── synoptiq/               # Python package (pip install -e .)
+│   ├── data/               # Corpus loading, parsing, alignment, splits, augmentation
+│   ├── models/             # KoineFormer, DirectionScorer, MultiTaskEncoder
 │   │   ├── koineformer.py  # GreTa + LoRA wrapper, save/load adapters, generate
+│   │   ├── direction.py    # Phase 3: CrossAttentionAsymmetry, GRL, DirectionScorer
 │   │   └── encoder.py      # Multi-task encoder: POS, biaffine parser, pericope heads
-│   ├── training/           # DAPT, multi-task, direction training
-│   │   ├── dapt.py         # DAPT data loader (70/30 replay) + training loop with AMP, checkpointing
+│   ├── training/           # DAPT, multi-task, direction training loops
+│   │   ├── _config.py      # Frozen dataclasses: ModelConfig, TrainingConfig, et al.
+│   │   ├── dapt.py         # DAPT data loader (70/30 replay) + training loop
+│   │   ├── direction.py    # Phase 3: DirectionDataset, DirectionTrainer
 │   │   └── multitask.py    # Multi-task LoRA fine-tuning (POS dataset + trainer)
-│   ├── evaluation/         # Linear probe POS evaluation, baseline comparison
+│   ├── evaluation/         # Linear probe POS/lemma, direction metrics
 │   ├── bayesian/           # PyMC models, bridge sampling, prior sensitivity
 │   ├── interpretability/   # SHAP, Hawkins comparison, BERTViz
 │   └── utils/              # Greek text, tokenization, types, constants, logging
@@ -25,21 +28,23 @@ SynoptiQ/
 │   ├── export_hf_dataset.py # Package SynoptiQ Corpus as HuggingFace dataset
 │   ├── train_dapt.py       # Phase 2A: KoineFormer DAPT (--smoke-test for quick check)
 │   ├── train_multitask.py  # Phase 2B: Multi-task LoRA fine-tuning
+│   ├── train_direction.py  # Phase 3: Direction scorer (--smoke-test, full GPU training)
 │   ├── eval_baseline.py    # Zero-shot vs DAPT evaluation (--zero-shot, --dapt-checkpoint)
 │   └── run_ablation.py     # LoRA vs full fine-tune ablation
-├── paper/                  # Paper A: KoineFormer (ACL/LaTeCH-CLfL, XeLaTeX)
-│   ├── main.tex            # Main manuscript (Poppins + TeX Gyre Pagella, Mediterranean palette)
-│   └── references.bib      # BibTeX references
+├── paper/                  # Paper A: KoineFormer (XeLaTeX)
+│   ├── main.tex            # Main manuscript (Poppins + TeX Gyre Pagella, Mediterranean)
+│   ├── project_overview.tex # SynoptiQ project brief for Yale/Oxford/Harvard audience
+│   └── references.bib      # BibTeX references (6 entries)
 ├── modal/                  # Modal GPU deployment
-│   └── app_dapt.py         # DAPT training, ablation, full-FT eval — upload, train, monitor
-├── configs/                # YAML config files (data, model, training, bayesian, modal)
-├── datasets/               # HuggingFace dataset export output (gitignored except README)
+│   ├── app_dapt.py         # Phase 2A: DAPT training, ablation, full-FT eval
+│   └── app_direction.py    # Phase 3: Direction scorer training (T4 GPU)
+├── datasets/               # HuggingFace dataset export (gitignored except README)
 │   └── synoptiq-corpus/    # Pushed to ainouche-abderahmane/synoptiq-corpus
-├── tests/                  # Mirrors synoptiq/ structure; 84 tests
+├── tests/                  # 84 tests (mirrors synoptiq/ structure)
 ├── data/                   # Git-ignored: raw corpora, processed Parquet files
 ├── models/                 # Git-ignored: downloaded HF models, trained adapters
-│   └── koineformer/dapt/   # LoRA adapter checkpoints (~14 MB each, 10 checkpoints + final)
-├── outputs/                # Git-ignored: logs, eval results, ablation curves
+├── outputs/                # Git-ignored: logs, eval results, checkpoints
+├── PROJECT_OVERVIEW.md      # Project overview (Markdown)
 ├── SYNOPTIQ_MASTER_PLAN.md  # Research design, architecture, innovation rationale
 └── IMPLEMENTATION_PLAN.md   # Phases, subtasks, file lists, budget, timeline
 ```
@@ -52,28 +57,34 @@ SynoptiQ/
 | Phase 1 | ✓ Data Pipeline | SynoptiQ Corpus: 49,061 tokens, 170 pericopes, 235 alignments, 84 tests |
 | Phase 2A | ✓ DAPT | KoineFormer trained: 96.62% POS, 81.34% lemma, 14 MB |
 | Phase 2B | ○ Multi-task | Code ready, not yet trained |
-| Phase 3 | ● Direction Scorer | Code ready, smoke-test passed, awaiting GPU training |
+| Phase 3 | ● Direction Scorer | Code ready, smoke-test passed, awaiting Modal GPU training |
 | Phase 4 | ○ Editorial Drift | Not started |
 | Phase 5 | ○ Q Reconstruction | Not started |
 | Phase 6 | ○ Bayesian | Not started |
 | Phase 7 | ○ Interpretability | Not started |
-| Paper A | ✓ Draft | paper/main.tex — complete manuscript, 7/7 refinements applied |
+| Paper A | ✓ Draft | paper/main.tex — complete manuscript, verified numbers |
+| Paper B | ○ Design | Architecture designed, core code implemented |
 
 ## Key files to know
 
-- `synoptiq/utils/types_.py` — All shared TypedDicts, Literals, Protocols used everywhere
-- `synoptiq/utils/constants.py` — **Aland pericope table** (bedrock of the project), MorphGNT tagset maps, Goodacre fatigue pericopes, genre classifications. 1,337 lines, definitional.
+- `synoptiq/utils/types_.py` — All shared TypedDicts (`Direction`, `DirectionScores` already defined), Literals, Protocols
+- `synoptiq/utils/constants.py` — **Aland pericope table** (bedrock), MorphGNT tagset maps, Goodacre fatigue pericopes, 1,337 lines
 - `synoptiq/utils/greek.py` — Greek text normalization (NFD accent stripping, sigma normalization)
-- `synoptiq/data/corpus.py` — Central `Corpus` class. Single entry point for all data access.
+- `synoptiq/data/corpus.py` — Central `Corpus` class. `direction_pairs(split=...)` yields (book_a, tokens_a, book_b, tokens_b, alignment) for direction scorer training
 - `synoptiq/data/alignment.py` — Needleman-Wunsch token alignment via Bio.Align.PairwiseAligner
-- `synoptiq/training/_config.py` — Five frozen dataclasses with all training configuration
-- `synoptiq/models/koineformer.py` — **KoineFormer**: GreTa + LoRA wrapper, save/load adapters, generate
-- `synoptiq/training/dapt.py` — **DAPT**: data loader (70/30 Koine/Classical replay) + training loop with AMP, SIGTERM handler, crash-safe checkpointing
-- `synoptiq/evaluation/__init__.py` — **Evaluation**: per-token linear probe for POS accuracy
+- `synoptiq/data/augmentation.py` — Bootstrap resampling, sliding windows, scribal noise injection
+- `synoptiq/training/_config.py` — Five frozen dataclasses: `ModelConfig` already has `direction_num_classes`, `cross_attn_num_heads`, `asymmetry_num_features`, `lambda_adversarial`
+- `synoptiq/models/koineformer.py` — **KoineFormer**: GreTa + LoRA wrapper, factory, save/load, generate
+- `synoptiq/models/direction.py` — **DirectionScorer** (Phase 3): CrossAttentionAsymmetry, GradientReversalLayer, DirectionClassifier, AuthorDiscriminator
+- `synoptiq/training/dapt.py` — **DAPT**: data loader + training loop with AMP, SIGTERM handler, crash-safe checkpointing
+- `synoptiq/training/direction.py` — **Phase 3 training**: DirectionDataset (wraps Corpus.direction_pairs), DirectionTrainer (AMP, GRL annealing, checkpointing)
+- `synoptiq/evaluation/__init__.py` — Linear probe evaluation: POS + lemma accuracy
 - `scripts/train_dapt.py` — DAPT CLI: `--smoke-test` (100 steps CPU), full training (20K steps GPU)
-- `scripts/eval_baseline.py` — Compare zero-shot GreTa vs DAPT KoineFormer on downstream POS
+- `scripts/train_direction.py` — Direction scorer CLI: `--smoke-test` (100 steps CPU), full training (5K steps GPU)
+- `scripts/eval_baseline.py` — Compare zero-shot GreTa vs DAPT KoineFormer on POS + lemma
 - `scripts/run_ablation.py` — LoRA vs full fine-tune loss curve comparison
-- `modal/app_dapt.py` — Modal GPU deployment: `upload_data`, `start_training`, `run_ablation`, `train_and_eval_full_ft`
+- `modal/app_dapt.py` — Phase 2A Modal: `upload_data`, `start_training`, `run_ablation`, `train_and_eval_full_ft`
+- `modal/app_direction.py` — Phase 3 Modal: `upload_data`, `start_training` (T4, 5K steps), `smoke_test`
 
 ## Phase 2A results (Paper A)
 
@@ -92,46 +103,93 @@ but not vocabulary.
 ### DAPT corpus
 - Koine (70%): SBLGNT full NT (~773K tokens) + Apostolic Fathers (~732K tokens) ≈ 1.5M tokens
 - Classical replay (30%): First1KGreek (Homer, Plato, Xenophon)
-- LXX not yet loaded — TextFabric repo contains converter code but no text data
+- LXX yields 0 chunks (TextFabric `.tf` files are metadata, not Greek text)
 
 ### Training config
-- GreTa (T5-base, 220M) frozen, LoRA r=16 α=32 on W_q, W_v, W_o, W_i, W_o → 3.7M trainable
+- GreTa (T5-base, 220M) frozen, LoRA r=16 α=32 targeting `["q", "v", "o", "wi", "wo"]`
+- Note: `wi` does NOT actually apply (PEFT uses `endswith` matching; `wi` doesn't match `wi_0`/`wi_1`)
+- Actual LoRA targets: W_q, W_v, W_o (attention) + W_o (FFN output) → 3.7M trainable
+- Breakdown: attention 2.65M (q+v+o, self+cross) + FFN 1.08M (wo only)
 - 20,000 steps, batch 8, seq_len 512, AMP (FP16), AdamW lr=1e-4, cosine to zero
 - A10G GPU, 58 minutes, 10 checkpoints + final, crash-safe with SIGTERM handler
+
+## Phase 3: Direction Scorer
+
+### Architecture
+
+```
+Pericope pair (A, B) aligned tokens
+  → Tokenize each passage → KoineFormer encoder (frozen)
+  → H_A [L_A, 768], H_B [L_B, 768]
+  → CrossAttentionAsymmetry (trainable multi-head cross-attention):
+      A→B cross-attn + B→A cross-attn → 8 asymmetry features
+  → Pooled states → GradientReversalLayer → AuthorDiscriminator (3 books)
+  → [pooled_A, pooled_B, asym_features] → DirectionClassifier → 3-way softmax
+```
+
+### 8 asymmetry features
+1-2: mean attention A→B, B→A
+3-4: variance A→B, B→A
+5-6: entropy A→B, B→A
+7: KL-asymmetry (KL(A→B ‖ B→A) - KL(B→A ‖ A→B))
+8: position-decay (avg attended position normalized by sequence length)
+
+### Training data
+- 65 labeled triple-tradition pericopes (39 train / 12 val / 14 test)
+- Labels: (Mark, Matthew) → A_to_B, (Mark, Luke) → A_to_B, (Matthew, Luke) → independent
+- Swap augmentation doubles samples (A↔B with flipped label)
+- 250 train / 86 val / 92 test samples after augmentation
+- Pericope-level split prevents data leakage (same pericope never in train+test)
+
+### Training config
+- KoineFormer encoder frozen; cross-attention + classifier + discriminator trained
+- Batch 16, 5,000 steps, AdamW lr=1e-4, cosine to zero
+- GRL: λ anneals 0→1.0 over 1,000 steps
+- Loss = CrossEntropy(direction) + 0.1 × CrossEntropy(author)
+- AMP (FP16) on CUDA only; T4 GPU, ~30 min
+- Same crash-safe checkpointing as DAPT
+
+### Baselines needed (not yet built)
+- Encoplot (encode + cosine similarity heuristic)
+- Length ratio heuristic
+- With/without GRL ablation
+- POS-only vs full-encoder ablation
+
+### Key gotchas
+- AMP/GradScaler only activates on CUDA (not MPS/CPU)
+- GRL is wired correctly: pooled states → GRL → discriminator; classifier sees original (non-GRL'd) states
+- Matthew↔Luke pairs labeled "independent" under 2SH — critical negative examples
+- Direction types (`A_to_B`, `B_to_A`, `independent`) defined in `types_.py`
 
 ## Modal commands
 
 ```bash
-# Upload data to Modal volume (once):
+# ── Phase 2A: DAPT ──────────────────────────────────────────────────
+# Upload data (once):
 modal run modal/app_dapt.py::upload_data
 
-# Train KoineFormer (auto-resumes from checkpoint):
+# Train KoineFormer (auto-resumes):
 modal run modal/app_dapt.py::start_training
-
-# Monitor training (live logs):
 modal app logs synoptiq-dapt
 
-# Ablation — LoRA vs full fine-tune (2K steps, ~10 min):
+# Ablation:
 modal run modal/app_dapt.py::run_ablation
 
-# Full fine-tune DAPT + downstream POS eval (20K steps, ~1 hr):
-modal run modal/app_dapt.py::train_and_eval_full_ft
-
-# Download trained adapters:
+# Download adapters:
 modal volume get synoptiq-outputs dapt/ models/koineformer/dapt/
-```
 
-```bash
-# Phase 3: Train direction scorer (auto-resumes):
-modal run modal/app_direction.py::start_training
+# ── Phase 3: Direction Scorer ───────────────────────────────────────
+# Upload data (once, reuses DAPT volumes):
+modal run modal/app_direction.py::upload_data
 
-# Direction scorer smoke test:
+# Smoke test (100 steps, T4):
 modal run modal/app_direction.py::smoke_test
 
-# Monitor:
+# Full training (5K steps, T4, ~30 min):
+modal run modal/app_direction.py::start_training
 modal app logs synoptiq-direction
 
-# Download trained checkpoints:
+# Download checkpoints:
 modal volume get synoptiq-outputs direction/ outputs/direction/
 ```
 
@@ -139,55 +197,57 @@ Modal volume structure:
 - `synoptiq-data` — `/data/raw/` (4007 files) + `/data/processed/` (Parquet files)
 - `synoptiq-outputs` — `/outputs/dapt/` (10 checkpoints + final), `/outputs/direction/`, `/outputs/ablation/`, `/outputs/full_ft/`
 
-## HuggingFace dataset
+## HuggingFace
 
-Published at `ainouche-abderahmane/synoptiq-corpus` (CC-BY-SA 4.0):
+### Model: ainouche-abderahmane/koineformer
+```python
+from peft import PeftModel
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+base = AutoModelForSeq2SeqLM.from_pretrained("bowphs/GreTa")
+model = PeftModel.from_pretrained(base, "ainouche-abderahmane/koineformer").merge_and_unload()
+```
+CC-BY-SA 4.0. 96.62% POS, 81.34% lemma, 14 MB adapter.
 
+### Dataset: ainouche-abderahmane/synoptiq-corpus
 ```python
 from datasets import load_dataset
 ds = load_dataset("ainouche-abderahmane/synoptiq-corpus")
 # ds["train"] → 27,289 tokens, ds["validation"] → 9,170, ds["test"] → 10,618
 ```
+CC-BY-SA 4.0. 49,061 tokens, 170 pericopes, 235 alignments.
 
-Export/republish: `python3 scripts/export_hf_dataset.py --push --force`
-
-## DAPT data loader behavior
-
-- `DAPTIterableDataset` concatenates short text chunks into full 512-token sequences
-- 70% Koine sources (SBLGNT, Apostolic Fathers) interleaved with 30% Classical (First1KGreek)
-- Token-level noise: 15% of tokens replaced with mask_token_id=4
-- LXX yields 0 chunks (TextFabric `.tf` files are key=value metadata, not Greek text)
+### GitHub: github.com/abderahmane-ai/SynoptiQ
 
 ## Tokenizer notes
 
-- GreTa SentencePiece has no pad_token or eos_token set — must call `tokenizer.add_special_tokens({"pad_token": "[PAD]"})` and `model.resize_token_embeddings()`
-- Koine text tokenizes at 1.38 subwords/word (better than Classical at 1.95) — simpler morphology
-- Nomina sacra (Ἰησοῦς, Χριστός, κύριος, θεός) are single tokens — good coverage
+- GreTa SentencePiece has no pad_token or eos_token — always call:
+  `tokenizer.add_special_tokens({"pad_token": "[PAD]"})` then `model.resize_token_embeddings(len(tokenizer))`
+- Koine text tokenizes at 1.38 subwords/word (Classical: 1.95) — simpler morphology
+- Nomina sacra (Ἰησοῦς, Χριστός, κύριος, θεός) are single tokens
+- Subword-to-word alignment uses `▁` prefix (U+2581) for SentencePiece word boundaries
 
 ## Paper compilation
 
 ```bash
-# Install TeX (once):
-brew install --cask basictex
-# Or use Overleaf with XeLaTeX compiler
-
-# Compile:
+# Compile Paper A:
 cd paper
 xelatex main.tex && bibtex main && xelatex main.tex && xelatex main.tex
+
+# Compile Project Overview:
+xelatex project_overview.tex
 ```
 
-Paper uses custom fonts (Poppins, TeX Gyre Pagella, FreeSerif for Greek) and requires XeLaTeX.
-Color palette: marine (#123C48), terracotta (#B75B36), papyrus (#F7F2E7).
+Paper uses custom fonts (Poppins, TeX Gyre Pagella, FreeSerif for Greek) and XeLaTeX.
+Palette: marine (#123C48), terracotta (#B75B36), papyrus (#F7F2E7).
+Uses Overleaf if local TeX is unavailable.
 
 ## Pre-commit checklist (ALWAYS do these)
 
-Before every commit, in this exact order:
-
 ```bash
-# 1. Lint and auto-fix
+# 1. Lint — must show zero F or E level errors
 python3 -m ruff check synoptiq/ tests/ scripts/ --fix
 
-# 2. Run full test suite
+# 2. Full test suite — all 84 must pass
 python3 -m pytest tests/ -q --tb=short
 
 # 3. Clean all caches
@@ -198,40 +258,57 @@ find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null
 find . -name "*.pyc" -delete
 
 # 4. Commit
-git add -A
-git commit -m "<message>"
+git add -A && git commit -m "<message>"
 ```
 
-All tests must pass. Ruff should show zero F or E level errors (TC, UP, RUF, ANN, B90 warnings are cosmetic).
+Ruff TC, UP, RUF, ANN, B90 warnings are cosmetic — only fix F and E.
 
 ## Architecture summary
 
-**KoineFormer** = GreTa (T5 encoder-decoder, 220M params, Classical Greek) after PEFT-DAPT on Koine corpus (SBLGNT full NT + Apostolic Fathers ~1.5M tokens). LoRA adapters only (~3.7M trainable params, r=16, α=32, targeting W_q, W_v, W_o in attention + W_o in FFN). 70/30 Koine/Classical replay buffer (First1KGreek). Trained 20K steps, 58 min on A10G. 96.62% POS accuracy, 81.34% lemma accuracy. 14 MB checkpoint.
+**KoineFormer** = GreTa (T5 encoder-decoder, 220M params, Classical Greek) after
+PEFT-DAPT on Koine corpus (SBLGNT + Apostolic Fathers ~1.5M tokens). LoRA adapters
+only (~3.7M trainable, r=16 α=32, targeting W_q/W_v/W_o in attention + W_o in FFN).
+70/30 Koine/Classical replay buffer. 20K steps, 58 min on A10G. 96.62% POS,
+81.34% lemma. 14 MB checkpoint.
 
-**Direction Scorer** (Phase 3) = Cross-attention asymmetry between parallel passages → 8 asymmetry features → 3-way classification (A→B, B→A, independent). Adversarial GRL head strips authorship style. Trained on triple tradition (known direction: Mark → Matthew, Mark → Luke).
+**Direction Scorer** (Phase 3) = Frozen KoineFormer encoder → bidirectional
+cross-attention → 8 asymmetry features → GRL-stripped pooled states → 3-way
+classifier (A→B, B→A, independent). Adversarial GRL forces style-invariant
+features. Trained on 65 labeled triple-tradition pericopes (Mark→Matthew/Luke
+direction known). 5K steps on T4.
 
-**Editorial Fatigue** (Phase 4) = Position-weighted consistency loss: `L_fatigue = Σ w(i) · D_KL(edit_dist_i || source_dist_i)` where `w(i) = exp(-λ · i/N)`.
+**Editorial Fatigue** (Phase 4) = Position-weighted KL divergence between
+editing distribution and source distribution, with exponential decay weight.
+Detects copying author reverting to own style over the course of a pericope.
 
-**Q Reconstruction** (Phase 5) = Fusion-in-Decoder (FiD): Matthew + Luke encoded independently → concatenated hidden states → decoder with cross-attention. Trained on triple tradition (Matthew+Luke → reconstruct Mark) then transferred to double tradition.
+**Q Reconstruction** (Phase 5) = Fusion-in-Decoder: Matthew + Luke encoded
+independently → concatenated hidden states → decoder cross-attention. Trained
+on triple tradition (Mt+Lk→reconstruct Mark) then transferred to double tradition.
 
-**Bayesian Comparison** (Phase 6) = Direction scorer outputs → MC Dropout (T=20) → (μ_i, σ²_i) per pericope → PyMC Beta models with precision κ_i = 1/σ²_i. Four hypotheses: 2SH, FGH, Augustinian, Griesbach.
+**Bayesian Comparison** (Phase 6) = MC Dropout uncertainty per pericope →
+PyMC Beta hierarchical models → bridge sampling Bayes factors. Four hypotheses:
+Two-Source (2SH), Farrer–Goulder (FGH), Augustinian, Griesbach.
 
-**Interpretability** (Phase 7) = SHAP feature importance compared to Hawkins' *Horae Synopticae* (1899). BERTViz attention visualization. Multi-edition sensitivity (NA28 vs TR vs Majority Text vs WH).
+**Interpretability** (Phase 7) = SHAP feature importance vs Hawkins (1899).
+BERTViz attention visualization. Multi-edition sensitivity (NA28/TR/Majority/WH).
 
 ## Three-paper strategy
 
 | Paper | Phases | Content | Dependencies |
 |-------|--------|---------|-------------|
 | **Paper A** | Phase 1+2 | KoineFormer + SynoptiQ Corpus | Self-contained ✓ |
-| Paper B | Phase 3+4 | Direction scorer + editorial fatigue | Paper A encoder (or Ancient-Greek-BERT fallback) |
+| Paper B | Phase 3+4 | Direction scorer + editorial fatigue | Paper A encoder |
 | Paper C | Phase 5+6+7 | Q reconstruction + Bayesian + interpretability | Papers A+B |
 
-Paper A is complete (draft in `paper/main.tex`). Paper B can proceed with Ancient-Greek-BERT as encoder if KoineFormer isn't ready — they're independent.
+Paper A is complete (paper/main.tex). Paper B architecture implemented (Phase 3 code).
 
 ## Tech stack
 
-- Python 3.12+, PyTorch 2.6+, HuggingFace transformers 4.51+
-- PEFT (LoRA adapters), Modal (GPU cloud, A10G)
-- BioPython (token alignment), PyMC + ArviZ (Bayesian), SHAP + BERTViz (interpretability)
-- ruff (linting), pytest (testing), XeLaTeX (paper)
-- Data sources: SBLGNT (CC-BY), MorphGNT (CC-BY-SA), Apostolic Fathers, First1KGreek (CC-BY-SA)
+- Python 3.12+, PyTorch 2.6+, HuggingFace transformers 4.51+, PEFT
+- Modal (GPU cloud: A10G for DAPT, T4 for direction scorer)
+- BioPython (token alignment), PyMC + ArviZ (Bayesian), SHAP + BERTViz
+- ruff (linting), pytest (84 tests), XeLaTeX (paper)
+- Data: SBLGNT (CC-BY), MorphGNT (CC-BY-SA), Apostolic Fathers, First1KGreek (CC-BY-SA)
+- GitHub: [abderahmane-ai/SynoptiQ](https://github.com/abderahmane-ai/SynoptiQ)
+- HF model: [ainouche-abderahmane/koineformer](https://huggingface.co/ainouche-abderahmane/koineformer)
+- HF dataset: [ainouche-abderahmane/synoptiq-corpus](https://huggingface.co/datasets/ainouche-abderahmane/synoptiq-corpus)
