@@ -242,18 +242,9 @@ class DirectionTrainer:
         ) if val_dataset else None
 
         self.optimizer = AdamW(
-            scorer.cross_attn.parameters(),
+            list(scorer.cross_attn.parameters()) + list(scorer.classifier.parameters()),
             lr=config.learning_rate,
         )
-        # Also optimize classifier and discriminator
-        self.optimizer.add_param_group({
-            "params": scorer.classifier.parameters(),
-            "lr": config.learning_rate,
-        })
-        self.optimizer.add_param_group({
-            "params": scorer.author_disc.parameters(),
-            "lr": config.learning_rate,
-        })
 
         self.scheduler = CosineAnnealingLR(self.optimizer, T_max=config.max_steps)
         self.scaler = (
@@ -263,7 +254,6 @@ class DirectionTrainer:
         )
 
         self.direction_loss_fn = nn.CrossEntropyLoss()
-        self.author_loss_fn = nn.CrossEntropyLoss()
 
         self.global_step = 0
         self.history: dict[str, list[float]] = {
@@ -281,12 +271,6 @@ class DirectionTrainer:
             self._interrupted = True
 
         signal.signal(signal.SIGTERM, _handler)
-
-    def _grl_lambda(self) -> float:
-        """Linear warmup schedule for GRL gradient scale."""
-        if self.global_step >= self.config.grl_warmup_steps:
-            return self.config.grl_lambda_max
-        return self.config.grl_lambda_max * (self.global_step / self.config.grl_warmup_steps)
 
     def train(self) -> dict[str, list[float]]:
         """Run the full training loop."""
@@ -322,22 +306,10 @@ class DirectionTrainer:
                     attention_mask_b=batch["attention_mask_b"],
                 )
 
-                # Direction loss
-                dir_loss = self.direction_loss_fn(
+                # Direction loss only — GRL removed (v2)
+                loss = self.direction_loss_fn(
                     output["direction_logits"], batch["direction_label"],
                 )
-
-                # Adversarial author loss
-                author_loss_a = self.author_loss_fn(
-                    output["author_logits_a"], batch["author_label_a"],
-                )
-                author_loss_b = self.author_loss_fn(
-                    output["author_logits_b"], batch["author_label_b"],
-                )
-                author_loss = (author_loss_a + author_loss_b) / 2
-
-                # Total loss
-                loss = dir_loss + 0.1 * author_loss
 
             # Backward with AMP
             self.optimizer.zero_grad()
@@ -352,9 +324,6 @@ class DirectionTrainer:
             self.scheduler.step()
             self.global_step += 1
 
-            # Update GRL lambda
-            scorer.set_grl_lambda(self._grl_lambda())
-
             self.history["train_loss"].append(loss.item())
 
             # Logging
@@ -363,9 +332,6 @@ class DirectionTrainer:
                     f"step {self.global_step}/{config.max_steps}",
                     extra={
                         "loss": round(loss.item(), 4),
-                        "dir_loss": round(dir_loss.item(), 4),
-                        "author_loss": round(author_loss.item(), 4),
-                        "grl_lambda": round(scorer._grl_lambda, 3),
                         "lr": round(self.scheduler.get_last_lr()[0], 6),
                     },
                 )

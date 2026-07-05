@@ -1,7 +1,13 @@
 """Direction scorer — detects direction of literary copying between parallel passages.
 
-Uses cross-attention asymmetry between KoineFormer encoder hidden states
-with adversarial gradient reversal to strip authorship style.
+Uses cross-attention asymmetry between KoineFormer encoder hidden states.
+The cross-attention is a learned multi-head attention that compares two
+encoded passages and extracts 8 engineered asymmetry features. A 3-way MLP
+classifier outputs probabilities for A→B, B→A, or independent.
+
+No adversarial component — the GRL was removed (v1 experiment) because on
+250 samples it destroyed the cross-attention gradients, producing flat
+attention maps and collapsing the classifier to always predict "independent."
 """
 
 from __future__ import annotations
@@ -275,19 +281,13 @@ class DirectionScorer(nn.Module):
         super().__init__()
         self.config = config or DirectionScorerConfig()
         self.encoder = encoder  # Frozen KoineFormer encoder
-        self._grl_lambda = 0.0  # Annealed during training
 
         self.cross_attn = CrossAttentionAsymmetry(self.config)
         self.classifier = DirectionClassifier(self.config)
-        self.author_disc = AuthorDiscriminator(self.config)
 
         # Freeze encoder
         for param in self.encoder.parameters():
             param.requires_grad = False
-
-    def set_grl_lambda(self, lambda_: float) -> None:
-        """Set the GRL gradient scale (annealed during training)."""
-        self._grl_lambda = lambda_
 
     def forward(
         self,
@@ -296,12 +296,11 @@ class DirectionScorer(nn.Module):
         input_ids_b: torch.Tensor,  # [B, L_B]
         attention_mask_b: torch.Tensor,  # [B, L_B]
     ) -> dict[str, torch.Tensor]:
-        """Forward pass — returns direction logits and adversarial logits.
+        """Forward pass — returns direction logits and asymmetry features.
 
         Returns:
             Dict with keys:
                 direction_logits: [B, 3]
-                author_logits: [B, 3] (adversarial, for GRL loss)
                 asymmetry_features: [B, 8] (for analysis)
         """
         # Encode both passages with frozen encoder
@@ -320,20 +319,12 @@ class DirectionScorer(nn.Module):
             h_a_detached, h_b_detached, attention_mask_a.bool(), attention_mask_b.bool(),
         )
 
-        # GRL on pooled states for adversarial author prediction
-        grl_pooled_a = GradientReversalLayer.apply(pooled_a, self._grl_lambda)
-        grl_pooled_b = GradientReversalLayer.apply(pooled_b, self._grl_lambda)
-        author_logits_a = self.author_disc(grl_pooled_a)
-        author_logits_b = self.author_disc(grl_pooled_b)
-
         # Direction classification
         combined = torch.cat([pooled_a, pooled_b, asym_features], dim=1)  # [B, 1544]
         direction_logits = self.classifier(combined)
 
         return {
             "direction_logits": direction_logits,
-            "author_logits_a": author_logits_a,
-            "author_logits_b": author_logits_b,
             "asymmetry_features": asym_features,
         }
 

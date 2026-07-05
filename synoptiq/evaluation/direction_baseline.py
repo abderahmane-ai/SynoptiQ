@@ -233,7 +233,6 @@ def run_all_baselines(
 def main() -> None:
     """Run baselines and print comparison table."""
     import sys
-    from pathlib import Path
 
     _ROOT = Path(__file__).parent.parent.parent
     if str(_ROOT) not in sys.path:

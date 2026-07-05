@@ -49,9 +49,9 @@ def _build_image() -> object:
         )
     )
     # Copy project files into container
-    image = image.add_local_dir("synoptiq", "/app/synoptiq")
-    image = image.add_local_file("pyproject.toml", "/app/pyproject.toml")
-    image = image.add_local_file("README.md", "/app/README.md")
+    image = image.add_local_dir("synoptiq", "/app/synoptiq", copy=True)
+    image = image.add_local_file("pyproject.toml", "/app/pyproject.toml", copy=True)
+    image = image.add_local_file("README.md", "/app/README.md", copy=True)
     image = image.run_commands("cd /app && pip install -e . --no-deps")
     return image
 
