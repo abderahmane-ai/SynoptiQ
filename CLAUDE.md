@@ -52,7 +52,7 @@ SynoptiQ/
 | Phase 1 | ✓ Data Pipeline | SynoptiQ Corpus: 49,061 tokens, 170 pericopes, 235 alignments, 84 tests |
 | Phase 2A | ✓ DAPT | KoineFormer trained: 96.62% POS, 81.34% lemma, 14 MB |
 | Phase 2B | ○ Multi-task | Code ready, not yet trained |
-| Phase 3 | ○ Direction Scorer | Not started |
+| Phase 3 | ● Direction Scorer | Code ready, smoke-test passed, awaiting GPU training |
 | Phase 4 | ○ Editorial Drift | Not started |
 | Phase 5 | ○ Q Reconstruction | Not started |
 | Phase 6 | ○ Bayesian | Not started |
@@ -121,9 +121,23 @@ modal run modal/app_dapt.py::train_and_eval_full_ft
 modal volume get synoptiq-outputs dapt/ models/koineformer/dapt/
 ```
 
+```bash
+# Phase 3: Train direction scorer (auto-resumes):
+modal run modal/app_direction.py::start_training
+
+# Direction scorer smoke test:
+modal run modal/app_direction.py::smoke_test
+
+# Monitor:
+modal app logs synoptiq-direction
+
+# Download trained checkpoints:
+modal volume get synoptiq-outputs direction/ outputs/direction/
+```
+
 Modal volume structure:
 - `synoptiq-data` — `/data/raw/` (4007 files) + `/data/processed/` (Parquet files)
-- `synoptiq-outputs` — `/outputs/dapt/` (10 checkpoints + final), `/outputs/ablation/`, `/outputs/full_ft/`
+- `synoptiq-outputs` — `/outputs/dapt/` (10 checkpoints + final), `/outputs/direction/`, `/outputs/ablation/`, `/outputs/full_ft/`
 
 ## HuggingFace dataset
 
