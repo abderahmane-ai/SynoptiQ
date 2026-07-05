@@ -374,7 +374,8 @@ class DAPTTrainer:
         # ── SIGTERM handler (spot preemption) ──────────────────────────
         interrupted = False
 
-        def _handle_sigterm(signum: int, frame: Any) -> None:
+        def _handle_sigterm(_signum: int, _frame: Any) -> None:
+            """Flag the loop to checkpoint and exit at the next safe point."""
             nonlocal interrupted
             _LOG.warning("SIGTERM received — saving emergency checkpoint")
             interrupted = True

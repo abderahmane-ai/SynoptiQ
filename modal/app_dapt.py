@@ -109,7 +109,7 @@ def upload_data() -> None:
     if result.returncode != 0:
         print(f"Raw upload failed: {result.stderr}")
         sys.exit(1)
-    print(f"Raw data uploaded.")
+    print("Raw data uploaded.")
 
     # Also upload processed Parquet files (needed for eval on Modal).
     local_proc = Path("data/processed")
@@ -121,7 +121,7 @@ def upload_data() -> None:
         if result.returncode != 0:
             print(f"Processed upload failed: {result.stderr}")
         else:
-            print(f"Processed data uploaded.")
+            print("Processed data uploaded.")
 
     print(f"Upload complete. Volume: {DATA_VOLUME}")
 
@@ -187,9 +187,9 @@ def start_training() -> None:
 
     print(f"Starting DAPT: {config.max_steps} steps, batch={config.batch_size}, "
           f"seq_len={config.max_length}, AMP={config.use_amp}")
-    print(f"Data: /data/raw  |  Checkpoints: /outputs/dapt")
-    print(f"Auto-resume: yes  |  Volume commits: yes")
-    print(f"Monitor: modal app logs synoptiq-dapt")
+    print("Data: /data/raw  |  Checkpoints: /outputs/dapt")
+    print("Auto-resume: yes  |  Volume commits: yes")
+    print("Monitor: modal app logs synoptiq-dapt")
     print(f"{'='*50}")
 
     trainer = DAPTTrainer(model, data_dir, tokenizer, config, device=device)
@@ -202,10 +202,10 @@ def start_training() -> None:
     final_loss = history["loss"][-1]
     best_loss = min(history["loss"])
     print(f"\n{'='*50}")
-    print(f"DAPT COMPLETE")
+    print("DAPT COMPLETE")
     print(f"  Final loss: {final_loss:.4f}")
     print(f"  Best loss:  {best_loss:.4f}")
-    print(f"  Checkpoints: /outputs/dapt/")
+    print("  Checkpoints: /outputs/dapt/")
     print(f"  Download: modal volume get {OUTPUT_VOLUME} outputs/dapt/ models/")
     print(f"{'='*50}")
 
@@ -246,6 +246,7 @@ def run_ablation(n_steps: int = 2_000) -> None:
     tokenizer.add_special_tokens({"pad_token": "[PAD]"})
 
     def _train(model_obj, label, steps):
+        """Train one ablation variant for `steps` steps; return its loss history."""
         ds = DAPTIterableDataset(data_dir, tokenizer, max_length=512)
         it = iter(ds)
         opt = AdamW(model_obj.parameters(), lr=1e-4)
@@ -276,7 +277,9 @@ def run_ablation(n_steps: int = 2_000) -> None:
 
     # Variant 2: Full fine-tune (raw GreTa)
     print("=== Full Fine-Tune ===")
-    raw = AutoModelForSeq2SeqLM.from_pretrained("bowphs/GreTa", torch_dtype=torch.float32).to(device)
+    raw = AutoModelForSeq2SeqLM.from_pretrained(
+        "bowphs/GreTa", torch_dtype=torch.float32
+    ).to(device)
     if hasattr(raw.config, "tie_word_embeddings"):
         raw.config.tie_word_embeddings = False
     raw.resize_token_embeddings(len(tokenizer))
@@ -299,7 +302,7 @@ def run_ablation(n_steps: int = 2_000) -> None:
         "verdict": "lora_wins" if lora_end < ft_end else "fullft_lower",
     }
     (output_dir / "ablation_results.json").write_text(json.dumps(results, indent=2))
-    print(f"Results: /outputs/ablation/ablation_results.json")
+    print("Results: /outputs/ablation/ablation_results.json")
 
 
 # ── Step 4: Full FT DAPT + downstream eval ────────────────────────────────
@@ -338,7 +341,9 @@ def train_and_eval_full_ft() -> None:
 
     # ── Load model + tokenizer ─────────────────────────────────────────
     print("Loading raw GreTa (no LoRA) for full fine-tune...")
-    model = AutoModelForSeq2SeqLM.from_pretrained("bowphs/GreTa", torch_dtype=torch.float32).to(device)
+    model = AutoModelForSeq2SeqLM.from_pretrained(
+        "bowphs/GreTa", torch_dtype=torch.float32
+    ).to(device)
     if hasattr(model.config, "tie_word_embeddings"):
         model.config.tie_word_embeddings = False
 
@@ -358,7 +363,6 @@ def train_and_eval_full_ft() -> None:
 
     model.train()
     losses: list[float] = []
-    best_loss = float("inf")
 
     print(f"Training full FT DAPT: {n_steps} steps, batch={bsz}")
     for step in range(1, n_steps + 1):
@@ -401,7 +405,6 @@ def train_and_eval_full_ft() -> None:
     # Build a simple POS tag set from the encoder's behavior.
     # We evaluate by extracting hidden states on test verses and training
     # a linear probe on train verses — same protocol as local eval.
-    from synoptiq.training.dapt import _extract_text_from_dir
 
     # We need the processed corpus.  Reconstruct via the Corpus API
     # using the Parquet files if they exist on the volume, otherwise
@@ -437,6 +440,7 @@ def train_and_eval_full_ft() -> None:
     encoder.eval()
 
     def _extract(data_split, max_verses=500):
+        """Encode verses in a split into pooled hidden states and POS labels."""
         all_h, all_l = [], []
         n_v = 0
         for book in ("Matthew", "Mark", "Luke"):
@@ -510,7 +514,7 @@ def train_and_eval_full_ft() -> None:
     (output_dir / "results.json").write_text(json.dumps(results, indent=2, ensure_ascii=False))
     print(f"\n{'='*50}")
     print(f"Full FT POS accuracy: {acc:.2%}")
-    print(f"Results saved: /outputs/full_ft/results.json")
+    print("Results saved: /outputs/full_ft/results.json")
     print(f"{'='*50}")
 
 

@@ -29,6 +29,7 @@ if str(_ROOT) not in sys.path:
 
 from transformers import AutoTokenizer  # type: ignore[import-untyped]  # noqa: E402
 
+from scripts._cli_utils import detect_device  # noqa: E402
 from synoptiq.models.koineformer import KoineFormer  # noqa: E402
 from synoptiq.training.dapt import DAPTConfig, DAPTTrainer  # noqa: E402
 from synoptiq.utils.logging_ import get_logger  # noqa: E402
@@ -39,6 +40,7 @@ _LOG = get_logger(__name__)
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the argument parser for the DAPT training CLI."""
     parser = argparse.ArgumentParser(
         description="KoineFormer DAPT: domain-adaptive pre-training on Koine Greek",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -73,6 +75,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    """Parse arguments and run the DAPT training loop. Returns a process exit code."""
     parser = _build_parser()
     args = parser.parse_args()
 
@@ -85,7 +88,7 @@ def main() -> int:
         args.lr = 5e-4  # higher LR for quick convergence
         args.device = "cpu"
 
-    device = args.device or _detect_device()
+    device = args.device or detect_device()
     data_dir: Path = args.data_dir.resolve()
     output_dir: Path = args.output_dir.resolve()
 
@@ -156,15 +159,6 @@ def main() -> int:
             return 1
 
     return 0
-
-
-def _detect_device() -> str:
-    import torch
-    if torch.cuda.is_available():
-        return "cuda"
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
 
 
 if __name__ == "__main__":

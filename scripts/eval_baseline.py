@@ -27,6 +27,7 @@ if str(_ROOT) not in sys.path:
 
 from transformers import AutoTokenizer  # type: ignore[import-untyped]  # noqa: E402
 
+from scripts._cli_utils import detect_device  # noqa: E402
 from synoptiq.data.corpus import Corpus  # noqa: E402
 from synoptiq.evaluation import evaluate_lemmatization, evaluate_pos_tagging  # noqa: E402
 from synoptiq.models.koineformer import KoineFormer  # noqa: E402
@@ -36,6 +37,7 @@ _LOG = get_logger(__name__)
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the argument parser for the baseline evaluation CLI."""
     parser = argparse.ArgumentParser(
         description="Paper A baseline evaluation",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -54,12 +56,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    """Run zero-shot vs DAPT baseline evaluation. Returns a process exit code."""
     parser = _build_parser()
     args = parser.parse_args()
     data_dir: Path = args.data_dir.resolve()
     output_dir: Path = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    device = args.device or _detect_device()
+    device = args.device or detect_device()
 
     processed = data_dir / "processed"
     corpus = Corpus.from_parquet(
@@ -128,15 +131,6 @@ def main() -> int:
         print(f"  {'Δ':<25s} {pos_delta:>+7.2%}  {lemma_delta:>+7.2%}")
 
     return 0
-
-
-def _detect_device() -> str:
-    import torch
-    if torch.cuda.is_available():
-        return "cuda"
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
 
 
 if __name__ == "__main__":

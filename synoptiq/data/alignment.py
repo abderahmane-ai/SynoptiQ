@@ -3,28 +3,29 @@
 Implements Needleman-Wunsch global alignment using Bio.Align.PairwiseAligner
 (the current non-deprecated BioPython API, confirmed as of Biopython ≥1.80).
 
-Alignment key: lemma + POS (not surface form). This handles morphological
-variation — e.g., Matthew might write ἀπεκρίθη (aorist passive) where
-Mark writes ἀποκριθείς (aorist passive participle): same lemma, same POS,
-should align. Surface form matching alone would miss this.
+Comparison key: (normalized lemma, POS) — not surface form. This handles
+morphological variation: Matthew might write ἀπεκρίθη (aorist passive) where
+Mark writes ἀποκριθείς (aorist passive participle) — same lemma, same POS, so
+they should align even though the surface strings differ.
 
-Scoring matrix:
-  lemma_A == lemma_B AND pos_A == pos_B  → +2.5  (exact semantic match)
-  lemma_A == lemma_B                      → +2.0  (same word, different POS)
-  surface_A == surface_B                  → +0.5  bonus (added on top)
-  pos_A == pos_B only                     → +0.5
-  mismatch                                → -1.0
-  gap opening                             → -5.0
-  gap extension                           → -0.5
+Scoring is deliberately binary. Each distinct (lemma, POS) pair is encoded as
+a single Private-Use-Area codepoint, so the aligner reduces to character
+identity:
 
-The custom matrix is implemented by mapping each (lemma, pos) pair to an
-integer key (via a shared vocabulary), building a substitution matrix array,
-and passing it to PairwiseAligner. For very short sequences (<3 tokens),
-we skip alignment and return a trivial zip pairing.
+  identical (lemma, POS)  → +2.5  (``match_score``)
+  anything else           → -100  (``mismatch_score`` — effectively forbids
+                                    aligning non-identical tokens, forcing a gap)
+  gap opening             → -5.0
+  gap extension           → -0.5
+
+A richer graded matrix (lemma-only, POS-only, surface bonus) was prototyped but
+abandoned: a custom PairwiseAligner substitution matrix proved fragile for
+non-trivial alphabets. Surface-form agreement is still reported by
+``alignment_score`` as a quality statistic; it just does not steer the path.
 
 Usage:
     from synoptiq.data.alignment import align_tokens
-    pairs = align_tokens(matthew_tokens, mark_tokens, config)
+    pairs = align_tokens(matthew_tokens, mark_tokens)
     # pairs: list of (idx_in_matthew, idx_in_mark) — None = gap
 """
 
@@ -44,11 +45,8 @@ _LOG = get_logger(__name__)
 
 DEFAULT_GAP_OPEN: Final = -5.0
 DEFAULT_GAP_EXTEND: Final = -0.5
-DEFAULT_LEMMA_POS_MATCH: Final = 2.5
-DEFAULT_LEMMA_MATCH: Final = 2.0
-DEFAULT_POS_MATCH: Final = 0.5
-DEFAULT_SURFACE_BONUS: Final = 0.5
-DEFAULT_MISMATCH: Final = -100.0
+DEFAULT_MATCH: Final = 2.5  # score for an identical (lemma, POS) pair
+DEFAULT_MISMATCH: Final = -100.0  # effectively forbids aligning non-identical tokens
 
 # Maximum sequence length before we warn (NW is O(n*m))
 NW_WARN_LENGTH: Final = 300
@@ -72,60 +70,6 @@ def _make_token_key(record: TokenRecord) -> tuple[str, str, str]:
 
 
 # ── Alignment via PairwiseAligner ─────────────────────────────────────────────
-
-
-def _make_substitution_matrix(
-    keys_a: list[tuple[str, str, str]],
-    keys_b: list[tuple[str, str, str]],
-    *,
-    lemma_pos_match: float = DEFAULT_LEMMA_POS_MATCH,
-    lemma_match: float = DEFAULT_LEMMA_MATCH,
-    pos_match: float = DEFAULT_POS_MATCH,
-    surface_bonus: float = DEFAULT_SURFACE_BONUS,
-    mismatch: float = DEFAULT_MISMATCH,
-) -> tuple[list[str], list[list[float]]]:
-    """Build a substitution matrix for (lemma, pos, surface) token keys.
-
-    Maps each unique (lemma, pos) pair to a single-character 'alphabet'
-    for use with PairwiseAligner's substitution_matrix.
-
-    Returns:
-        Tuple of (alphabet, score_matrix) where alphabet is a list of
-        character strings and score_matrix[i][j] is the score for aligning
-        alphabet[i] with alphabet[j].
-    """
-    # Collect unique (lemma, pos) pairs from both sequences
-    all_pairs: set[tuple[str, str]] = set()
-    for lemma, pos, _ in keys_a + keys_b:
-        all_pairs.add((lemma, pos))
-
-    # Map each pair to a unique alphabet character (or index)
-    pair_to_idx: dict[tuple[str, str], int] = {pair: i for i, pair in enumerate(sorted(all_pairs))}
-    n = len(pair_to_idx)
-
-    # Build NxN score matrix
-    matrix: list[list[float]] = [[mismatch] * n for _ in range(n)]
-    for (l1, p1), i in pair_to_idx.items():
-        for (l2, p2), j in pair_to_idx.items():
-            if l1 == l2 and p1 == p2:
-                matrix[i][j] = lemma_pos_match
-            elif l1 == l2:
-                matrix[i][j] = lemma_match
-            elif p1 == p2:
-                matrix[i][j] = pos_match
-            # else: mismatch (already initialized)
-
-    # Add surface bonus: iterate over all pairs of keys in both sequences
-    # This modifies scores where surface forms also agree
-    # (approximation — we cannot easily encode 3-way keys in PairwiseAligner)
-    # We handle surface bonus separately in post-processing.
-
-    # Build a string "alphabet" — one character per unique (lemma, pos) pair
-    # Use Unicode Private Use Area characters for uniqueness
-    start_codepoint = 0xE000
-    alphabet = [chr(start_codepoint + i) for i in range(n)]
-
-    return alphabet, matrix, pair_to_idx
 
 
 def _indices_from_alignment(
@@ -196,29 +140,25 @@ def align_tokens(
     *,
     gap_open: float = DEFAULT_GAP_OPEN,
     gap_extend: float = DEFAULT_GAP_EXTEND,
-    lemma_pos_match: float = DEFAULT_LEMMA_POS_MATCH,
-    lemma_match: float = DEFAULT_LEMMA_MATCH,
-    pos_match: float = DEFAULT_POS_MATCH,
-    surface_bonus: float = DEFAULT_SURFACE_BONUS,
+    match: float = DEFAULT_MATCH,
     mismatch: float = DEFAULT_MISMATCH,
 ) -> list[tuple[int | None, int | None]]:
     """Align two lists of TokenRecords using Needleman-Wunsch global alignment.
 
-    Uses Bio.Align.PairwiseAligner (non-deprecated API, Biopython ≥1.80).
-    The comparison key is lemma + POS, not surface form. Surface bonus is
-    applied as a post-hoc score computation for reporting purposes, but
-    doesn't affect the alignment path (approximation — see below).
+    Uses Bio.Align.PairwiseAligner (non-deprecated API, Biopython ≥1.80). Each
+    token is reduced to its (normalized lemma, POS) key and encoded as a single
+    Private-Use-Area character, so alignment is exact-match on that key: two
+    tokens either share a (lemma, POS) pair (``match``) or they do not
+    (``mismatch``). Surface form does not affect the path.
 
     Args:
         tokens_a: Tokens from the first gospel passage.
         tokens_b: Tokens from the second gospel passage.
         gap_open: Gap opening penalty (default -5.0).
         gap_extend: Gap extension penalty (default -0.5).
-        lemma_pos_match: Score for matching lemma AND POS (default 2.5).
-        lemma_match: Score for matching lemma only (default 2.0).
-        pos_match: Score for matching POS only (default 0.5).
-        surface_bonus: Bonus for also matching surface form (default 0.5).
-        mismatch: Score for a mismatch (default -1.0).
+        match: Score for an identical (lemma, POS) pair (default 2.5).
+        mismatch: Score for non-identical tokens (default -100.0, which
+            effectively forbids aligning them and forces a gap instead).
 
     Returns:
         List of (idx_a, idx_b) pairs. None indicates a gap in that sequence.
@@ -241,7 +181,6 @@ def align_tokens(
             extra={"len_a": len_a, "len_b": len_b},
         )
 
-    # Handle trivially identical sequences (fast path)
     keys_a = [_make_token_key(t) for t in tokens_a]
     keys_b = [_make_token_key(t) for t in tokens_b]
 
@@ -254,6 +193,7 @@ def align_tokens(
     max_codepoint = 0xF8FF
 
     def _encode_key(lemma: str, pos: str) -> str:
+        """Map a (lemma, pos) pair to a stable Private-Use-Area character."""
         k = (lemma, pos)
         if k not in char_map:
             if codepoint + len(char_map) > max_codepoint:
@@ -273,7 +213,7 @@ def align_tokens(
     # No substitution matrix — just character identity.
     aligner = Align.PairwiseAligner()
     aligner.mode = "global"
-    aligner.match_score = lemma_pos_match
+    aligner.match_score = match
     aligner.mismatch_score = mismatch
     aligner.open_gap_score = gap_open
     aligner.extend_gap_score = gap_extend

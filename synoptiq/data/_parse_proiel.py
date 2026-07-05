@@ -126,8 +126,6 @@ def _iter_sentences(
 
 def parse_proiel(
     proiel_dir: Path,
-    *,
-    only_nt: bool = True,
 ) -> list[tuple[dict[str, str], list[ConlluToken]]]:
     """Parse PROIEL UD CoNLL-U files from the UD_Ancient_Greek-PROIEL repo.
 
@@ -136,8 +134,6 @@ def parse_proiel(
 
     Args:
         proiel_dir: Path to the cloned UD_Ancient_Greek-PROIEL repository.
-        only_nt: If True (default), attempt to filter only NT sentences
-            using sentence metadata (``newdoc id`` / ``source`` fields).
 
     Returns:
         List of (metadata_dict, token_list) tuples — one per sentence.

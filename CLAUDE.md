@@ -4,6 +4,29 @@ A multi-task neural source criticism framework for the Synoptic Problem.
 Applies transformers, causal direction modeling, and Bayesian inference
 to determine the literary relationships among Matthew, Mark, and Luke.
 
+## graphify (codebase knowledge graph)
+
+This project has a knowledge graph at `graphify-out/` (git-ignored — generated
+locally, never committed). It covers `synoptiq/`, `scripts/`, and `modal/`:
+664 nodes, 1246 edges, 39 communities. God nodes: `Corpus`, `KoineFormer`,
+`DirectionScorer`, `DirectionDataset`, `TokenRecord`.
+
+When the user types `/graphify`, invoke the `graphify` skill before anything else.
+
+Rules:
+- For any codebase question, run `graphify query "<question>"` first when
+  `graphify-out/graph.json` exists — it returns a scoped subgraph, usually far
+  smaller than grep or reading `GRAPH_REPORT.md`. Use `graphify path "<A>" "<B>"`
+  for relationships between two symbols and `graphify explain "<concept>"` for a
+  focused node.
+- Prefer the graph over blind file browsing when tracing call paths, data flow,
+  or cross-module dependencies.
+- Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review when
+  query/path/explain don't surface enough.
+- After modifying code, run `graphify update .` to keep the graph current
+  (AST-only, no API cost). Dirty `graphify-out/` files are expected and are not a
+  reason to skip graphify.
+
 ## Project layout
 
 ```

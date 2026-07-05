@@ -1,7 +1,8 @@
 """Ancient Greek text processing utilities.
 
-Handles normalization, accent handling, and Koine-specific
-features like nomina sacra, movable nu, and sigma variants.
+Handles normalization, accent stripping, and Koine-specific features like
+movable nu and sigma variants. (Nomina sacra special tokens are handled by
+``synoptiq.utils.tokenization``.)
 
 Koine Greek differs from classical Attic in several ways:
 - Simpler sentence structure (more paratactic kai)
@@ -29,33 +30,6 @@ _GREEK_PATTERN: Final = re.compile(r"[\u0370-\u03ff\u1f00-\u1fff]+")
 # Unicode combining marks that appear as diacritics on Greek letters.
 # These are separated out by NFD normalization and filtered below.
 _COMBINING_MARKS: Final = re.compile(r"[\u0300-\u036f\u0345]")
-
-# Words exhibiting movable nu (ν ἐφελκυστικόν).
-# A copyist might normalise these differently — we treat both forms as equivalent.
-MOVABLE_NU_PAIRS: Final[dict[str, str]] = {
-    "εἶπε": "εἶπεν",
-    "ἔλεγε": "ἔλεγεν",
-    "ἐστί": "ἐστίν",
-    "φησί": "φησίν",
-    "ἐγένετο": "ἐγένετον",  # rare but attested
-}
-
-# Nomina sacra: abbreviated sacred names common in NT manuscripts.
-# The SBLGNT expands these, but we keep the mapping for manuscript-aware work.
-NOMINA_SACRA: Final[dict[str, str]] = {
-    "θς": "θεος",
-    "κς": "κυριος",
-    "ιης": "ιησους",
-    "χς": "χριστος",
-    "πνα": "πνευμα",
-    "πηρ": "πατηρ",
-    "υς": "υιος",
-    "σηρ": "σωτηρ",
-    "δαδ": "δαυιδ",
-    "ιηλ": "ισραηλ",
-    "ανος": "ανθρωπος",
-    "ουνος": "ουρανος",
-}
 
 # Punctuation characters that appear adjacent to Greek words in SBLGNT.
 _PUNCT_CHARS: Final[frozenset[str]] = frozenset(".,·;·!?\"'()[]{}—–-\u00b7\u037e\u0387")

@@ -239,6 +239,7 @@ def evaluate_lemmatization(
     encoder.eval()
 
     def _extract(data_split: str) -> tuple[torch.Tensor, torch.Tensor]:
+        """Encode verses in a split into pooled hidden states and lemma labels."""
         all_hidden: list[torch.Tensor] = []
         all_labels: list[int] = []
         n_verses = 0

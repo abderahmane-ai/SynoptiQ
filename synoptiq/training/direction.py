@@ -261,7 +261,8 @@ class DirectionTrainer:
         """Handle SIGTERM for graceful shutdown on spot preemption."""
         self._interrupted = False
 
-        def _handler(signum: int, frame: object) -> None:
+        def _handler(_signum: int, _frame: object) -> None:
+            """Flag the loop to checkpoint and exit at the next safe point."""
             _LOG.warning("received SIGTERM — saving checkpoint")
             self._interrupted = True
 

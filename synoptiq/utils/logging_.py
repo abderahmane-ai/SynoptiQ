@@ -3,10 +3,9 @@
 Uses stdlib logging with a JSON formatter for structured output.
 Optionally initializes Weights & Biases if WANDB_API_KEY is set.
 
-Design: 20 lines of code per the project spec, not a library.
-All training scripts call get_logger(__name__) and log to stdout.
-W&B receives metrics via wandb.log() calls in training loops;
-this module only handles process-level setup.
+Intentionally minimal: training scripts call ``get_logger(__name__)`` and log
+JSON lines to stdout. W&B receives metrics via ``wandb.log()`` calls in the
+training loops themselves; this module only handles process-level setup.
 """
 
 from __future__ import annotations
@@ -23,6 +22,12 @@ class _JsonFormatter(logging.Formatter):
     """Formats log records as JSON lines for structured log consumption."""
 
     def format(self, record: logging.LogRecord) -> str:
+        """Render a log record as a single JSON line.
+
+        Emits the timestamp, level, logger name, and message, plus the
+        traceback for records carrying exception info and any extra fields
+        passed via ``logger.log(..., extra={...})``.
+        """
         payload: dict[str, Any] = {
             "ts": datetime.now(tz=UTC).isoformat(),
             "level": record.levelname,

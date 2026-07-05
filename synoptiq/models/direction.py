@@ -127,6 +127,7 @@ def _compute_asymmetry_features(
         #   A-tokens may scatter over B (B compressed A → high H(A→B))
         # So H(A→B) − H(B→A) > 0 signals "B copies A"
         def _mean_row_entropy(mat: torch.Tensor) -> torch.Tensor:
+            """Mean Shannon entropy of each row's temperature-softmaxed attention."""
             p = torch.softmax(mat * temp, dim=1)
             return -(p * (p + eps).log()).sum(dim=1).mean()
 

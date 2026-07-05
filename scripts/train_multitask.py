@@ -23,6 +23,7 @@ if str(_ROOT) not in sys.path:
 
 from transformers import AutoTokenizer  # type: ignore[import-untyped]  # noqa: E402
 
+from scripts._cli_utils import detect_device  # noqa: E402
 from synoptiq.data.corpus import Corpus  # noqa: E402
 from synoptiq.models.koineformer import KoineFormer  # noqa: E402
 from synoptiq.training.multitask import MultiTaskTrainer, MultiTaskTrainingConfig  # noqa: E402
@@ -32,6 +33,7 @@ _LOG = get_logger(__name__)
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the argument parser for the multi-task fine-tuning CLI."""
     parser = argparse.ArgumentParser(
         description="KoineFormer multi-task LoRA fine-tuning",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -53,6 +55,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    """Run multi-task LoRA fine-tuning. Returns a process exit code."""
     parser = _build_parser()
     args = parser.parse_args()
 
@@ -62,7 +65,7 @@ def main() -> int:
 
     data_dir: Path = args.data_dir.resolve()
     output_dir: Path = args.output_dir.resolve()
-    device = args.device or _detect_device()
+    device = args.device or detect_device()
 
     # Load corpus
     processed = data_dir / "processed"
@@ -95,15 +98,6 @@ def main() -> int:
 
     _LOG.info("multi-task complete", extra={"metrics": str(metrics)})
     return 0
-
-
-def _detect_device() -> str:
-    import torch
-    if torch.cuda.is_available():
-        return "cuda"
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
 
 
 if __name__ == "__main__":

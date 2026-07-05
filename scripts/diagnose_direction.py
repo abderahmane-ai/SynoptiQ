@@ -57,6 +57,7 @@ def experiment_1_asymmetry_only(
 
     # Extract asymmetry features using the trained model
     def _extract_asym(split: str) -> tuple[np.ndarray, np.ndarray]:
+        """Extract the 10 asymmetry features and labels for one split."""
         ds = DirectionDataset(corpus, tokenizer, split=split, max_length=512,
                               min_aligned_tokens=5, use_scribal_noise=False)
         features, labels = [], []
@@ -259,6 +260,7 @@ def experiment_4_author_discriminator_accuracy(
     _LOG.info("=== Experiment 4: Author decodability from asymmetry features ===")
 
     def _collect(split: str) -> tuple[np.ndarray, np.ndarray]:
+        """Collect asymmetry features and author-of-A labels for one split."""
         ds = DirectionDataset(corpus, tokenizer, split=split, max_length=512,
                               min_aligned_tokens=5, use_scribal_noise=False)
         features, author_labels = [], []
@@ -361,6 +363,7 @@ def experiment_5_pooled_only(
 
 
 def main() -> None:
+    """Load the trained scorer and run the five direction-scorer diagnostics."""
     parser = _build_parser()
     args = parser.parse_args()
 
@@ -441,6 +444,7 @@ def main() -> None:
 
 
 def _build_parser():
+    """Build the argument parser for the direction scorer diagnostics CLI."""
     import argparse
     parser = argparse.ArgumentParser(description="Diagnose direction scorer plateau")
     parser.add_argument("--checkpoint", type=Path, default=None,

@@ -29,6 +29,7 @@ _ROOT = Path(__file__).parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from scripts._cli_utils import detect_device  # noqa: E402
 from synoptiq.models.koineformer import KoineFormer  # noqa: E402
 from synoptiq.training.dapt import DAPTIterableDataset  # noqa: E402
 from synoptiq.utils.logging_ import get_logger  # noqa: E402
@@ -75,6 +76,7 @@ def _run_training(
 
 
 def main() -> int:
+    """Run the LoRA-vs-full-fine-tune ablation. Returns a process exit code."""
     parser = argparse.ArgumentParser(description="Ablation: LoRA vs full fine-tune DAPT")
     parser.add_argument("--data-dir", type=Path, default=Path("data/raw"))
     parser.add_argument("--output-dir", type=Path, default=Path("outputs/ablation"))
@@ -88,7 +90,7 @@ def main() -> int:
     data_dir: Path = args.data_dir.resolve()
     output_dir: Path = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    device = args.device or _detect_device()
+    device = args.device or detect_device()
 
     n_steps = 200 if args.smoke_test else args.steps
 
@@ -152,15 +154,6 @@ def main() -> int:
     results_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
     _LOG.info("ablation saved", extra={"path": str(results_path)})
     return 0
-
-
-def _detect_device() -> str:
-    import torch
-    if torch.cuda.is_available():
-        return "cuda"
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
 
 
 if __name__ == "__main__":

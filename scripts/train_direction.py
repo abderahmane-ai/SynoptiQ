@@ -27,6 +27,7 @@ if str(_ROOT) not in sys.path:
 
 from transformers import AutoTokenizer  # type: ignore[import-untyped]  # noqa: E402
 
+from scripts._cli_utils import detect_device  # noqa: E402
 from synoptiq.data.corpus import Corpus  # noqa: E402
 from synoptiq.models.direction import DirectionScorer, DirectionScorerConfig  # noqa: E402
 from synoptiq.training.direction import (  # noqa: E402
@@ -37,6 +38,7 @@ from synoptiq.training.direction import (  # noqa: E402
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the argument parser for the direction scorer training CLI."""
     parser = argparse.ArgumentParser(
         description="Train the SynoptiQ Direction Scorer (Phase 3)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -60,13 +62,14 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    """Train or evaluate the direction scorer. Returns a process exit code."""
     parser = _build_parser()
     args = parser.parse_args()
     data_dir: Path = args.data_dir.resolve()
     output_dir: Path = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    device = args.device or _detect_device()
+    device = args.device or detect_device()
 
     # ── Load corpus ────────────────────────────────────────────────────
     processed = data_dir / "processed"
@@ -222,14 +225,6 @@ def _evaluate(
         "per_sample": results,
     }, indent=2, ensure_ascii=False))
     print(f"  Results saved: {results_path}")
-
-
-def _detect_device() -> str:
-    if torch.cuda.is_available():
-        return "cuda"
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
 
 
 if __name__ == "__main__":

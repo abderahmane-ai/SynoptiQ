@@ -39,10 +39,6 @@ LORA_CONFIG = LoraConfig(
     target_modules=["q", "v", "o", "wi", "wo"],
 )
 
-# Adapter weight filenames saved alongside the config.
-ADAPTER_WEIGHTS_FILENAME = "adapter_model.safetensors"
-ADAPTER_CONFIG_FILENAME = "adapter_config.json"
-
 
 class KoineFormer:
     """Domain-adapted T5 encoder-decoder for Koine Greek.
