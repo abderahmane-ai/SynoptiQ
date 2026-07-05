@@ -99,7 +99,6 @@ def upload_data() -> None:
         "/outputs": modal.Volume.from_name(OUTPUT_VOLUME, create_if_missing=True),
     },
     timeout=TIMEOUT_SECONDS,
-    container_idle_timeout=300,
 ) if modal is not None else None
 def start_training(
     max_steps: int = 5_000,
@@ -218,7 +217,6 @@ def start_training(
         "/data": modal.Volume.from_name(DATA_VOLUME, create_if_missing=True),
     },
     timeout=600,
-    container_idle_timeout=120,
 ) if modal is not None else None
 def smoke_test() -> None:
     """Quick 100-step smoke test on GPU."""
