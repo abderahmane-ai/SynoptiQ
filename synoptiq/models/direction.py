@@ -359,6 +359,13 @@ class DirectionScorer(nn.Module):
         # Freeze the encoder — it is used only as a feature extractor
         for param in self.encoder.parameters():
             param.requires_grad = False
+        self.encoder.eval()
+
+    def train(self, mode: bool = True) -> DirectionScorer:
+        """Set classifier train/eval mode while keeping the frozen encoder stable."""
+        super().train(mode)
+        self.encoder.eval()
+        return self
 
     def forward(
         self,
@@ -374,6 +381,7 @@ class DirectionScorer(nn.Module):
                 direction_logits    [B, 3]  — raw logits for cross-entropy loss
                 asymmetry_features  [B, 10] — intermediate features for diagnostics
         """
+        self.encoder.eval()
         with torch.no_grad():
             h_a = self.encoder(
                 input_ids=input_ids_a,

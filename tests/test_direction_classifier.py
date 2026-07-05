@@ -1,8 +1,13 @@
 """Tests for the Phase 3 direction classifier head."""
 
 import torch
+import torch.nn as nn
 
-from synoptiq.models.direction import DirectionClassifier, DirectionScorerConfig
+from synoptiq.models.direction import (
+    DirectionClassifier,
+    DirectionScorer,
+    DirectionScorerConfig,
+)
 
 
 def _swap_features(features: torch.Tensor) -> torch.Tensor:
@@ -54,3 +59,24 @@ def test_feature_standardizer_preserves_swap_geometry() -> None:
     assert classifier.feature_mean[9].item() == 0.0
     assert classifier.feature_std[0].item() == classifier.feature_std[1].item()
     assert classifier.feature_std[3].item() == classifier.feature_std[4].item()
+
+
+def test_direction_scorer_train_keeps_frozen_encoder_in_eval_mode() -> None:
+    encoder = nn.Sequential(
+        nn.Linear(4, 4),
+        nn.Dropout(p=0.5),
+    )
+    scorer = DirectionScorer(encoder, DirectionScorerConfig())
+
+    scorer.train()
+
+    assert scorer.training
+    assert scorer.classifier.training
+    assert not scorer.encoder.training
+    assert not encoder[1].training
+
+    scorer.eval()
+
+    assert not scorer.training
+    assert not scorer.classifier.training
+    assert not scorer.encoder.training

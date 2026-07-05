@@ -338,12 +338,14 @@ class DirectionTrainer:
             # Validation
             if self.global_step % config.val_steps == 0 and self.val_loader is not None:
                 val_metrics = self._validate()
-                self.history["val_loss"].append(val_metrics["loss"])
-                self.history["val_accuracy"].append(val_metrics["accuracy"])
+                val_loss = float(val_metrics["loss"])
+                val_acc = float(val_metrics["accuracy"])
+                self.history["val_loss"].append(val_loss)
+                self.history["val_accuracy"].append(val_acc)
                 _LOG.info(f"validation @ step {self.global_step}", extra=val_metrics)
 
-                if val_metrics["accuracy"] > best_val_acc:
-                    best_val_acc = val_metrics["accuracy"]
+                if val_acc > best_val_acc:
+                    best_val_acc = val_acc
                     self._save_checkpoint(suffix="best")
 
             # Checkpoint
@@ -404,12 +406,16 @@ class DirectionTrainer:
         )
 
     @torch.no_grad()
-    def _validate(self) -> dict[str, float]:
+    def _validate(self) -> dict[str, object]:
         """Evaluate on validation set."""
         self.scorer.eval()
         total_loss = 0.0
         correct = 0
         n_samples = 0
+        n_classes = self.scorer.config.num_classes
+        pred_counts = [0 for _ in range(n_classes)]
+        class_correct = [0 for _ in range(n_classes)]
+        class_total = [0 for _ in range(n_classes)]
 
         for batch in self.val_loader:
             batch = {k: v.to(self.device) for k, v in batch.items()}
@@ -428,11 +434,23 @@ class DirectionTrainer:
             preds = output["direction_logits"].argmax(dim=1)
             correct += (preds == batch["direction_label"]).sum().item()
             n_samples += len(batch["direction_label"])
+            for class_idx in range(n_classes):
+                label_mask = batch["direction_label"] == class_idx
+                pred_counts[class_idx] += int((preds == class_idx).sum().item())
+                class_total[class_idx] += int(label_mask.sum().item())
+                class_correct[class_idx] += int(
+                    (preds[label_mask] == class_idx).sum().item()
+                )
 
         self.scorer.train()
         return {
             "loss": round(total_loss / max(n_samples, 1), 4),
             "accuracy": round(correct / max(n_samples, 1), 6),
+            "pred_counts": pred_counts,
+            "class_accuracy": [
+                round(class_correct[class_idx] / max(class_total[class_idx], 1), 4)
+                for class_idx in range(n_classes)
+            ],
         }
 
     def _save_checkpoint(self, suffix: str | None = None) -> None:
