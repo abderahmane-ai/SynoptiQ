@@ -50,6 +50,32 @@ experiments *before* spending more GPU time. Experiments 1 (asymmetry-only LR) a
 4 (author decodability) directly answer the signal-vs-style question. See the
 "Phase 3" section and its "Key gotchas" below for what's already been tried and ruled out.
 
+## Cold start (fresh clone / new machine)
+
+`data/`, `models/`, and `graphify-out/` are all git-ignored, so a fresh clone
+has none of them. Regenerate in this order (skip any step whose output already
+exists locally):
+
+```bash
+# 1. Install the package (Python 3.12+)
+pip install -e .
+
+# 2. Regenerate the corpus → data/processed/{tokens,pericopes}.parquet
+python scripts/prepare_data.py --validate
+
+# 3. Get DAPT adapters → models/koineformer/dapt/final/ (needed for Phase 3)
+#    Option A (Modal):
+modal volume get synoptiq-outputs dapt/ models/koineformer/dapt/
+#    Option B (HuggingFace, no Modal):
+python -c "from huggingface_hub import snapshot_download; snapshot_download('ainouche-abderahmane/koineformer', local_dir='models/koineformer/dapt/final')"
+
+# 4. Verify everything is wired up (all 87 must pass)
+python -m pytest tests/ -q
+
+# 5. Rebuild the knowledge graph (git-ignored) — invoke the `graphify` skill,
+#    or from the CLI over the source dirs. Then `graphify query "..."` works again.
+```
+
 ## Project layout
 
 ```
