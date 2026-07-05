@@ -129,7 +129,6 @@ def main() -> int:
         }
         output = scorer(**batch)
         print(f"  direction_logits: {output['direction_logits'].shape}")
-        print(f"  author_logits_a: {output['author_logits_a'].shape}")
         print(f"  asymmetry_features: {output['asymmetry_features'].shape}")
         print("\n  ✓ Forward pass OK — smoke test passed")
 

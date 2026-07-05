@@ -2,10 +2,8 @@
 
 Provides a DirectionDataset that wraps Corpus.direction_pairs() into
 batched tensors, and a DirectionTrainer with AMP, checkpointing, and
-GRL annealing.
+periodic validation.
 """
-
-from __future__ import annotations
 
 from __future__ import annotations
 
@@ -33,7 +31,6 @@ _LOG = get_logger(__name__)
 
 # Label mapping
 _DIRECTION_TO_IDX = {"A_to_B": 0, "B_to_A": 1, "independent": 2}
-_BOOK_TO_AUTHOR_IDX = {"Matthew": 0, "Mark": 1, "Luke": 2}
 
 
 # ── Training config ───────────────────────────────────────────────────────────
@@ -44,9 +41,9 @@ class DirectionTrainingConfig:
     """Mutable training config for the direction scorer."""
 
     batch_size: int = 16
-    learning_rate: float = 1e-4
+    learning_rate: float = 1e-3  # higher LR suits the ~50-param linear classifier
     max_steps: int = 5_000
-    warmup_steps: int = 500
+    warmup_steps: int = 200
     val_steps: int = 250
     save_steps: int = 1_000
     max_length: int = 512
@@ -197,8 +194,6 @@ class DirectionDataset(Dataset):
         )
 
         label = _DIRECTION_TO_IDX[sample["direction"]]
-        author_a = _BOOK_TO_AUTHOR_IDX.get(sample["book_a"], 0)
-        author_b = _BOOK_TO_AUTHOR_IDX.get(sample["book_b"], 0)
 
         return {
             "input_ids_a": encoded_a["input_ids"].squeeze(0),
@@ -206,8 +201,6 @@ class DirectionDataset(Dataset):
             "input_ids_b": encoded_b["input_ids"].squeeze(0),
             "attention_mask_b": encoded_b["attention_mask"].squeeze(0),
             "direction_label": torch.tensor(label, dtype=torch.long),
-            "author_label_a": torch.tensor(author_a, dtype=torch.long),
-            "author_label_b": torch.tensor(author_b, dtype=torch.long),
         }
 
 
@@ -241,9 +234,11 @@ class DirectionTrainer:
             val_dataset, batch_size=config.batch_size, shuffle=False,
         ) if val_dataset else None
 
+        # Only the classifier is trainable; the encoder is frozen inside DirectionScorer
         self.optimizer = AdamW(
-            list(scorer.cross_attn.parameters()) + list(scorer.classifier.parameters()),
+            scorer.classifier.parameters(),
             lr=config.learning_rate,
+            weight_decay=1e-2,  # L2 regularisation on ~50 params
         )
 
         self.scheduler = CosineAnnealingLR(self.optimizer, T_max=config.max_steps)
@@ -431,6 +426,4 @@ def collate_direction_batch(
         "input_ids_b": torch.stack([s["input_ids_b"] for s in batch]),
         "attention_mask_b": torch.stack([s["attention_mask_b"] for s in batch]),
         "direction_label": torch.stack([s["direction_label"] for s in batch]),
-        "author_label_a": torch.stack([s["author_label_a"] for s in batch]),
-        "author_label_b": torch.stack([s["author_label_b"] for s in batch]),
     }

@@ -8,14 +8,14 @@ What does the confusion matrix look like?
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
+import sys
 
 import numpy as np
-import torch
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import StandardScaler
+import torch
 
 _ROOT = Path(__file__).parent.parent
 if str(_ROOT) not in sys.path:
@@ -230,7 +230,7 @@ def experiment_3_feature_label_correlation(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Experiment 4: GRL ablation — does the adversarial loss help?
+# Experiment 4: Author decodability from asymmetry features
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -240,42 +240,58 @@ def experiment_4_author_discriminator_accuracy(
     tokenizer: object,
     device: str,
 ) -> dict:
-    """Check if the author discriminator is better than random.
+    """Check whether authorship is decodable from the 10 asymmetry features.
 
-    If discriminator accuracy = 33% (random): GRL is working or
-    style was never detectable. If >33%: style is still leaking.
+    The direction scorer has no adversarial de-biasing. This experiment asks:
+    does a logistic regression trained on the asymmetry features alone predict
+    the author of passage A better than chance (33%)?
+
+    If accuracy ≈ 33%: features are direction-specific, not style-specific.
+    If accuracy >> 33%: features carry authorship signal — a confound to note.
     """
-    _LOG.info("=== Experiment 4: Author discriminator check ===")
+    _LOG.info("=== Experiment 4: Author decodability from asymmetry features ===")
 
-    ds = DirectionDataset(corpus, tokenizer, split="train", max_length=512,
-                          min_aligned_tokens=5, use_scribal_noise=False)
+    def _collect(split: str) -> tuple[np.ndarray, np.ndarray]:
+        ds = DirectionDataset(corpus, tokenizer, split=split, max_length=512,
+                              min_aligned_tokens=5, use_scribal_noise=False)
+        features, author_labels = [], []
+        _author_idx = {"Matthew": 0, "Mark": 1, "Luke": 2}
+        scorer.eval()
+        with torch.no_grad():
+            for i in range(len(ds)):
+                s = ds[i]
+                sample_raw = ds.samples[i]  # access raw sample for book_a
+                batch = {
+                    "input_ids_a": s["input_ids_a"].unsqueeze(0).to(device),
+                    "attention_mask_a": s["attention_mask_a"].unsqueeze(0).to(device),
+                    "input_ids_b": s["input_ids_b"].unsqueeze(0).to(device),
+                    "attention_mask_b": s["attention_mask_b"].unsqueeze(0).to(device),
+                }
+                out = scorer(**batch)
+                features.append(out["asymmetry_features"][0].cpu().numpy())
+                author_labels.append(_author_idx.get(sample_raw["book_a"], 0))
+        return np.stack(features), np.array(author_labels)
 
-    correct_a = correct_b = total = 0
-    scorer.eval()
-    with torch.no_grad():
-        for i in range(min(len(ds), 50)):  # 50 samples is enough
-            s = ds[i]
-            batch = {
-                "input_ids_a": s["input_ids_a"].unsqueeze(0).to(device),
-                "attention_mask_a": s["attention_mask_a"].unsqueeze(0).to(device),
-                "input_ids_b": s["input_ids_b"].unsqueeze(0).to(device),
-                "attention_mask_b": s["attention_mask_b"].unsqueeze(0).to(device),
-            }
-            out = scorer(**batch)
-            pred_a = out["author_logits_a"].argmax(dim=1).item()
-            pred_b = out["author_logits_b"].argmax(dim=1).item()
-            correct_a += int(pred_a == s["author_label_a"].item())
-            correct_b += int(pred_b == s["author_label_b"].item())
-            total += 1
+    X_train, y_train = _collect("train")
+    X_test, y_test = _collect("test")
+
+    scaler = StandardScaler()
+    X_train_s = scaler.fit_transform(X_train)
+    X_test_s = scaler.transform(X_test)
+
+    clf = LogisticRegression(max_iter=1000, random_state=42)
+    clf.fit(X_train_s, y_train)
+    train_acc = float(clf.score(X_train_s, y_train))
+    test_acc = float(clf.score(X_test_s, y_test))
 
     return {
-        "name": "author_discriminator",
-        "accuracy_a": float(correct_a / total),
-        "accuracy_b": float(correct_b / total),
-        "random_baseline": 1.0 / 3.0,
+        "name": "author_decodability",
+        "train_acc": round(train_acc, 4),
+        "test_acc": round(test_acc, 4),
+        "random_baseline": round(1.0 / 3.0, 4),
         "verdict": (
-            "GRL is working — discriminator at chance" if (correct_a / total) < 0.40
-            else "style still detectable — GRL too weak or unnecessary"
+            "features are direction-specific (good)" if test_acc < 0.45
+            else "authorship still decodable from features — style confound present"
         ),
     }
 

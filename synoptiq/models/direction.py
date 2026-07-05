@@ -1,13 +1,22 @@
 """Direction scorer — detects direction of literary copying between parallel passages.
 
-Uses cross-attention asymmetry between KoineFormer encoder hidden states.
-The cross-attention is a learned multi-head attention that compares two
-encoded passages and extracts 8 engineered asymmetry features. A 3-way MLP
-classifier outputs probabilities for A→B, B→A, or independent.
+The model encodes each passage independently through the frozen KoineFormer encoder,
+then extracts 10 asymmetry features from the cross-similarity matrix of their hidden
+states. A linear classifier maps those features to 3-way direction labels.
 
-No adversarial component — the GRL was removed (v1 experiment) because on
-250 samples it destroyed the cross-attention gradients, producing flat
-attention maps and collapsing the classifier to always predict "independent."
+Feature design is grounded in BERTScore Precision/Recall asymmetry (Zhang et al. 2020):
+when B copies A, A's tokens reproduce well in B (high recall) but B's tokens do not
+fully cover A (higher recall than precision), producing a measurable R–P gap. Additional
+features capture attention-entropy asymmetry and structural statistics.
+
+The encoder is completely frozen. Total trainable parameters: ~33.
+
+History:
+  - Attempts with learned cross-attention (~5M params) overfit immediately on the
+    250-sample training set, collapsing to majority-class prediction.
+  - A logistic regression on pooled encoder states achieves 72.8% — the signal is
+    present in the hidden states but is entangled with authorship style. These features
+    are designed to isolate the causal direction component.
 """
 
 from __future__ import annotations
@@ -29,309 +38,259 @@ _LOG = get_logger(__name__)
 
 @dataclass
 class DirectionScorerConfig:
-    """Configuration for the DirectionScorer model.
+    """Configuration for the DirectionScorer."""
 
-    All defaults match the ModelConfig in _config.py.
-    """
-
-    hidden_dim: int = 768  # KoineFormer encoder output dim
-    cross_attn_heads: int = 8
-    asymmetry_num_features: int = 8
-    classifier_hidden: tuple[int, ...] = (256, 128)
-    num_classes: int = 3  # A→B, B→A, independent
-    dropout: float = 0.3
-    grl_lambda_max: float = 1.0  # Max GRL gradient scale
-    grl_warmup_steps: int = 1000  # Linear warmup steps for GRL lambda
+    n_features: int = 10
+    num_classes: int = 3
+    attn_temperature: float = 10.0  # softmax temperature for entropy features
+    coverage_threshold: float = 0.3  # cosine threshold for "covered" token count
 
 
-# ── Gradient Reversal Layer ───────────────────────────────────────────────────
+# ── Feature extraction ────────────────────────────────────────────────────────
 
 
-class GradientReversalLayer(torch.autograd.Function):
-    """Gradient reversal for adversarial domain adaptation.
-
-    Forward: identity.  Backward: multiplies gradients by -lambda.
-    Used to strip authorship style from the direction features:
-    an adversarial discriminator tries to predict which gospel each
-    hidden state came from, and the GRL forces the encoder to produce
-    style-invariant representations.
-
-    Usage:
-        hidden = GradientReversalLayer.apply(hidden, self._grl_lambda)
-    """
-
-    @staticmethod
-    def forward(ctx: Any, x: torch.Tensor, lambda_: float) -> torch.Tensor:
-        ctx.lambda_ = lambda_
-        return x
-
-    @staticmethod
-    def backward(ctx: Any, grad_output: torch.Tensor) -> tuple[torch.Tensor, None]:
-        return grad_output.neg() * ctx.lambda_, None
-
-
-# ── Asymmetry Feature Extraction ──────────────────────────────────────────────
-
-
-def _extract_asymmetry_features(
-    cross_attn_a_to_b: torch.Tensor,  # [B, heads, L_A, L_B]
-    cross_attn_b_to_a: torch.Tensor,  # [B, heads, L_B, L_A]
+def _compute_asymmetry_features(
+    h_a: torch.Tensor,    # [B, L_A, D]
+    h_b: torch.Tensor,    # [B, L_B, D]
+    mask_a: torch.Tensor, # [B, L_A] — bool, True for real tokens
+    mask_b: torch.Tensor, # [B, L_B] — bool, True for real tokens
+    config: DirectionScorerConfig,
 ) -> torch.Tensor:
-    """Extract 8 asymmetry features from a pair of cross-attention maps.
+    """Extract 10 directional asymmetry features from encoder hidden states.
+
+    All features are computed from the pairwise cosine-similarity matrix
+    S[i, j] = cos(h_A[i], h_B[j]), restricted to non-padding positions.
+
+    Feature groups:
+        1–5  BERTScore P/R asymmetry and spread
+        6    Attention-entropy asymmetry
+        7    Diagonal alignment strength (order-preserving copy signal)
+        8    Log length ratio
+        9    Symmetric pooled-embedding cosine similarity (reference)
+        10   Coverage asymmetry
 
     Args:
-        cross_attn_a_to_b: Cross-attention weights A→B, averaged over heads.
-        cross_attn_b_to_a: Cross-attention weights B→A, averaged over heads.
+        h_a, h_b: Hidden states from the frozen encoder.
+        mask_a, mask_b: Boolean masks, True for non-padding positions.
+        config: Scorer configuration.
 
     Returns:
-        Tensor of shape [B, 8] with the asymmetry features.
+        Tensor of shape [B, 10].
     """
-    # Mean-pool over heads for clean statistics
-    ab = cross_attn_a_to_b.mean(dim=1)  # [B, L_A, L_B]
-    ba = cross_attn_b_to_a.mean(dim=1)  # [B, L_B, L_A]
-
+    batch_size = h_a.shape[0]
+    device = h_a.device
     eps = 1e-8
+    temp = config.attn_temperature
+    thresh = config.coverage_threshold
+    all_features: list[torch.Tensor] = []
 
-    # Features 1-2: mean attention weights
-    mean_ab = ab.mean(dim=(1, 2))  # [B]
-    mean_ba = ba.mean(dim=(1, 2))  # [B]
+    for b in range(batch_size):
+        len_a = int(mask_a[b].sum().item())
+        len_b = int(mask_b[b].sum().item())
 
-    # Features 3-4: variance of attention weights
-    var_ab = ab.var(dim=(1, 2))  # [B]
-    var_ba = ba.var(dim=(1, 2))  # [B]
+        # Guard against degenerate (zero-length) passages
+        len_a = max(len_a, 1)
+        len_b = max(len_b, 1)
 
-    # Features 5-6: entropy of attention distributions
-    ent_ab = -(ab * (ab + eps).log()).sum(dim=(1, 2))  # [B]
-    ent_ba = -(ba * (ba + eps).log()).sum(dim=(1, 2))  # [B]
+        # L2-normalised token embeddings for cosine similarity
+        h_a_valid = F.normalize(h_a[b, :len_a], p=2, dim=1)  # [len_a, D]
+        h_b_valid = F.normalize(h_b[b, :len_b], p=2, dim=1)  # [len_b, D]
 
-    # Feature 7: KL asymmetry — bidirectional KL divergence ratio
-    # A copying author (B) produces more focused cross-attention than the source (A)
-    kl_ab_to_ba = (ab * ((ab + eps) / (ba.mean(dim=2, keepdim=True) + eps)).log()).sum(dim=(1, 2))
-    kl_ba_to_ab = (ba * ((ba + eps) / (ab.mean(dim=2, keepdim=True) + eps)).log()).sum(dim=(1, 2))
-    kl_asymmetry = kl_ab_to_ba - kl_ba_to_ab  # [B]
+        # Cross-similarity matrix  S[i, j] = cos(h_A[i], h_B[j])
+        S = h_a_valid @ h_b_valid.T  # [len_a, len_b]
 
-    # Feature 8: position-decay — how fast does attention decay with position?
-    # A copying author attends forward to the source text; the source attends back more uniformly
-    L_A = ab.shape[1]
-    L_B = ba.shape[1]
-    positions_ab = torch.arange(L_A, device=ab.device, dtype=ab.dtype)
-    positions_ba = torch.arange(L_B, device=ba.device, dtype=ba.dtype)
-    # Weighted average position attended to
-    avg_pos_ab = (ab.sum(dim=2) * positions_ab[None, :]).sum(dim=1) / (ab.sum(dim=(1, 2)) + eps)
-    avg_pos_ba = (ba.sum(dim=2) * positions_ba[None, :]).sum(dim=1) / (ba.sum(dim=(1, 2)) + eps)
-    # Normalize by sequence length so it's comparable across passages
-    pos_decay = (avg_pos_ba / (L_B + eps)) - (avg_pos_ab / (L_A + eps))  # [B]
+        # ── Features 1–5: BERTScore Precision / Recall ────────────────────
+        # Recall  R(A→B): for each A-token, best match in B
+        #   Low R means A has content not reproduced in B (B compressed A)
+        row_max = S.max(dim=1).values   # [len_a]
+        bertscore_recall = row_max.mean()
 
-    features = torch.stack([
-        mean_ab, mean_ba, var_ab, var_ba,
-        ent_ab, ent_ba, kl_asymmetry, pos_decay,
-    ], dim=1)  # [B, 8]
+        # Precision  P(B→A): for each B-token, best match in A
+        #   High P means every B token traces back to A (B drew from A's vocabulary)
+        col_max = S.max(dim=0).values   # [len_b]
+        bertscore_precision = col_max.mean()
 
-    return features
+        # P − R: primary directional signal
+        #   > 0  →  B copies A   (B traces to A; A not fully reproduced = compression)
+        #   < 0  →  A copies B
+        #   ≈ 0  →  independent
+        asym_pr = bertscore_precision - bertscore_recall
 
+        row_max_std = row_max.std() if len_a > 1 else row_max.new_zeros(())
+        col_max_std = col_max.std() if len_b > 1 else col_max.new_zeros(())
 
-# ── Cross-Attention Asymmetry Module ──────────────────────────────────────────
+        # ── Feature 6: Attention-entropy asymmetry ────────────────────────
+        # For each query row, compute entropy of the temperature-scaled softmax.
+        # Low entropy = focused (specific) attention = the token has one clear correspondent.
+        # When B copies A:
+        #   B-tokens attend specifically to A (they came from A → low H(B→A))
+        #   A-tokens may scatter over B (B compressed A → high H(A→B))
+        # So H(A→B) − H(B→A) > 0 signals "B copies A"
+        def _mean_row_entropy(mat: torch.Tensor) -> torch.Tensor:
+            p = torch.softmax(mat * temp, dim=1)
+            return -(p * (p + eps).log()).sum(dim=1).mean()
 
+        entropy_asym = _mean_row_entropy(S) - _mean_row_entropy(S.T)
 
-class CrossAttentionAsymmetry(nn.Module):
-    """Learned cross-attention layers for detecting direction asymmetry.
+        # ── Feature 7: Diagonal alignment strength ────────────────────────
+        # For each A-token, the index of its best B-match.
+        # If copying preserves word order, best matches cluster near the diagonal.
+        row_argmax = S.argmax(dim=1).float()        # [len_a]
+        expected_pos = (
+            torch.arange(len_a, device=device).float()
+            / len_a * len_b
+        )
+        # Closeness ∈ [0, 1]; 1.0 = perfectly diagonal
+        diagonal_closeness = (
+            1.0 - (row_argmax - expected_pos).abs() / (len_b + eps)
+        ).mean()
 
-    Given two encoded passages H_A and H_B, computes bidirectional
-    cross-attention and extracts 8 asymmetry features.
-    """
-
-    def __init__(self, config: DirectionScorerConfig):
-        super().__init__()
-        self.hidden_dim = config.hidden_dim
-        self.num_heads = config.cross_attn_heads
-        self.head_dim = config.hidden_dim // config.cross_attn_heads
-
-        self.cross_attn = nn.MultiheadAttention(
-            embed_dim=config.hidden_dim,
-            num_heads=config.cross_attn_heads,
-            dropout=config.dropout,
-            batch_first=True,
+        # ── Feature 8: Log length ratio ───────────────────────────────────
+        # Copies are often shorter (compression) or longer (expansion).
+        # Provides a structural prior independent of content similarity.
+        log_len_ratio = torch.log(
+            torch.tensor(len_b / (len_a + eps), device=device, dtype=torch.float)
         )
 
-    def forward(
-        self,
-        h_a: torch.Tensor,  # [B, L_A, D]
-        h_b: torch.Tensor,  # [B, L_B, D]
-        mask_a: torch.Tensor | None = None,  # [B, L_A]
-        mask_b: torch.Tensor | None = None,  # [B, L_B]
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Compute bidirectional cross-attention and extract asymmetry features.
-
-        Returns:
-            (asymmetry_features, pooled_a, pooled_b)
-        """
-        # A → B cross-attention: Q from A, K/V from B
-        key_padding_a = None if mask_a is None else (~mask_a.bool())
-        key_padding_b = None if mask_b is None else (~mask_b.bool())
-
-        ab_out, ab_weights = self.cross_attn(
-            query=h_a, key=h_b, value=h_b,
-            key_padding_mask=key_padding_b,
-            need_weights=True, average_attn_weights=False,
-        )  # ab_out: [B, L_A, D], ab_weights: [B, heads, L_A, L_B]
-
-        # B → A cross-attention: Q from B, K/V from A
-        ba_out, ba_weights = self.cross_attn(
-            query=h_b, key=h_a, value=h_a,
-            key_padding_mask=key_padding_a,
-            need_weights=True, average_attn_weights=False,
-        )  # ba_out: [B, L_B, D], ba_weights: [B, heads, L_B, L_A]
-
-        # Extract 8 asymmetry features
-        asym_features = _extract_asymmetry_features(ab_weights, ba_weights)  # [B, 8]
-
-        # Mean-pool the cross-attended outputs
-        if mask_a is not None:
-            pooled_a = (ab_out * mask_a.unsqueeze(-1)).sum(dim=1) / (mask_a.sum(dim=1, keepdim=True) + 1e-8)
-        else:
-            pooled_a = ab_out.mean(dim=1)
-
-        if mask_b is not None:
-            pooled_b = (ba_out * mask_b.unsqueeze(-1)).sum(dim=1) / (mask_b.sum(dim=1, keepdim=True) + 1e-8)
-        else:
-            pooled_b = ba_out.mean(dim=1)
-
-        return asym_features, pooled_a, pooled_b
-
-
-# ── Author Discriminator (GRL adversary) ──────────────────────────────────────
-
-
-class AuthorDiscriminator(nn.Module):
-    """Adversarial head that tries to predict gospel book from hidden states.
-
-    Trained with a GradientReversalLayer before it, so the encoder
-    learns to produce style-invariant representations.
-    """
-
-    def __init__(self, config: DirectionScorerConfig):
-        super().__init__()
-        self.discriminator = nn.Sequential(
-            nn.Linear(config.hidden_dim, 128),
-            nn.ReLU(),
-            nn.Dropout(config.dropout),
-            nn.Linear(128, 3),  # Matthew, Mark, Luke
+        # ── Feature 9: Symmetric pooled-embedding similarity ──────────────
+        # Reference baseline — high value means passages are semantically close
+        # regardless of direction.
+        pooled_sim = F.cosine_similarity(
+            h_a[b, :len_a].mean(dim=0),
+            h_b[b, :len_b].mean(dim=0),
+            dim=0,
         )
 
-    def forward(self, pooled: torch.Tensor) -> torch.Tensor:
-        """Predict book logits from pooled hidden states. [B, D] → [B, 3]."""
-        return self.discriminator(pooled)
+        # ── Feature 10: Coverage asymmetry ───────────────────────────────
+        # "Coverage" = fraction of tokens with a close match (cosine > threshold).
+        # If B copies A: most A-tokens reproduced in B (high a_cov);
+        #   B may also be well-covered (high b_cov).
+        # Independent: both coverages lower.
+        # The difference isolates directionality beyond the overall similarity level.
+        a_coverage = (row_max > thresh).float().mean()
+        b_coverage = (col_max > thresh).float().mean()
+        coverage_diff = a_coverage - b_coverage
+
+        features = torch.stack([
+            bertscore_recall,    # 1
+            bertscore_precision, # 2
+            asym_pr,             # 3 — primary directional signal (P-R > 0 means B copies A)
+            row_max_std,         # 4
+            col_max_std,         # 5
+            entropy_asym,        # 6
+            diagonal_closeness,  # 7
+            log_len_ratio,       # 8
+            pooled_sim,          # 9
+            coverage_diff,       # 10
+        ])
+        all_features.append(features)
+
+    return torch.stack(all_features)  # [B, 10]
 
 
-# ── Direction Classifier ──────────────────────────────────────────────────────
+# ── Classifier ────────────────────────────────────────────────────────────────
 
 
 class DirectionClassifier(nn.Module):
-    """MLP that classifies direction from [pooled_states + asymmetry features].
+    """LayerNorm + Linear: 10 asymmetry features → 3 direction classes.
 
-    Input: concatenation of pooled_A [B, 768], pooled_B [B, 768], and
-    asymmetry features [B, 8] = [B, 1544].
-    Output: 3-class logits [B, 3].
+    LayerNorm handles feature-scale differences without introducing learnable
+    bias that could overfit. Total parameters: LayerNorm(20) + Linear(30) = 50.
     """
 
     def __init__(self, config: DirectionScorerConfig):
         super().__init__()
-        input_dim = 2 * config.hidden_dim + config.asymmetry_num_features  # 1544
+        self.norm = nn.LayerNorm(config.n_features)
+        self.linear = nn.Linear(config.n_features, config.num_classes, bias=True)
 
-        layers: list[nn.Module] = []
-        in_features = input_dim
-        for h in config.classifier_hidden:
-            layers.append(nn.Linear(in_features, h))
-            layers.append(nn.ReLU())
-            layers.append(nn.Dropout(config.dropout))
-            in_features = h
-        layers.append(nn.Linear(in_features, config.num_classes))
-        self.mlp = nn.Sequential(*layers)
-
-    def forward(self, combined: torch.Tensor) -> torch.Tensor:
-        """[B, 1544] → [B, 3]."""
-        return self.mlp(combined)
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """[B, 10] → [B, 3]."""
+        return self.linear(self.norm(features))
 
 
-# ── Full Direction Scorer ─────────────────────────────────────────────────────
+# ── Full model ────────────────────────────────────────────────────────────────
 
 
 class DirectionScorer(nn.Module):
-    """Detects literary copying direction between parallel Gospel passages.
+    """Detects literary copying direction using frozen-encoder hidden-state asymmetry.
 
-    Given two parallel passages A and B:
-    1. Encode both with frozen KoineFormer encoder → H_A, H_B
-    2. Compute bidirectional cross-attention → 8 asymmetry features
-    3. GRL-stripped pooled states + asymmetry features → 3-way classifier
-    4. Adversarial discriminator predicts authorship (for GRL training)
+    Architecture:
+        1. Encode A and B independently with the frozen KoineFormer encoder.
+        2. Compute 10 asymmetry features from the cross-similarity matrix — no
+           learned attention, no additional parameters on the encoder path.
+        3. LayerNorm + Linear maps features to 3-way logits (A→B, B→A, independent).
+
+    Total trainable parameters: ~50 (LayerNorm + Linear).
 
     Usage:
         config = DirectionScorerConfig()
         scorer = DirectionScorer(koineformer_encoder, config)
-        logits, author_logits = scorer(input_ids_a, mask_a, input_ids_b, mask_b)
+        output = scorer(input_ids_a, mask_a, input_ids_b, mask_b)
+        # output["direction_logits"]: [B, 3]
+        # output["asymmetry_features"]: [B, 10]
     """
 
-    _IDX_TO_DIRECTION = {0: "A_to_B", 1: "B_to_A", 2: "independent"}
+    _IDX_TO_DIRECTION: dict[int, str] = {0: "A_to_B", 1: "B_to_A", 2: "independent"}
 
     def __init__(
         self,
         encoder: nn.Module,
         config: DirectionScorerConfig | None = None,
-    ):
+    ) -> None:
         super().__init__()
         self.config = config or DirectionScorerConfig()
-        self.encoder = encoder  # Frozen KoineFormer encoder
-
-        self.cross_attn = CrossAttentionAsymmetry(self.config)
+        self.encoder = encoder
         self.classifier = DirectionClassifier(self.config)
 
-        # Freeze encoder
+        # Freeze the encoder — it is used only as a feature extractor
         for param in self.encoder.parameters():
             param.requires_grad = False
 
     def forward(
         self,
-        input_ids_a: torch.Tensor,  # [B, L_A]
+        input_ids_a: torch.Tensor,       # [B, L_A]
         attention_mask_a: torch.Tensor,  # [B, L_A]
-        input_ids_b: torch.Tensor,  # [B, L_B]
+        input_ids_b: torch.Tensor,       # [B, L_B]
         attention_mask_b: torch.Tensor,  # [B, L_B]
     ) -> dict[str, torch.Tensor]:
-        """Forward pass — returns direction logits and asymmetry features.
+        """Forward pass.
 
         Returns:
-            Dict with keys:
-                direction_logits: [B, 3]
-                asymmetry_features: [B, 8] (for analysis)
+            dict with:
+                direction_logits    [B, 3]  — raw logits for cross-entropy loss
+                asymmetry_features  [B, 10] — intermediate features for diagnostics
         """
-        # Encode both passages with frozen encoder
         with torch.no_grad():
-            h_a = self.encoder(input_ids=input_ids_a, attention_mask=attention_mask_a)
-            h_a = h_a.last_hidden_state  # [B, L_A, 768]
-            h_b = self.encoder(input_ids=input_ids_b, attention_mask=attention_mask_b)
-            h_b = h_b.last_hidden_state  # [B, L_B, 768]
+            h_a = self.encoder(
+                input_ids=input_ids_a,
+                attention_mask=attention_mask_a,
+            ).last_hidden_state  # [B, L_A, 768]
 
-        # Detach so encoder doesn't receive gradient
-        h_a_detached = h_a.detach()
-        h_b_detached = h_b.detach()
+            h_b = self.encoder(
+                input_ids=input_ids_b,
+                attention_mask=attention_mask_b,
+            ).last_hidden_state  # [B, L_B, 768]
 
-        # Cross-attention asymmetry
-        asym_features, pooled_a, pooled_b = self.cross_attn(
-            h_a_detached, h_b_detached, attention_mask_a.bool(), attention_mask_b.bool(),
-        )
+        features = _compute_asymmetry_features(
+            h_a, h_b,
+            attention_mask_a.bool(),
+            attention_mask_b.bool(),
+            self.config,
+        )  # [B, 10]
 
-        # Direction classification
-        combined = torch.cat([pooled_a, pooled_b, asym_features], dim=1)  # [B, 1544]
-        direction_logits = self.classifier(combined)
+        logits = self.classifier(features)  # [B, 3]
 
         return {
-            "direction_logits": direction_logits,
-            "asymmetry_features": asym_features,
+            "direction_logits": logits,
+            "asymmetry_features": features,
         }
 
     def predict(self, **kwargs: Any) -> list[dict[str, Any]]:
-        """Inference mode — predict direction for a batch of pairs.
+        """Inference: predict direction for a batch of passage pairs.
 
-        Returns list of dicts with probabilities and predicted direction.
+        Returns:
+            List of dicts with predicted_direction, per-class probabilities,
+            and asymmetry_features for interpretability.
         """
         self.eval()
         with torch.no_grad():

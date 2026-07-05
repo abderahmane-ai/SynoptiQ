@@ -14,9 +14,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-import torch
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
+import torch
 
 from synoptiq.data.corpus import Corpus
 from synoptiq.utils.logging_ import get_logger
@@ -239,6 +239,7 @@ def main() -> None:
         sys.path.insert(0, str(_ROOT))
 
     from transformers import AutoTokenizer
+
     from synoptiq.data.corpus import Corpus
     from synoptiq.models.koineformer import KoineFormer
 

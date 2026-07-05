@@ -115,29 +115,34 @@ but not vocabulary.
 
 ## Phase 3: Direction Scorer
 
-### Architecture (v2 — GRL removed)
+### Architecture (v2 — GRL removed, features-only classifier)
 
 v1 included a GradientReversalLayer + AuthorDiscriminator for style invariance.
 Diagnostic experiments showed the GRL at λ=1.0 destroyed cross-attention gradients:
-features 1,2,8 were constant (flat attention maps), the model collapsed to always
+features were constant (flat attention maps), the model collapsed to always
 predicting "independent" (32.6% accuracy vs 33.3% random). v2 removes the adversarial
-component entirely.
+component entirely, extracting 10 asymmetry features from frozen encoder outputs.
 
 ```
 Pericope pair (A, B) aligned tokens
   → Tokenize each passage → KoineFormer encoder (frozen, DAPT adapters loaded)
   → H_A [L_A, 768], H_B [L_B, 768]
-  → CrossAttentionAsymmetry (trainable multi-head cross-attention):
-      A→B cross-attn + B→A cross-attn → 8 asymmetry features + pooled states
-  → [pooled_A, pooled_B, asym_features] → DirectionClassifier → 3-way softmax
+  → Compute cross-similarity matrix S = cos(H_A, H_B)
+  → Extract 10 asymmetry features (e.g. BERTScore P/R, entropy, diagonal, length ratio)
+  → DirectionClassifier (LayerNorm + Linear) → 3-way direction logits
 ```
 
-### 8 asymmetry features
-1-2: mean attention A→B, B→A
-3-4: variance A→B, B→A
-5-6: entropy A→B, B→A
-7: KL-asymmetry (KL(A→B ‖ B→A) - KL(B→A ‖ A→B))
-8: position-decay (avg attended position normalized by sequence length)
+### 10 asymmetry features
+1. BERTScore Recall R(A→B) (mean of row maxes)
+2. BERTScore Precision P(B→A) (mean of col maxes)
+3. Precision-Recall asymmetry (P - R: >0 means B copies A)
+4. Standard deviation of row maxes
+5. Standard deviation of col maxes
+6. Attention-entropy asymmetry
+7. Diagonal alignment strength (order-preserving copy signal)
+8. Log length ratio log(len_B / len_A)
+9. Symmetric pooled-embedding similarity
+10. Coverage asymmetry (fraction of close matches difference)
 
 ### Training data
 - 65 labeled triple-tradition pericopes (39 train / 12 val / 14 test)
@@ -279,8 +284,8 @@ only (~3.7M trainable, r=16 α=32, targeting W_q/W_v/W_o in attention + W_o in F
 81.34% lemma. 14 MB checkpoint.
 
 **Direction Scorer** (Phase 3, v2) = Frozen KoineFormer encoder (DAPT) →
-bidirectional cross-attention → 8 asymmetry features + pooled states →
-3-way classifier (A→B, B→A, independent). No GRL (v1 experiment: GRL
+cos-similarity matrix → 10 asymmetry features (P-R, entropy, alignment path) →
+linear classifier (A→B, B→A, independent). No GRL (v1 experiment: GRL
 destroyed gradients, model collapsed). Trained on 65 labeled triple-tradition
 pericopes. Baseline: logistic regression on same encoder = 72.8%. 5K steps T4.
 

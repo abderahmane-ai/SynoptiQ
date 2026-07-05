@@ -157,8 +157,6 @@ def start_training(
         batch_size=batch_size,
         learning_rate=learning_rate,
         output_dir=output_dir,
-        grl_warmup_steps=1_000,
-        grl_lambda_max=1.0,
         val_steps=250,
         save_steps=1_000,
     )
