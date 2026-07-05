@@ -21,7 +21,7 @@ _ROOT = Path(__file__).parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from transformers import AutoTokenizer  # type: ignore[import-untyped]
+from transformers import AutoTokenizer  # type: ignore[import-untyped]  # noqa: E402
 
 from synoptiq.data.corpus import Corpus  # noqa: E402
 from synoptiq.models.koineformer import KoineFormer  # noqa: E402

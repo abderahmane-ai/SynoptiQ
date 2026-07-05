@@ -88,15 +88,11 @@ class ModelConfig:
     lora_dropout: float = 0.05
     lora_target_modules: tuple[str, ...] = ("q", "k", "v", "o")
 
-    # Direction scorer head
+    # Direction scorer head: 10 fixed features + swap-equivariant classifier
     direction_num_classes: int = 3  # A→B, B→A, independent
-    cross_attn_num_heads: int = 8
-    asymmetry_mlp_hidden: int = 512
-    asymmetry_num_features: int = 8
-
-    # Adversarial de-biasing (Gradient Reversal Layer)
-    num_author_classes: int = 3  # Matthew, Mark, Luke
-    lambda_adversarial: float = 0.1
+    asymmetry_num_features: int = 10
+    direction_signed_features: int = 6
+    direction_independence_features: int = 10
 
     # Q reconstruction (FiD)
     fid_num_beams: int = 5

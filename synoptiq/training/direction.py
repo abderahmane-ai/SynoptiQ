@@ -41,7 +41,7 @@ class DirectionTrainingConfig:
     """Mutable training config for the direction scorer."""
 
     batch_size: int = 16
-    learning_rate: float = 1e-3  # higher LR suits the ~50-param linear classifier
+    learning_rate: float = 1e-3  # higher LR suits the tiny constrained classifier
     max_steps: int = 5_000
     warmup_steps: int = 200
     val_steps: int = 250
@@ -210,8 +210,8 @@ class DirectionDataset(Dataset):
 class DirectionTrainer:
     """Training loop for the DirectionScorer.
 
-    Features: AMP (FP16), GRL annealing, crash-safe checkpointing with
-    SIGTERM handler, cosine LR schedule, periodic validation.
+    Features: AMP (FP16), fixed feature calibration, crash-safe checkpointing
+    with SIGTERM handler, cosine LR schedule, periodic validation.
     """
 
     def __init__(
@@ -238,7 +238,7 @@ class DirectionTrainer:
         self.optimizer = AdamW(
             scorer.classifier.parameters(),
             lr=config.learning_rate,
-            weight_decay=1e-2,  # L2 regularisation on ~50 params
+            weight_decay=1e-2,  # L2 regularisation on the small classifier heads
         )
 
         self.scheduler = CosineAnnealingLR(self.optimizer, T_max=config.max_steps)
@@ -270,6 +270,7 @@ class DirectionTrainer:
     def train(self) -> dict[str, list[float]]:
         """Run the full training loop."""
         scorer = self.scorer.to(self.device)
+        self._fit_feature_standardizer()
         scorer.train()
         config = self.config
 
@@ -293,7 +294,10 @@ class DirectionTrainer:
             batch = {k: v.to(self.device) for k, v in batch.items()}
 
             # Forward pass
-            with torch.amp.autocast("cuda", enabled=config.use_amp and self.device.startswith("cuda")):
+            with torch.amp.autocast(
+                "cuda",
+                enabled=config.use_amp and self.device.startswith("cuda"),
+            ):
                 output = scorer(
                     input_ids_a=batch["input_ids_a"],
                     attention_mask_a=batch["attention_mask_a"],
@@ -301,7 +305,7 @@ class DirectionTrainer:
                     attention_mask_b=batch["attention_mask_b"],
                 )
 
-                # Direction loss only — GRL removed (v2)
+                # Direction loss only; the classifier encodes swap symmetry directly.
                 loss = self.direction_loss_fn(
                     output["direction_logits"], batch["direction_label"],
                 )
@@ -350,6 +354,54 @@ class DirectionTrainer:
         self._save_checkpoint(suffix="final")
         _LOG.info("training complete", extra={"best_val_acc": round(best_val_acc, 4)})
         return self.history
+
+    @torch.no_grad()
+    def _fit_feature_standardizer(self) -> None:
+        """Estimate fixed z-score statistics from raw train-split features."""
+        self.scorer.eval()
+        feature_batches = []
+        label_batches = []
+
+        for batch in self.train_loader:
+            batch = {k: v.to(self.device) for k, v in batch.items()}
+            output = self.scorer(
+                input_ids_a=batch["input_ids_a"],
+                attention_mask_a=batch["attention_mask_a"],
+                input_ids_b=batch["input_ids_b"],
+                attention_mask_b=batch["attention_mask_b"],
+            )
+            feature_batches.append(output["asymmetry_features"].detach().float().cpu())
+            label_batches.append(batch["direction_label"].detach().cpu())
+
+        if not feature_batches:
+            msg = "cannot fit direction feature standardizer on an empty train loader"
+            raise ValueError(msg)
+
+        features = torch.cat(feature_batches, dim=0)
+        labels = torch.cat(label_batches, dim=0)
+        mean = features.mean(dim=0).to(self.device)
+        std = features.std(dim=0, unbiased=False).to(self.device)
+        self.scorer.classifier.set_feature_stats(mean, std)
+        self.scorer.classifier.initialize_from_centroids(
+            features.to(self.device),
+            labels.to(self.device),
+        )
+
+        _LOG.info(
+            "fitted direction feature standardizer",
+            extra={
+                "feature_mean": [
+                    round(x, 4) for x in self.scorer.classifier.feature_mean.tolist()
+                ],
+                "feature_std": [
+                    round(x, 4) for x in self.scorer.classifier.feature_std.tolist()
+                ],
+                "class_counts": [
+                    int((labels == class_idx).sum().item())
+                    for class_idx in range(self.scorer.config.num_classes)
+                ],
+            },
+        )
 
     @torch.no_grad()
     def _validate(self) -> dict[str, float]:

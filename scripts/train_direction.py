@@ -25,7 +25,7 @@ _ROOT = Path(__file__).parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from transformers import AutoTokenizer  # type: ignore[import-untyped]
+from transformers import AutoTokenizer  # type: ignore[import-untyped]  # noqa: E402
 
 from synoptiq.data.corpus import Corpus  # noqa: E402
 from synoptiq.models.direction import DirectionScorer, DirectionScorerConfig  # noqa: E402
@@ -55,7 +55,7 @@ def _build_parser() -> argparse.ArgumentParser:
                         help="Torch device (auto-detect if unset)")
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--max-steps", type=int, default=5000)
-    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--lr", type=float, default=1e-3)
     return parser
 
 
@@ -108,7 +108,7 @@ def main() -> int:
         "tokenizer": tokenizer,
         "max_length": 512,
         "min_aligned_tokens": 5,
-        "use_scribal_noise": not args.eval_only,
+        "use_scribal_noise": False,
     }
 
     if args.smoke_test:

@@ -37,7 +37,7 @@ def _encode_passages(
     """Encode all aligned passage pairs and return pooled embeddings + labels.
 
     Returns:
-        X: [N, 1544] — concatenated pooled_A + pooled_B + simple features
+        X: [N, 1540] — concatenated pooled_A + pooled_B + simple features
         y: [N] — direction labels (0=A→B, 1=B→A, 2=independent)
         meta: list of dicts with book_a, book_b, pericope_id
     """
@@ -70,8 +70,12 @@ def _encode_passages(
             h_b = h_b.last_hidden_state  # [1, L_B, 768]
 
             # Mean-pool
-            pooled_a = (h_a * mask_a.unsqueeze(-1)).sum(dim=1) / (mask_a.sum(dim=1, keepdim=True) + 1e-8)
-            pooled_b = (h_b * mask_b.unsqueeze(-1)).sum(dim=1) / (mask_b.sum(dim=1, keepdim=True) + 1e-8)
+            pooled_a = (h_a * mask_a.unsqueeze(-1)).sum(dim=1) / (
+                mask_a.sum(dim=1, keepdim=True) + 1e-8
+            )
+            pooled_b = (h_b * mask_b.unsqueeze(-1)).sum(dim=1) / (
+                mask_b.sum(dim=1, keepdim=True) + 1e-8
+            )
             pooled_a = pooled_a.squeeze(0).cpu().numpy()
             pooled_b = pooled_b.squeeze(0).cpu().numpy()
 

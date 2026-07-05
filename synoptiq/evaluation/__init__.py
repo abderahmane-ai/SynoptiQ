@@ -123,7 +123,11 @@ def evaluate_pos_tagging(
                 for wi, word_start in enumerate(word_boundaries):
                     if wi >= len(verse_tokens):
                         break
-                    word_end = word_boundaries[wi + 1] if wi + 1 < len(word_boundaries) else len(subword_texts)
+                    word_end = (
+                        word_boundaries[wi + 1]
+                        if wi + 1 < len(word_boundaries)
+                        else len(subword_texts)
+                    )
                     # Skip padding tokens
                     actual_end = min(word_end, attention_mask.sum().item())
                     if word_start >= actual_end:
@@ -181,7 +185,8 @@ def evaluate_pos_tagging(
             total_loss += loss.item()
             n_batches += 1
         if epoch % 3 == 0:
-            _LOG.info(f"  probe epoch {epoch + 1}/{probe_epochs}: loss={total_loss / max(n_batches, 1):.4f}")
+            avg_loss = total_loss / max(n_batches, 1)
+            _LOG.info(f"  probe epoch {epoch + 1}/{probe_epochs}: loss={avg_loss:.4f}")
 
     # ── Evaluate ───────────────────────────────────────────────────────
     probe.eval()
@@ -224,9 +229,9 @@ def evaluate_lemmatization(
     # Build lemma vocabulary from training data
     lemma_to_idx: dict[str, int] = {}
     for token in corpus.get_tokens(split="train"):
-        l = token.get("lemma", "")
-        if l and l not in lemma_to_idx:
-            lemma_to_idx[l] = len(lemma_to_idx)
+        lemma = token.get("lemma", "")
+        if lemma and lemma not in lemma_to_idx:
+            lemma_to_idx[lemma] = len(lemma_to_idx)
     n_classes = len(lemma_to_idx)
     _LOG.info("lemma probe setup", extra={"n_classes": n_classes})
 
@@ -271,7 +276,11 @@ def evaluate_lemmatization(
                 for wi, word_start in enumerate(word_boundaries):
                     if wi >= len(verse_tokens):
                         break
-                    word_end = word_boundaries[wi + 1] if wi + 1 < len(word_boundaries) else len(subword_texts)
+                    word_end = (
+                        word_boundaries[wi + 1]
+                        if wi + 1 < len(word_boundaries)
+                        else len(subword_texts)
+                    )
                     actual_end = min(word_end, attention_mask.sum().item())
                     if word_start >= actual_end:
                         continue
@@ -285,7 +294,10 @@ def evaluate_lemmatization(
             return torch.zeros(0, 768), torch.zeros(0, dtype=torch.long)
         X = torch.stack(all_hidden)
         y = torch.tensor(all_labels, dtype=torch.long)
-        _LOG.info(f"extracted {len(X)} lemma tokens from {n_verses} verses", extra={"split": data_split})
+        _LOG.info(
+            f"extracted {len(X)} lemma tokens from {n_verses} verses",
+            extra={"split": data_split},
+        )
         return X, y
 
     _LOG.info("extracting train features")
@@ -322,7 +334,8 @@ def evaluate_lemmatization(
             total_loss += loss.item()
             n_batches += 1
         if epoch % 5 == 0:
-            _LOG.info(f"  probe epoch {epoch + 1}/{probe_epochs}: loss={total_loss / max(n_batches, 1):.4f}")
+            avg_loss = total_loss / max(n_batches, 1)
+            _LOG.info(f"  probe epoch {epoch + 1}/{probe_epochs}: loss={avg_loss:.4f}")
 
     probe.eval()
     X_test_dev = X_test.to(device)
@@ -333,7 +346,10 @@ def evaluate_lemmatization(
         correct = (preds == y_test_dev).sum().item()
 
     accuracy = correct / max(len(y_test_dev), 1)
-    _LOG.info(f"probe lemma accuracy ({split}): {accuracy:.2%} ({correct}/{len(y_test_dev)} tokens)")
+    _LOG.info(
+        f"probe lemma accuracy ({split}): {accuracy:.2%} "
+        f"({correct}/{len(y_test_dev)} tokens)"
+    )
 
     return BenchmarkResult(
         model_name=model.model_id,

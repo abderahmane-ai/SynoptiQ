@@ -1,4 +1,4 @@
-# CLAUDE.md — SynoptiQ
+# AGENTS.md — SynoptiQ
 
 A multi-task neural source criticism framework for the Synoptic Problem.
 Applies transformers, causal direction modeling, and Bayesian inference

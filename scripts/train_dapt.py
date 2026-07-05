@@ -27,7 +27,7 @@ _ROOT = Path(__file__).parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from transformers import AutoTokenizer  # type: ignore[import-untyped]
+from transformers import AutoTokenizer  # type: ignore[import-untyped]  # noqa: E402
 
 from synoptiq.models.koineformer import KoineFormer  # noqa: E402
 from synoptiq.training.dapt import DAPTConfig, DAPTTrainer  # noqa: E402
@@ -149,7 +149,10 @@ def main() -> int:
         if pct > 30:
             _LOG.info(f"✓ SMOKE TEST PASSED — loss reduced {pct:.0f}%")
         else:
-            _LOG.error(f"✗ SMOKE TEST FAILED — loss only reduced {pct:.0f}% ({start_loss:.2f} → {end_loss:.2f})")
+            _LOG.error(
+                f"✗ SMOKE TEST FAILED — loss only reduced {pct:.0f}% "
+                f"({start_loss:.2f} → {end_loss:.2f})"
+            )
             return 1
 
     return 0

@@ -21,15 +21,11 @@ lora_target_modules:
   - v
   - o
 
-# Direction scorer head (Phase 3)
+# Direction scorer head (Phase 3): 10 fixed features + swap-equivariant probe
 direction_num_classes: 3      # A→B, B→A, independent
-cross_attn_num_heads: 8
-asymmetry_mlp_hidden: 512
-asymmetry_num_features: 8
-
-# Adversarial de-biasing (GRL — Phase 3)
-num_author_classes: 3         # Matthew, Mark, Luke
-lambda_adversarial: 0.1
+asymmetry_num_features: 10
+direction_signed_features: 6
+direction_independence_features: 10
 
 # Q reconstruction (FiD — Phase 5)
 fid_num_beams: 5

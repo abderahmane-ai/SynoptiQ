@@ -108,7 +108,10 @@ def main() -> int:
     # ── Variant 2: Full fine-tune (raw GreTa, no LoRA) ──────────────
     _LOG.info("=== VARIANT 2: Full fine-tune (raw GreTa, 220M params) ===")
     from transformers import AutoModelForSeq2SeqLM
-    raw_model = AutoModelForSeq2SeqLM.from_pretrained("bowphs/GreTa", torch_dtype=torch.float32).to(device)
+    raw_model = AutoModelForSeq2SeqLM.from_pretrained(
+        "bowphs/GreTa",
+        torch_dtype=torch.float32,
+    ).to(device)
     if hasattr(raw_model.config, "tie_word_embeddings"):
         raw_model.config.tie_word_embeddings = False
     trainable = sum(p.numel() for p in raw_model.parameters())

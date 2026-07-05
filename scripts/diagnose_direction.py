@@ -1,8 +1,8 @@
-"""Diagnose why the direction scorer plateaued at 57% vs baseline 60.9%.
+"""Diagnose direction scorer feature quality and classifier behavior.
 
 Runs five experiments on local CPU/MPS — no Modal, no GPU needed.
-Answers: are asymmetry features useful? Is GRL helping? Is it capacity?
-What does the confusion matrix look like?
+Answers: are asymmetry features useful, is authorship still decodable,
+and what does the confusion matrix look like?
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ _ROOT = Path(__file__).parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from transformers import AutoTokenizer  # type: ignore[import-untyped]
+from transformers import AutoTokenizer  # type: ignore[import-untyped]  # noqa: E402
 
 from synoptiq.data.corpus import Corpus  # noqa: E402
 from synoptiq.models.direction import (  # noqa: E402
@@ -38,7 +38,7 @@ DIRECTIONS = ["A→B", "B→A", "independent"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Experiment 1: Are the 8 asymmetry features informative on their own?
+# Experiment 1: Are the 10 asymmetry features informative on their own?
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -48,10 +48,10 @@ def experiment_1_asymmetry_only(
     tokenizer: object,
     device: str,
 ) -> dict:
-    """Train logistic regression on the 8 asymmetry features ONLY.
+    """Train logistic regression on the 10 asymmetry features ONLY.
 
-    If accuracy >33%, the cross-attention learned something useful.
-    If accuracy =33%, the features are noise — cross-attn didn't converge.
+    If accuracy >33%, the frozen-encoder asymmetry features carry signal.
+    If accuracy =33%, the features are not direction-informative.
     """
     _LOG.info("=== Experiment 1: Asymmetry features only ===")
 
@@ -100,7 +100,7 @@ def experiment_1_asymmetry_only(
         },
         "verdict": (
             "features are informative" if test_acc > 0.38
-            else "features are NOISE — cross-attention didn't learn"
+            else "features are not direction-informative"
         ),
     }
 
@@ -170,8 +170,7 @@ def experiment_3_feature_label_correlation(
     """Compute Pearson r between each asymmetry feature and the true label.
 
     High correlation = that feature carries directional signal.
-    Near-zero = that feature is useless. This tells us which of the 8
-    features the model actually learned to compute usefully.
+    Near-zero = that feature is weak for that binary contrast.
     """
     _LOG.info("=== Experiment 3: Feature-label correlation ===")
 
@@ -193,13 +192,21 @@ def experiment_3_feature_label_correlation(
             all_features.append(out["asymmetry_features"][0].cpu().numpy())
             all_labels.append(s["direction_label"].item())
 
-    X = np.stack(all_features)  # [N, 8]
+    X = np.stack(all_features)  # [N, 10]
     y = np.array(all_labels)    # [N]
 
     correlations = {}
     feature_names = [
-        "mean_AB", "mean_BA", "var_AB", "var_BA",
-        "ent_AB", "ent_BA", "kl_asymmetry", "pos_decay",
+        "bertscore_recall",
+        "bertscore_precision",
+        "precision_recall_asymmetry",
+        "row_max_std",
+        "col_max_std",
+        "entropy_asymmetry",
+        "diagonal_closeness",
+        "log_length_ratio",
+        "pooled_similarity",
+        "coverage_asymmetry",
     ]
     for i, name in enumerate(feature_names):
         # Point-biserial correlation with label
@@ -242,7 +249,7 @@ def experiment_4_author_discriminator_accuracy(
 ) -> dict:
     """Check whether authorship is decodable from the 10 asymmetry features.
 
-    The direction scorer has no adversarial de-biasing. This experiment asks:
+    This experiment asks:
     does a logistic regression trained on the asymmetry features alone predict
     the author of passage A better than chance (33%)?
 
@@ -310,7 +317,7 @@ def experiment_5_pooled_only(
     """Compare: pooled embeddings alone vs pooled + asymmetry features.
 
     Uses the trained model but sets asymmetry contribution to zero
-    to isolate whether the cross-attn features add anything beyond
+    to isolate whether the asymmetry features add anything beyond
     the pooled encoder representations.
     """
     _LOG.info("=== Experiment 5: Pooled embeddings only ===")
@@ -339,11 +346,11 @@ def experiment_5_pooled_only(
     return {
         "name": "pooled_vs_asymmetry",
         "accuracy_with_asymmetry": float(correct_with / total),
-        "baseline_without_asymmetry": 0.609,  # From our logistic regression baseline
-        "delta": round(float(correct_with / total) - 0.609, 4),
+        "baseline_without_asymmetry": 0.728,  # pooled-embedding logistic baseline
+        "delta": round(float(correct_with / total) - 0.728, 4),
         "verdict": (
-            "asymmetry features ADD signal" if (correct_with / total) > 0.63
-            else "asymmetry features DEGRADE signal — cross-attention is noise"
+            "asymmetry features ADD signal" if (correct_with / total) > 0.728
+            else "asymmetry features do not beat the pooled-embedding baseline"
         ),
     }
 
@@ -417,8 +424,8 @@ def main() -> None:
                 continue
             if isinstance(v, dict):
                 print(f"  {k}:")
-                for k2, v2 in v.items():
-                    print(f"    {k2}: {v2}")
+                for nested_key, nested_value in v.items():
+                    print(f"    {nested_key}: {nested_value}")
             elif isinstance(v, list):
                 print(f"  {k}: {v}")
             else:

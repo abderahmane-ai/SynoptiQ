@@ -2,18 +2,18 @@
 
 The model encodes each passage independently through the frozen KoineFormer encoder,
 then extracts 10 asymmetry features from the cross-similarity matrix of their hidden
-states. A linear classifier maps those features to 3-way direction labels.
+states. A swap-equivariant classifier maps those features to 3-way direction labels.
 
 Feature design is grounded in BERTScore Precision/Recall asymmetry (Zhang et al. 2020):
 when B copies A, A's tokens reproduce well in B (high recall) but B's tokens do not
 fully cover A (higher recall than precision), producing a measurable R–P gap. Additional
 features capture attention-entropy asymmetry and structural statistics.
 
-The encoder is completely frozen. Total trainable parameters: ~33.
+The encoder is completely frozen. Total trainable parameters: 17.
 
 History:
-  - Attempts with learned cross-attention (~5M params) overfit immediately on the
-    250-sample training set, collapsing to majority-class prediction.
+  - Parameter-heavy learned matching heads overfit immediately on the 250-sample
+    training set, collapsing to majority-class prediction.
   - A logistic regression on pooled encoder states achieves 72.8% — the signal is
     present in the hidden states but is entangled with authorship style. These features
     are designed to isolate the causal direction component.
@@ -192,20 +192,134 @@ def _compute_asymmetry_features(
 
 
 class DirectionClassifier(nn.Module):
-    """LayerNorm + Linear: 10 asymmetry features → 3 direction classes.
+    """Swap-equivariant linear probe: 10 asymmetry features → 3 classes.
 
-    LayerNorm handles feature-scale differences without introducing learnable
-    bias that could overfit. Total parameters: LayerNorm(20) + Linear(30) = 50.
+    The asymmetry features are low-dimensional tabular statistics with meaningful
+    absolute values and signs. A per-sample LayerNorm destroys that geometry by
+    subtracting each passage pair's own feature mean. Instead, store fixed
+    train-split feature statistics and learn two constrained probes:
+
+      - direction score d(x) over anti-symmetric features
+      - independence score i(x) over symmetric and absolute directional features
+
+    The emitted logits are [d, -d, i]. Swapping A and B negates d while leaving i
+    unchanged, so A_to_B and B_to_A exchange roles by construction.
     """
 
     def __init__(self, config: DirectionScorerConfig):
         super().__init__()
-        self.norm = nn.LayerNorm(config.n_features)
-        self.linear = nn.Linear(config.n_features, config.num_classes, bias=True)
+        if config.n_features != 10:
+            msg = "DirectionClassifier expects the 10 handcrafted asymmetry features"
+            raise ValueError(msg)
+        if config.num_classes != 3:
+            msg = "DirectionClassifier expects 3 classes: A_to_B, B_to_A, independent"
+            raise ValueError(msg)
+
+        self.direction_head = nn.Linear(6, 1, bias=False)
+        self.independence_head = nn.Linear(10, 1, bias=True)
+        self.register_buffer("feature_mean", torch.zeros(config.n_features))
+        self.register_buffer("feature_std", torch.ones(config.n_features))
+
+    @torch.no_grad()
+    def set_feature_stats(
+        self,
+        mean: torch.Tensor,
+        std: torch.Tensor,
+        min_std: float = 1e-6,
+    ) -> None:
+        """Set fixed train-split statistics for feature z-scoring."""
+        fitted_mean = mean.to(self.feature_mean.device).clone()
+        fitted_std = std.to(self.feature_std.device).clone()
+
+        for left_idx, right_idx in ((0, 1), (3, 4)):
+            shared_mean = 0.5 * (fitted_mean[left_idx] + fitted_mean[right_idx])
+            shared_std = torch.sqrt(
+                0.5 * (fitted_std[left_idx].square() + fitted_std[right_idx].square())
+            )
+            fitted_mean[left_idx] = shared_mean
+            fitted_mean[right_idx] = shared_mean
+            fitted_std[left_idx] = shared_std
+            fitted_std[right_idx] = shared_std
+
+        for signed_idx in (2, 5, 7, 9):
+            fitted_mean[signed_idx] = 0.0
+
+        self.feature_mean.copy_(fitted_mean)
+        self.feature_std.copy_(fitted_std.clamp_min(min_std))
+
+    def normalize_features(self, features: torch.Tensor) -> torch.Tensor:
+        """Apply train-split z-scoring to raw asymmetry features."""
+        return (features - self.feature_mean) / self.feature_std
+
+    def decompose_features(
+        self,
+        features: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Split raw features into anti-symmetric and independence features."""
+        x = self.normalize_features(features)
+
+        signed = torch.stack([
+            x[:, 0] - x[:, 1],  # BERTScore P/R contrast
+            x[:, 2],            # P - R
+            x[:, 3] - x[:, 4],  # row/column max-spread contrast
+            x[:, 5],            # entropy asymmetry
+            x[:, 7],            # log length ratio
+            x[:, 9],            # coverage asymmetry
+        ], dim=1)
+
+        symmetric = torch.stack([
+            0.5 * (x[:, 0] + x[:, 1]),  # overall token-match strength
+            0.5 * (x[:, 3] + x[:, 4]),  # overall match-spread strength
+            x[:, 6],                    # diagonal closeness
+            x[:, 8],                    # pooled embedding similarity
+        ], dim=1)
+
+        independence = torch.cat([symmetric, signed.abs()], dim=1)
+        return signed, independence
+
+    @torch.no_grad()
+    def initialize_from_centroids(
+        self,
+        features: torch.Tensor,
+        labels: torch.Tensor,
+    ) -> None:
+        """Initialise constrained heads with shared-covariance centroid rules."""
+        signed, independence = self.decompose_features(features)
+
+        a_mask = labels == 0
+        b_mask = labels == 1
+        independent_mask = labels == 2
+        dependent_mask = labels != 2
+
+        if a_mask.any() and b_mask.any():
+            a_centroid = signed[a_mask].mean(dim=0)
+            b_centroid = signed[b_mask].mean(dim=0)
+            log_odds_weight = a_centroid - b_centroid
+            self.direction_head.weight.copy_(0.5 * log_odds_weight.unsqueeze(0))
+
+        if independent_mask.any() and dependent_mask.any():
+            i_centroid = independence[independent_mask].mean(dim=0)
+            d_centroid = independence[dependent_mask].mean(dim=0)
+            i_prior = independent_mask.float().mean().clamp_min(1e-6)
+            d_prior = dependent_mask.float().mean().clamp_min(1e-6)
+            weight = i_centroid - d_centroid
+            bias = (
+                (i_prior / d_prior).log()
+                - 0.5 * (i_centroid.square().sum() - d_centroid.square().sum())
+            )
+            self.independence_head.weight.copy_(weight.unsqueeze(0))
+            self.independence_head.bias.copy_(bias.unsqueeze(0))
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         """[B, 10] → [B, 3]."""
-        return self.linear(self.norm(features))
+        signed, independence = self.decompose_features(features)
+        direction_logit = self.direction_head(signed).squeeze(-1)
+        independent_logit = self.independence_head(independence).squeeze(-1)
+        return torch.stack([
+            direction_logit,
+            -direction_logit,
+            independent_logit,
+        ], dim=1)
 
 
 # ── Full model ────────────────────────────────────────────────────────────────
@@ -218,9 +332,9 @@ class DirectionScorer(nn.Module):
         1. Encode A and B independently with the frozen KoineFormer encoder.
         2. Compute 10 asymmetry features from the cross-similarity matrix — no
            learned attention, no additional parameters on the encoder path.
-        3. LayerNorm + Linear maps features to 3-way logits (A→B, B→A, independent).
+        3. Train-split z-scoring + swap-equivariant probe maps features to logits.
 
-    Total trainable parameters: ~50 (LayerNorm + Linear).
+    Total trainable parameters: 17 (two constrained linear heads).
 
     Usage:
         config = DirectionScorerConfig()

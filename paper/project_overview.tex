@@ -219,10 +219,11 @@ Full codebase & github.com/abderahmane-ai/SynoptiQ & CC-BY-SA 4.0 \\
 The core question---``who copied from whom?''---is addressed with two
 complementary neural methods.
 
-\textbf{Direction Scorer.}  Cross-attention asymmetry between parallel
-passages produces directional features fed into a 3-way classifier
-(A$\rightarrow$B, B$\rightarrow$A, independent).  An adversarial gradient
-reversal layer strips authorship style to isolate the copying signal.
+\textbf{Direction Scorer.}  Frozen KoineFormer token states produce ten
+calibrated asymmetry features fed into a swap-equivariant 3-way classifier
+(A$\rightarrow$B, B$\rightarrow$A, independent).  The classifier emits
+logits $[d, -d, i]$, so reversing the passage order swaps only the two
+directional labels while preserving the independent label.
 Training uses triple-tradition pericopes where the direction is known
 (Mark$\rightarrow$Matthew, Mark$\rightarrow$Luke under the consensus
 view).
@@ -261,12 +262,12 @@ distances.  SynoptiQ operates at a deeper level:
 \begin{itemize}
 \item \textbf{Contextual representations.}  Transformer hidden states
   capture syntactic and semantic patterns that surface features miss.
-\item \textbf{Causal direction detection.}  Neural cross-attention
-  asymmetry provides a directional signal, rather than symmetric
-  similarity measures.
-\item \textbf{Adversarial debiasing.}  Gradient reversal separates the
-  copying signal from authorial style---critical when the same author
-  appears in multiple roles.
+\item \textbf{Causal direction detection.}  Frozen-encoder asymmetry
+  features provide a directional signal, rather than symmetric similarity
+  measures.
+\item \textbf{Swap-equivariant classification.}  The direction head
+  enforces the known label symmetry: swapping A and B must swap
+  A$\rightarrow$B and B$\rightarrow$A while leaving independence unchanged.
 \item \textbf{Full uncertainty quantification.}  Bayesian hierarchical
   models with bridge sampling yield Bayes factors and credible intervals,
   not just point estimates.
@@ -285,7 +286,7 @@ distances.  SynoptiQ operates at a deeper level:
 1 & Corpus \& alignment & Synoptiq Corpus (HF dataset) & \checkmark\ Complete \\
 2A & KoineFormer DAPT & Domain-adapted LM (HF model) & \checkmark\ Complete \\
 2B & Multi-task fine-tuning & POS, parser, pericope heads & Code ready \\
-3 & Direction scorer & 3-way classifier + GRL & Designed \\
+3 & Direction scorer & 10-feature swap-equivariant classifier & Code ready \\
 4 & Editorial fatigue & Position-weighted KL model & Designed \\
 5 & Q reconstruction & FiD transfer learning & Architecture ready \\
 6 & Bayesian comparison & PyMC hierarchical + BF & Specified \\

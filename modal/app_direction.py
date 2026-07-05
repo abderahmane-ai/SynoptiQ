@@ -1,7 +1,7 @@
 """Modal deployment for Phase 3: Direction Scorer training.
 
-Trains the cross-attention asymmetry classifier on triple-tradition
-pericopes with known Mark→Matthew/Luke copying direction.
+Trains the frozen-encoder, 10-feature swap-equivariant classifier on
+triple-tradition pericopes with known Mark→Matthew/Luke copying direction.
 
 Commands:
     # Upload data (once):
@@ -70,7 +70,10 @@ def upload_data() -> None:
     ]:
         if Path(path).exists():
             subprocess.run(
-                ["modal", "volume", "put", "--force", vol, path, "/data/" + path.split("/")[-2] + "/"],
+                [
+                    "modal", "volume", "put", "--force", vol, path,
+                    "/data/" + path.split("/")[-2] + "/",
+                ],
                 check=True,
             )
             print(f"Uploaded {path} → {vol}:/data/{Path(path).name}")
@@ -103,7 +106,7 @@ def upload_data() -> None:
 def start_training(
     max_steps: int = 5_000,
     batch_size: int = 16,
-    learning_rate: float = 1e-4,
+    learning_rate: float = 1e-3,
 ) -> None:
     """Train the direction scorer on Modal GPU."""
     import json
@@ -165,7 +168,7 @@ def start_training(
     dataset_kwargs = {
         "corpus": corpus, "tokenizer": tokenizer,
         "max_length": 512, "min_aligned_tokens": 5,
-        "use_scribal_noise": True,
+        "use_scribal_noise": False,
     }
     train_ds = DirectionDataset(split="train", **dataset_kwargs)
     val_ds = DirectionDataset(split="val", **dataset_kwargs)
@@ -219,7 +222,6 @@ def start_training(
 ) if modal is not None else None
 def smoke_test() -> None:
     """Quick 100-step smoke test on GPU."""
-    import torch
     from transformers import AutoTokenizer
 
     from synoptiq.data.corpus import Corpus

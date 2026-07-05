@@ -470,7 +470,12 @@ class Corpus:
         )
 
     def __repr__(self) -> str:
+        splits = (
+            dict.fromkeys(set(self._split_assignment.values()))
+            if self._split_assignment
+            else "none"
+        )
         return (
             f"Corpus(n_tokens={self.n_tokens:,}, n_pericopes={self.n_pericopes}, "
-            f"splits={dict.fromkeys(set(self._split_assignment.values())) if self._split_assignment else 'none'})"
+            f"splits={splits})"
         )
