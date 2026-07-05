@@ -85,7 +85,7 @@ def main() -> int:
 
     koine = KoineFormer.from_pretrained(device=device)
     # Try loading DAPT adapters if available
-    dapt_path = Path("outputs/dapt/final")
+    dapt_path = Path("models/koineformer/dapt/final")
     if dapt_path.exists():
         try:
             koine.load_adapters(dapt_path)

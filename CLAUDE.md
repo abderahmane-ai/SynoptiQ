@@ -115,15 +115,20 @@ but not vocabulary.
 
 ## Phase 3: Direction Scorer
 
-### Architecture
+### Architecture (v2 — GRL removed)
+
+v1 included a GradientReversalLayer + AuthorDiscriminator for style invariance.
+Diagnostic experiments showed the GRL at λ=1.0 destroyed cross-attention gradients:
+features 1,2,8 were constant (flat attention maps), the model collapsed to always
+predicting "independent" (32.6% accuracy vs 33.3% random). v2 removes the adversarial
+component entirely.
 
 ```
 Pericope pair (A, B) aligned tokens
-  → Tokenize each passage → KoineFormer encoder (frozen)
+  → Tokenize each passage → KoineFormer encoder (frozen, DAPT adapters loaded)
   → H_A [L_A, 768], H_B [L_B, 768]
   → CrossAttentionAsymmetry (trainable multi-head cross-attention):
-      A→B cross-attn + B→A cross-attn → 8 asymmetry features
-  → Pooled states → GradientReversalLayer → AuthorDiscriminator (3 books)
+      A→B cross-attn + B→A cross-attn → 8 asymmetry features + pooled states
   → [pooled_A, pooled_B, asym_features] → DirectionClassifier → 3-way softmax
 ```
 
@@ -139,24 +144,26 @@ Pericope pair (A, B) aligned tokens
 - Labels: (Mark, Matthew) → A_to_B, (Mark, Luke) → A_to_B, (Matthew, Luke) → independent
 - Swap augmentation doubles samples (A↔B with flipped label)
 - 250 train / 86 val / 92 test samples after augmentation
-- Pericope-level split prevents data leakage (same pericope never in train+test)
+- Pericope-level split prevents data leakage
+
+### Baselines (built)
+- Random: 33.3%, Majority class: 33.7%
+- Cosine similarity: 33.7% (direction not detectable from embedding similarity)
+- Logistic regression on pooled KoineFormer embeddings: **72.8%**
+- Gate: direction scorer must beat 72.8% to justify cross-attention complexity
 
 ### Training config
-- KoineFormer encoder frozen; cross-attention + classifier + discriminator trained
+- KoineFormer encoder frozen (DAPT adapters loaded); cross-attention + classifier trained
 - Batch 16, 5,000 steps, AdamW lr=1e-4, cosine to zero
-- GRL: λ anneals 0→1.0 over 1,000 steps
-- Loss = CrossEntropy(direction) + 0.1 × CrossEntropy(author)
-- AMP (FP16) on CUDA only; T4 GPU, ~30 min
+- Loss = CrossEntropy(direction) only (no adversarial term)
+- AMP (FP16) on CUDA only; T4 GPU, ~15 min
 - Same crash-safe checkpointing as DAPT
 
-### Baselines needed (not yet built)
-- Encoplot (encode + cosine similarity heuristic)
-- Length ratio heuristic
-- With/without GRL ablation
-- POS-only vs full-encoder ablation
-
 ### Key gotchas
+- DAPT adapters MUST be loaded — zero-shot GreTa baseline drops from 72.8% to 60.9%
+- Local DAPT path: `models/koineformer/dapt/final/`; Modal: `/outputs/dapt/final/`
 - AMP/GradScaler only activates on CUDA (not MPS/CPU)
+- GRL removed in v2 — don't add it back without testing on this data size
 - GRL is wired correctly: pooled states → GRL → discriminator; classifier sees original (non-GRL'd) states
 - Matthew↔Luke pairs labeled "independent" under 2SH — critical negative examples
 - Direction types (`A_to_B`, `B_to_A`, `independent`) defined in `types_.py`
@@ -271,11 +278,11 @@ only (~3.7M trainable, r=16 α=32, targeting W_q/W_v/W_o in attention + W_o in F
 70/30 Koine/Classical replay buffer. 20K steps, 58 min on A10G. 96.62% POS,
 81.34% lemma. 14 MB checkpoint.
 
-**Direction Scorer** (Phase 3) = Frozen KoineFormer encoder → bidirectional
-cross-attention → 8 asymmetry features → GRL-stripped pooled states → 3-way
-classifier (A→B, B→A, independent). Adversarial GRL forces style-invariant
-features. Trained on 65 labeled triple-tradition pericopes (Mark→Matthew/Luke
-direction known). 5K steps on T4.
+**Direction Scorer** (Phase 3, v2) = Frozen KoineFormer encoder (DAPT) →
+bidirectional cross-attention → 8 asymmetry features + pooled states →
+3-way classifier (A→B, B→A, independent). No GRL (v1 experiment: GRL
+destroyed gradients, model collapsed). Trained on 65 labeled triple-tradition
+pericopes. Baseline: logistic regression on same encoder = 72.8%. 5K steps T4.
 
 **Editorial Fatigue** (Phase 4) = Position-weighted KL divergence between
 editing distribution and source distribution, with exponential decay weight.

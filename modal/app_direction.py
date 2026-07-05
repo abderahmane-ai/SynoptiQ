@@ -215,6 +215,7 @@ def start_training(
     image=_build_image(),
     volumes={
         "/data": modal.Volume.from_name(DATA_VOLUME, create_if_missing=True),
+        "/outputs": modal.Volume.from_name(OUTPUT_VOLUME, create_if_missing=True),
     },
     timeout=600,
 ) if modal is not None else None
@@ -244,6 +245,12 @@ def smoke_test() -> None:
     tokenizer.add_special_tokens({"pad_token": "[PAD]"})
 
     koine = KoineFormer.from_pretrained(device="cuda")
+
+    dapt_path = Path("/outputs/dapt/final")
+    if dapt_path.exists():
+        koine.load_adapters(dapt_path)
+        print("Loaded DAPT adapters")
+
     koine.model.resize_token_embeddings(len(tokenizer))
 
     encoder = koine.model.base_model.encoder
