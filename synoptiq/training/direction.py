@@ -10,14 +10,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 import signal
-from typing import Any
 
 import torch
 import torch.nn as nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader, Dataset
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 from synoptiq.data.augmentation import add_scribal_noise
 from synoptiq.data.corpus import Corpus
@@ -252,7 +250,11 @@ class DirectionTrainer:
         })
 
         self.scheduler = CosineAnnealingLR(self.optimizer, T_max=config.max_steps)
-        self.scaler = torch.amp.GradScaler("cuda") if config.use_amp else None
+        self.scaler = (
+            torch.amp.GradScaler("cuda")
+            if config.use_amp and device.startswith("cuda")
+            else None
+        )
 
         self.direction_loss_fn = nn.CrossEntropyLoss()
         self.author_loss_fn = nn.CrossEntropyLoss()
@@ -306,7 +308,7 @@ class DirectionTrainer:
             batch = {k: v.to(self.device) for k, v in batch.items()}
 
             # Forward pass
-            with torch.amp.autocast("cuda", enabled=config.use_amp):
+            with torch.amp.autocast("cuda", enabled=config.use_amp and self.device.startswith("cuda")):
                 output = scorer(
                     input_ids_a=batch["input_ids_a"],
                     attention_mask_a=batch["attention_mask_a"],

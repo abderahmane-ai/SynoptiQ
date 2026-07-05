@@ -19,6 +19,8 @@ import argparse
 from pathlib import Path
 import sys
 
+import torch
+
 _ROOT = Path(__file__).parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
@@ -224,7 +226,6 @@ def _evaluate(
 
 
 def _detect_device() -> str:
-    import torch
     if torch.cuda.is_available():
         return "cuda"
     if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
