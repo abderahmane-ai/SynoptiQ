@@ -27,6 +27,29 @@ Rules:
   (AST-only, no API cost). Dirty `graphify-out/` files are expected and are not a
   reason to skip graphify.
 
+## Session handoff (read me first)
+
+**Last commit:** `chore: clean up dead code, unify device detection, honest
+docstrings` — a conservative full-package cleanup. Removed genuinely dead code
+(no tested/public API touched), corrected misleading docstrings, consolidated
+the 6 duplicated `detect_device()` copies onto `scripts/_cli_utils.detect_device`,
+and rewrote `alignment.py` docs to match its actual binary (lemma, POS) matching.
+Tree is clean; ruff passes; all 87 tests pass.
+
+**Current focus → the Direction Scorer (Phase 3).** It is *not* simply "awaiting
+GPU training" — it is a genuine research plateau. Recent git history is almost
+entirely direction-scorer churn (GRL added then removed, swap-equivariance added,
+encoder made deterministic). The open question: **do the 10 asymmetry features
+carry copying-*direction* signal, or only authorship/style signal?** The scorer
+must beat the **72.8%** pooled-embedding logistic-regression gate to justify the
+asymmetry probe at all.
+
+**Next concrete step:** run `python scripts/diagnose_direction.py` (CPU, no GPU/Modal
+needed; needs DAPT adapters at `models/koineformer/dapt/final/`) and read its 5
+experiments *before* spending more GPU time. Experiments 1 (asymmetry-only LR) and
+4 (author decodability) directly answer the signal-vs-style question. See the
+"Phase 3" section and its "Key gotchas" below for what's already been tried and ruled out.
+
 ## Project layout
 
 ```
@@ -53,7 +76,8 @@ SynoptiQ/
 │   ├── train_multitask.py  # Phase 2B: Multi-task LoRA fine-tuning
 │   ├── train_direction.py  # Phase 3: Direction scorer (--smoke-test, full GPU training)
 │   ├── eval_baseline.py    # Zero-shot vs DAPT evaluation (--zero-shot, --dapt-checkpoint)
-│   └── run_ablation.py     # LoRA vs full fine-tune ablation
+│   ├── run_ablation.py     # LoRA vs full fine-tune ablation
+│   └── diagnose_direction.py # Phase 3: 5 CPU experiments diagnosing the direction plateau
 ├── paper/                  # Paper A: KoineFormer (XeLaTeX)
 │   ├── main.tex            # Main manuscript (Poppins + TeX Gyre Pagella, Mediterranean)
 │   ├── project_overview.tex # SynoptiQ project brief for Yale/Oxford/Harvard audience
@@ -63,7 +87,7 @@ SynoptiQ/
 │   └── app_direction.py    # Phase 3: Direction scorer training (T4 GPU)
 ├── datasets/               # HuggingFace dataset export (gitignored except README)
 │   └── synoptiq-corpus/    # Pushed to ainouche-abderahmane/synoptiq-corpus
-├── tests/                  # 84 tests (mirrors synoptiq/ structure)
+├── tests/                  # 87 tests (mirrors synoptiq/ structure)
 ├── data/                   # Git-ignored: raw corpora, processed Parquet files
 ├── models/                 # Git-ignored: downloaded HF models, trained adapters
 ├── outputs/                # Git-ignored: logs, eval results, checkpoints
@@ -77,10 +101,10 @@ SynoptiQ/
 | Phase | Status | Key result |
 |-------|--------|------------|
 | Phase 0 | ✓ Foundation | Types, constants, Greek utils, project skeleton |
-| Phase 1 | ✓ Data Pipeline | SynoptiQ Corpus: 49,061 tokens, 170 pericopes, 235 alignments, 84 tests |
+| Phase 1 | ✓ Data Pipeline | SynoptiQ Corpus: 49,061 tokens, 170 pericopes, 235 alignments, 87 tests |
 | Phase 2A | ✓ DAPT | KoineFormer trained: 96.62% POS, 81.34% lemma, 14 MB |
 | Phase 2B | ○ Multi-task | Code ready, not yet trained |
-| Phase 3 | ● Direction Scorer | Code ready, smoke-test passed, awaiting Modal GPU training |
+| Phase 3 | ● Direction Scorer | Code ready + swap-equivariant; **plateau under investigation** (must beat 72.8% pooled-LR gate — see `diagnose_direction.py`) |
 | Phase 4 | ○ Editorial Drift | Not started |
 | Phase 5 | ○ Q Reconstruction | Not started |
 | Phase 6 | ○ Bayesian | Not started |
@@ -94,7 +118,7 @@ SynoptiQ/
 - `synoptiq/utils/constants.py` — **Aland pericope table** (bedrock), MorphGNT tagset maps, Goodacre fatigue pericopes, 1,337 lines
 - `synoptiq/utils/greek.py` — Greek text normalization (NFD accent stripping, sigma normalization)
 - `synoptiq/data/corpus.py` — Central `Corpus` class. `direction_pairs(split=...)` yields (book_a, tokens_a, book_b, tokens_b, alignment) for direction scorer training
-- `synoptiq/data/alignment.py` — Needleman-Wunsch token alignment via Bio.Align.PairwiseAligner
+- `synoptiq/data/alignment.py` — Needleman-Wunsch token alignment via Bio.Align.PairwiseAligner. Scoring is **binary on the (normalized lemma, POS) key** (each pair → a Private-Use-Area char; identical = `match` +2.5, else `mismatch` -100, forcing a gap). Surface form is reported by `alignment_score` but does not steer the path.
 - `synoptiq/data/augmentation.py` — Bootstrap resampling, sliding windows, scribal noise injection
 - `synoptiq/training/_config.py` — Five frozen dataclasses: `ModelConfig` already has `direction_num_classes`, `asymmetry_num_features`, `direction_signed_features`, `direction_independence_features`
 - `synoptiq/models/koineformer.py` — **KoineFormer**: GreTa + LoRA wrapper, factory, save/load, generate
@@ -106,6 +130,8 @@ SynoptiQ/
 - `scripts/train_direction.py` — Direction scorer CLI: `--smoke-test` (100 steps CPU), full training (5K steps GPU)
 - `scripts/eval_baseline.py` — Compare zero-shot GreTa vs DAPT KoineFormer on POS + lemma
 - `scripts/run_ablation.py` — LoRA vs full fine-tune loss curve comparison
+- `scripts/diagnose_direction.py` — **Phase 3 debugging**: 5 CPU experiments probing why the direction scorer plateaus (asymmetry-only LR, confusion matrix, feature↔label correlation, author decodability, pooled-only). Run this before more GPU training.
+- `scripts/_cli_utils.py` — Shared CLI helpers. **Canonical `detect_device()`** lives here; all training/eval scripts import it (do not re-add per-script copies).
 - `modal/app_dapt.py` — Phase 2A Modal: `upload_data`, `start_training`, `run_ablation`, `train_and_eval_full_ft`
 - `modal/app_direction.py` — Phase 3 Modal: `upload_data`, `start_training` (T4, 5K steps), `smoke_test`
 
@@ -195,6 +221,9 @@ Pericope pair (A, B) aligned tokens
 - Do not use per-sample LayerNorm on the 10 features; it destroys absolute/sign geometry
 - Matthew↔Luke pairs labeled "independent" under 2SH — critical negative examples
 - Direction types (`A_to_B`, `B_to_A`, `independent`) defined in `types_.py`
+- **GRL (gradient reversal) was removed** — it destroyed cross-attention gradients and hurt the encoder (commit `eb5a0a5`). Do not reintroduce an adversarial author-discriminator head without solving that first.
+- **The direction encoder is kept deterministic** (commit `b856943`): dropout off / eval-mode feature extraction, so the 10 asymmetry features are stable across runs. Keep it that way when debugging.
+- Open question the plateau hinges on: do the 10 asymmetry features carry *direction* signal, or only *authorship/style* signal? That is exactly what `diagnose_direction.py` experiments 1 & 4 test.
 
 ## Modal commands
 
@@ -282,7 +311,7 @@ Uses Overleaf if local TeX is unavailable.
 # 1. Lint — must show zero F or E level errors
 python3 -m ruff check synoptiq/ tests/ scripts/ --fix
 
-# 2. Full test suite — all 84 must pass
+# 2. Full test suite — all 87 must pass
 python3 -m pytest tests/ -q --tb=short
 
 # 3. Clean all caches
@@ -342,7 +371,7 @@ Paper A is complete (paper/main.tex). Paper B architecture implemented (Phase 3 
 - Python 3.12+, PyTorch 2.6+, HuggingFace transformers 4.51+, PEFT
 - Modal (GPU cloud: A10G for DAPT, T4 for direction scorer)
 - BioPython (token alignment), PyMC + ArviZ (Bayesian), SHAP + BERTViz
-- ruff (linting), pytest (84 tests), XeLaTeX (paper)
+- ruff (linting), pytest (87 tests), XeLaTeX (paper)
 - Data: SBLGNT (CC-BY), MorphGNT (CC-BY-SA), Apostolic Fathers, First1KGreek (CC-BY-SA)
 - GitHub: [abderahmane-ai/SynoptiQ](https://github.com/abderahmane-ai/SynoptiQ)
 - HF model: [ainouche-abderahmane/koineformer](https://huggingface.co/ainouche-abderahmane/koineformer)
