@@ -29,27 +29,49 @@ Rules:
 
 ## Session handoff (read me first)
 
-**Last commit:** `feat(phase3): MDL direction component + definitive confound
-analysis` — the Direction Scorer question is now **settled** (see
-`docs/DIRECTION_SCORER_FINDINGS.md`). Tree clean; ruff F/E passes; 112 tests pass.
+**Last commit:** `feat(phase3): RPM — variant-polarization rooting beats chance on
+synoptic direction`. Tree clean; ruff F/E passes; 127 tests pass. Full story in
+`docs/DIRECTION_SCORER_FINDINGS.md` (read it first — it now LEADS with the RPM
+breakthrough, then the negatives that forced it).
 
-**Phase 3 is RESOLVED — as a rigorous negative result, not a working detector.**
-The open question ("do the features carry direction signal, or only style?") was
-answered by a validation-gated investigation: **no tested method extracts copying
-direction from short parallel passages that is simultaneously author-independent,
-length-independent, and transferable across corpora.** Every strong-looking signal
-is a confound (length, or Markan style) or a synthetic-generator artifact, each
-exposed by a specific control. The clincher: two real known-direction sets of
-opposite length polarity — Jude→2 Peter (copy longer) and LXX Chronicles (copy
-shorter) — show the signal (and the learned component) tracks *which text is
+**Phase 3 — BREAKTHROUGH after a long negative arc. Read `docs/DIRECTION_SCORER_FINDINGS.md`.**
+
+Negatives (settled, do NOT re-try): all *global passage scores* — similarity features
+(chance), NLL/MDL compression (Markan style + length; sign flips with length polarity),
+a synthetic-trained head (99% synthetic = generator artifact, pure length prior on real
+data). Proven by two real known-direction sets of opposite length polarity: Jude→2 Peter
+(copy longer) and LXX Chronicles (copy shorter). Global scores track *which text is
 longer*, not which is the source.
 
-**Do NOT re-attempt** more similarity features, NLL asymmetry, or synthetic-trained
-heads expecting a working synoptic detector — all are ruled out with evidence.
-For Phase 6, keep any direction evidence **unsupervised on the synoptics** (a
-2SH-trained classifier fed into the Bayesian test is circular). The one avenue not
-yet confounded is **editorial fatigue** (Goodacre; within-pericope inconsistency,
-not global style/length) — scope it as its own effort on full-pericope aligned data.
+Breakthrough — the **Redactional Polarization Model (RPM)**. Reframe: direction is the
+stemmatology **rooting problem**, solved by polarizing individual **variants** (which
+reading is primitive) via the textual-criticism canons — NOT by global scores. Gated tests:
+- **H1** (`scripts/analyze_polarization.py`): *lectio brevior* = pure length (0.0/1.0
+  across polarity → dropped); *lectio difficilior* = chance; **connective smoothing**
+  (καί→δέ, directional per edit) is the survivor.
+- **H2/H3** (`scripts/train_polarization.py`): connective-only, scaled, length-free →
+  **synoptic directed acc 0.78 [0.71,0.85], 0.97 on the confident 25% (abstention)**;
+  Jude→2 Peter 1.0 (n=6); LXX weak 0.57 (connective is a gospel-genre phenomenon).
+  Dropping the length feature KEPT the synoptic result → genuine, not length.
+
+RPM is the first component to beat chance on real synoptic direction — interpretable
+(weights = canons), length-controlled, abstention-calibrated. Caveat: synoptic strength
+partly coincides with Mark's καί-heavy style (but it is per-edit directional and appears
+on non-synoptic Jude). Key modules: `synoptiq/evaluation/variants.py`,
+`synoptiq/models/polarization.py`, `synoptiq/data/frequency.py`.
+
+**NEXT (approved plan, gate-by-gate — plan file
+`~/.claude/plans/buzzing-squishing-fairy.md`):**
+- **R4** — fold **editorial fatigue** (`synoptiq/evaluation/fatigue.py`, already built as a
+  weak-but-length-robust lead) in as a SECOND canon feature; test incremental value (H4).
+- **R5** — pool per-pericope RPM log-odds into a posterior over the four rooted stemmata
+  (2SH/Farrer/Griesbach/Augustinian) via `synoptiq/bayesian/`; put the **Farrer-vs-Q**
+  question (does Luke show fatigue on double-tradition material?) to a quantitative test (H5).
+Keep Phase 6 non-circular: RPM is unsupervised on the synoptics (trained on external LXX).
+
+Do-not-repeat rules: global passage scores are dead; `local_brevior` is a confirmed length
+proxy (excluded by design); always test on BOTH length polarities and use
+pericope-grouped bootstrap CIs (`synoptiq/evaluation/bootstrap.py`).
 
 ## Cold start (fresh clone / new machine)
 
@@ -131,7 +153,7 @@ SynoptiQ/
 | Phase 1 | ✓ Data Pipeline | SynoptiQ Corpus: 49,061 tokens, 170 pericopes, 235 alignments, 87 tests |
 | Phase 2A | ✓ DAPT | KoineFormer trained: 96.62% POS, 81.34% lemma, 14 MB |
 | Phase 2B | ○ Multi-task | Code ready, not yet trained |
-| Phase 3 | ◐ Direction Scorer | **Resolved as a negative result** — no transferable direction signal exists at short-passage granularity (confounded with length + Markan style). See `docs/DIRECTION_SCORER_FINDINGS.md` |
+| Phase 3 | ◐ Direction Scorer | **RPM breakthrough** — variant-polarization (connective-smoothing canon) beats chance on synoptic direction: 0.78, 0.97 @25% coverage, length-controlled + interpretable. Global scores are dead. R4/R5 next. See `docs/DIRECTION_SCORER_FINDINGS.md` |
 | Phase 4 | ○ Editorial Drift | Not started |
 | Phase 5 | ○ Q Reconstruction | Not started |
 | Phase 6 | ○ Bayesian | Not started |
@@ -199,13 +221,15 @@ but not vocabulary.
 
 ## Phase 3: Direction Scorer
 
-> **RESOLVED (negative result). Read `docs/DIRECTION_SCORER_FINDINGS.md` first.**
-> The investigation proved no method extracts a copying-direction signal that is
-> author-independent, length-independent, and transferable. The 10-feature scorer
-> below is chance; conditional-NLL asymmetry is Markan style + length; a component
-> trained on a synthetic same-author corpus hits 99% on held-out authors but is a
-> pure length prior on real data (100% where the copy compresses, 17% where it
-> expands). The architecture below is retained as the documented dead-end baseline.
+> **Read `docs/DIRECTION_SCORER_FINDINGS.md` first.** Global passage scores (the
+> 10-feature scorer below, NLL/MDL, synthetic-trained head) are all DEAD — confounded
+> with length + Markan style, proven on both length polarities. The working approach is
+> the **Redactional Polarization Model (RPM)**: variant-level polarization via the
+> textual-criticism canons (`synoptiq/models/polarization.py`,
+> `synoptiq/evaluation/variants.py`). RPM reaches 0.78 synoptic directed accuracy (0.97
+> on its confident quartile) with the length-free connective-smoothing canon. The
+> architecture below is retained as the documented dead-end baseline; R4 (fatigue as a
+> 2nd canon) and R5 (rooting → Farrer/Q) are the next gated steps.
 
 ### Architecture
 
