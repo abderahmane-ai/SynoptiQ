@@ -29,26 +29,27 @@ Rules:
 
 ## Session handoff (read me first)
 
-**Last commit:** `chore: clean up dead code, unify device detection, honest
-docstrings` — a conservative full-package cleanup. Removed genuinely dead code
-(no tested/public API touched), corrected misleading docstrings, consolidated
-the 6 duplicated `detect_device()` copies onto `scripts/_cli_utils.detect_device`,
-and rewrote `alignment.py` docs to match its actual binary (lemma, POS) matching.
-Tree is clean; ruff passes; all 87 tests pass.
+**Last commit:** `feat(phase3): MDL direction component + definitive confound
+analysis` — the Direction Scorer question is now **settled** (see
+`docs/DIRECTION_SCORER_FINDINGS.md`). Tree clean; ruff F/E passes; 112 tests pass.
 
-**Current focus → the Direction Scorer (Phase 3).** It is *not* simply "awaiting
-GPU training" — it is a genuine research plateau. Recent git history is almost
-entirely direction-scorer churn (GRL added then removed, swap-equivariance added,
-encoder made deterministic). The open question: **do the 10 asymmetry features
-carry copying-*direction* signal, or only authorship/style signal?** The scorer
-must beat the **72.8%** pooled-embedding logistic-regression gate to justify the
-asymmetry probe at all.
+**Phase 3 is RESOLVED — as a rigorous negative result, not a working detector.**
+The open question ("do the features carry direction signal, or only style?") was
+answered by a validation-gated investigation: **no tested method extracts copying
+direction from short parallel passages that is simultaneously author-independent,
+length-independent, and transferable across corpora.** Every strong-looking signal
+is a confound (length, or Markan style) or a synthetic-generator artifact, each
+exposed by a specific control. The clincher: two real known-direction sets of
+opposite length polarity — Jude→2 Peter (copy longer) and LXX Chronicles (copy
+shorter) — show the signal (and the learned component) tracks *which text is
+longer*, not which is the source.
 
-**Next concrete step:** run `python scripts/diagnose_direction.py` (CPU, no GPU/Modal
-needed; needs DAPT adapters at `models/koineformer/dapt/final/`) and read its 5
-experiments *before* spending more GPU time. Experiments 1 (asymmetry-only LR) and
-4 (author decodability) directly answer the signal-vs-style question. See the
-"Phase 3" section and its "Key gotchas" below for what's already been tried and ruled out.
+**Do NOT re-attempt** more similarity features, NLL asymmetry, or synthetic-trained
+heads expecting a working synoptic detector — all are ruled out with evidence.
+For Phase 6, keep any direction evidence **unsupervised on the synoptics** (a
+2SH-trained classifier fed into the Bayesian test is circular). The one avenue not
+yet confounded is **editorial fatigue** (Goodacre; within-pericope inconsistency,
+not global style/length) — scope it as its own effort on full-pericope aligned data.
 
 ## Cold start (fresh clone / new machine)
 
@@ -130,7 +131,7 @@ SynoptiQ/
 | Phase 1 | ✓ Data Pipeline | SynoptiQ Corpus: 49,061 tokens, 170 pericopes, 235 alignments, 87 tests |
 | Phase 2A | ✓ DAPT | KoineFormer trained: 96.62% POS, 81.34% lemma, 14 MB |
 | Phase 2B | ○ Multi-task | Code ready, not yet trained |
-| Phase 3 | ● Direction Scorer | Code ready + swap-equivariant; **plateau under investigation** (must beat 72.8% pooled-LR gate — see `diagnose_direction.py`) |
+| Phase 3 | ◐ Direction Scorer | **Resolved as a negative result** — no transferable direction signal exists at short-passage granularity (confounded with length + Markan style). See `docs/DIRECTION_SCORER_FINDINGS.md` |
 | Phase 4 | ○ Editorial Drift | Not started |
 | Phase 5 | ○ Q Reconstruction | Not started |
 | Phase 6 | ○ Bayesian | Not started |
@@ -148,7 +149,12 @@ SynoptiQ/
 - `synoptiq/data/augmentation.py` — Bootstrap resampling, sliding windows, scribal noise injection
 - `synoptiq/training/_config.py` — Five frozen dataclasses: `ModelConfig` already has `direction_num_classes`, `asymmetry_num_features`, `direction_signed_features`, `direction_independence_features`
 - `synoptiq/models/koineformer.py` — **KoineFormer**: GreTa + LoRA wrapper, factory, save/load, generate
-- `synoptiq/models/direction.py` — **DirectionScorer** (Phase 3): frozen encoder → 10 asymmetry features → swap-equivariant classifier
+- `synoptiq/models/direction.py` — **DirectionScorer** (10 asymmetry features, dead-end baseline) + **MDLDirectionHead** (swap-equivariant head over NLL codelength features, the Phase-3 component)
+- `synoptiq/evaluation/nll_direction.py` — MDL direction scoring: four NLL codelengths, length-fair MDL score, codelength→feature vector, `CachedPairScorer`
+- `synoptiq/evaluation/bootstrap.py` — pericope-grouped + paired cluster bootstrap (use for ALL direction comparisons)
+- `synoptiq/data/redaction.py` — synthetic same-author, length-decorrelated redaction generator (the Phase-3 training corpus)
+- `synoptiq/data/external_pairs.py` — loader for known-direction pairs (Jude→2Pet, LXX Chronicles); no Corpus needed
+- `docs/DIRECTION_SCORER_FINDINGS.md` — **the Phase-3 conclusion**: full evidence + reproduction commands
 - `synoptiq/training/dapt.py` — **DAPT**: data loader + training loop with AMP, SIGTERM handler, crash-safe checkpointing
 - `synoptiq/training/direction.py` — **Phase 3 training**: DirectionDataset (wraps Corpus.direction_pairs), DirectionTrainer (AMP, feature calibration, checkpointing)
 - `synoptiq/evaluation/__init__.py` — Linear probe evaluation: POS + lemma accuracy
@@ -156,7 +162,10 @@ SynoptiQ/
 - `scripts/train_direction.py` — Direction scorer CLI: `--smoke-test` (100 steps CPU), full training (5K steps GPU)
 - `scripts/eval_baseline.py` — Compare zero-shot GreTa vs DAPT KoineFormer on POS + lemma
 - `scripts/run_ablation.py` — LoRA vs full fine-tune loss curve comparison
-- `scripts/diagnose_direction.py` — **Phase 3 debugging**: 5 CPU experiments probing why the direction scorer plateaus (asymmetry-only LR, confusion matrix, feature↔label correlation, author decodability, pooled-only). Run this before more GPU training.
+- `scripts/diagnose_direction.py` — 5 CPU experiments showing the 10-feature scorer is chance (asymmetry-only LR, confusion matrix, feature↔label correlation, author decodability, pooled-only)
+- `scripts/analyze_direction_signal.py` — deterministic NLL analysis: 3 score variants, length partial-correlation, `--no-dapt` ablation (this is what proved the signal is style+length)
+- `scripts/build_redaction_corpus.py` / `extract_direction_features.py` / `train_direction_component.py` — build synthetic corpus → cache NLL features → train the MDL head + full eval ladder + verdict
+- `scripts/build_external_pairs.py` / `build_lxx_pairs.py` / `eval_external_direction.py` — Jude→2Pet (copy longer) and LXX Chronicles (copy shorter) known-direction sets + their NLL evaluation
 - `scripts/_cli_utils.py` — Shared CLI helpers. **Canonical `detect_device()`** lives here; all training/eval scripts import it (do not re-add per-script copies).
 - `modal/app_dapt.py` — Phase 2A Modal: `upload_data`, `start_training`, `run_ablation`, `train_and_eval_full_ft`
 - `modal/app_direction.py` — Phase 3 Modal: `upload_data`, `start_training` (T4, 5K steps), `smoke_test`
@@ -190,9 +199,17 @@ but not vocabulary.
 
 ## Phase 3: Direction Scorer
 
+> **RESOLVED (negative result). Read `docs/DIRECTION_SCORER_FINDINGS.md` first.**
+> The investigation proved no method extracts a copying-direction signal that is
+> author-independent, length-independent, and transferable. The 10-feature scorer
+> below is chance; conditional-NLL asymmetry is Markan style + length; a component
+> trained on a synthetic same-author corpus hits 99% on held-out authors but is a
+> pure length prior on real data (100% where the copy compresses, 17% where it
+> expands). The architecture below is retained as the documented dead-end baseline.
+
 ### Architecture
 
-The current Direction Scorer is a frozen-encoder, feature-calibrated,
+The Direction Scorer is a frozen-encoder, feature-calibrated,
 swap-equivariant classifier. It extracts 10 deterministic asymmetry features
 from KoineFormer token states and emits logits `[d, -d, i]`, so swapping A/B
 swaps `A_to_B` and `B_to_A` while leaving `independent` invariant.
@@ -230,7 +247,10 @@ Pericope pair (A, B) aligned tokens
 - Random: 33.3%, Majority class: 33.7%
 - Cosine similarity: 33.7% (direction not detectable from embedding similarity)
 - Logistic regression on pooled KoineFormer embeddings: **72.8%**
-- Gate: direction scorer must beat 72.8% to justify the asymmetry probe over pooled embeddings
+- The "beat 72.8%" gate is superseded: that 72.8% is itself confounded (pooled
+  embeddings detect Markan authorship), and on ~14 test pericopes it carries a
+  ±13-pt bootstrap CI. Use pericope-grouped bootstrap CIs (`synoptiq/evaluation/bootstrap.py`),
+  not point accuracy, for any direction comparison.
 
 ### Training config
 - KoineFormer encoder frozen (DAPT adapters loaded); only the 17-parameter classifier is trained
@@ -249,7 +269,7 @@ Pericope pair (A, B) aligned tokens
 - Direction types (`A_to_B`, `B_to_A`, `independent`) defined in `types_.py`
 - **GRL (gradient reversal) was removed** — it destroyed cross-attention gradients and hurt the encoder (commit `eb5a0a5`). Do not reintroduce an adversarial author-discriminator head without solving that first.
 - **The direction encoder is kept deterministic** (commit `b856943`): dropout off / eval-mode feature extraction, so the 10 asymmetry features are stable across runs. Keep it that way when debugging.
-- Open question the plateau hinges on: do the 10 asymmetry features carry *direction* signal, or only *authorship/style* signal? That is exactly what `diagnose_direction.py` experiments 1 & 4 test.
+- Open question — now ANSWERED: the 10 asymmetry features carry neither (chance, and author only weakly decodable). The direction signal that *does* move (conditional-NLL asymmetry) is Markan style + length, not direction. Full evidence and the two-length-polarity proof are in `docs/DIRECTION_SCORER_FINDINGS.md`.
 
 ## Modal commands
 
@@ -361,11 +381,13 @@ only (~3.7M trainable, r=16 α=32, targeting W_q/W_v/W_o in attention + W_o in F
 70/30 Koine/Classical replay buffer. 20K steps, 58 min on A10G. 96.62% POS,
 81.34% lemma. 14 MB checkpoint.
 
-**Direction Scorer** (Phase 3) = Frozen KoineFormer encoder (DAPT) →
-cos-similarity matrix → 10 asymmetry features (P-R, entropy, alignment path) →
-swap-equivariant classifier with logits `[d, -d, i]` (A→B, B→A, independent).
-Trained on 65 labeled triple-tradition pericopes. Baseline: logistic regression
-on pooled encoder states = 72.8%. 5K steps T4.
+**Direction Scorer** (Phase 3) = **resolved as a negative result** (see
+`docs/DIRECTION_SCORER_FINDINGS.md`). Two swap-equivariant heads were built — a
+similarity-feature classifier (`DirectionScorer`) and an NLL-codelength head
+(`MDLDirectionHead`) — plus a synthetic same-author training corpus. None yields a
+transferable direction signal: the apparent signals are confounded with passage
+length and Markan style. Editorial fatigue (Phase 4) is the one unconfounded avenue
+left.
 
 **Editorial Fatigue** (Phase 4) = Position-weighted KL divergence between
 editing distribution and source distribution, with exponential decay weight.

@@ -9,6 +9,7 @@ from synoptiq.models.direction import (
     DirectionClassifier,
     DirectionScorer,
     DirectionScorerConfig,
+    MDLDirectionHead,
     _compute_asymmetry_features,
 )
 
@@ -145,3 +146,49 @@ def test_direction_scorer_train_keeps_frozen_encoder_in_eval_mode() -> None:
     assert not scorer.training
     assert not scorer.classifier.training
     assert not scorer.encoder.training
+
+
+# ── MDLDirectionHead (codelength-feature head) ──────────────────────────────────
+
+
+def _swap_mdl_features(f: torch.Tensor) -> torch.Tensor:
+    """Apply the A<->B swap transform to the 11 NLL codelength features."""
+    s = f.clone()
+    for li, ri in ((0, 1), (3, 4), (6, 7)):
+        s[:, li] = f[:, ri]
+        s[:, ri] = f[:, li]
+    for i in (2, 5, 8, 9, 10):
+        s[:, i] = -f[:, i]
+    return s
+
+
+def test_mdl_head_is_swap_equivariant() -> None:
+    torch.manual_seed(0)
+    head = MDLDirectionHead()
+    head.set_feature_stats(torch.zeros(11), torch.ones(11))
+    with torch.no_grad():
+        head.direction_head.weight.normal_()
+        head.independence_head.weight.normal_()
+
+    f = torch.randn(5, 11)
+    logits = head(f)
+    swapped = head(_swap_mdl_features(f))
+
+    torch.testing.assert_close(swapped[:, 0], logits[:, 1], atol=1e-5, rtol=1e-4)
+    torch.testing.assert_close(swapped[:, 1], logits[:, 0], atol=1e-5, rtol=1e-4)
+    torch.testing.assert_close(swapped[:, 2], logits[:, 2], atol=1e-5, rtol=1e-4)
+
+
+def test_mdl_head_set_feature_stats_shares_pairs_and_zeros_negators() -> None:
+    head = MDLDirectionHead()
+    stats = torch.arange(11, dtype=torch.float32) + 1.0
+    head.set_feature_stats(stats, stats)
+    for li, ri in ((0, 1), (3, 4), (6, 7)):
+        assert head.feature_mean[li].item() == head.feature_mean[ri].item()
+        assert head.feature_std[li].item() == head.feature_std[ri].item()
+    for i in (2, 5, 8, 9, 10):
+        assert head.feature_mean[i].item() == 0.0
+
+
+def test_mdl_head_forward_shape() -> None:
+    assert MDLDirectionHead()(torch.randn(3, 11)).shape == (3, 3)

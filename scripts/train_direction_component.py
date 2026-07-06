@@ -29,7 +29,7 @@ if str(_ROOT) not in sys.path:
 
 from synoptiq.evaluation.bootstrap import accuracy_ci  # noqa: E402
 from synoptiq.evaluation.nll_direction import FEATURE_NAMES  # noqa: E402
-from synoptiq.models.direction_mdl import MDLDirectionHead  # noqa: E402
+from synoptiq.models.direction import MDLDirectionHead  # noqa: E402
 from synoptiq.utils.logging_ import get_logger  # noqa: E402
 
 _LOG = get_logger(__name__)

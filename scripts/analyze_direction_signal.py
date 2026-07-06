@@ -1,7 +1,7 @@
-"""Adversarial validation of the conditional-NLL direction signal.
+"""Adversarial validation of the conditional-NLL direction signal (synoptic split).
 
 Decides the direction component's design by measurement, not assumption. For every
-synoptic and external pair it computes the four NLL codelengths and compares three
+synoptic test pair it computes the four NLL codelengths and compares three
 signed direction scores (positive => A is the source):
 
   1. conditional_asym  — naive per-token NLL(A|B) - NLL(B|A)  (the Stage-2 probe)
@@ -33,7 +33,6 @@ if str(_ROOT) not in sys.path:
 from transformers import AutoTokenizer  # noqa: E402
 
 from synoptiq.data.corpus import Corpus  # noqa: E402
-from synoptiq.data.external_pairs import load_external_pairs  # noqa: E402
 from synoptiq.evaluation.bootstrap import accuracy_ci  # noqa: E402
 from synoptiq.evaluation.nll_direction import (  # noqa: E402
     DirectionCodelengths,
@@ -196,17 +195,12 @@ def main() -> None:
     _LOG.info("scoring synoptic test pairs...")
     syn_data = _collect(scorer, syn_samples, device)
 
-    ext_samples = load_external_pairs(
-        Path("data/external/known_direction_pairs.json"), tokenizer,
-        max_length=512, augment_swap=True,
-    )
-    _LOG.info("scoring external pairs...")
-    ext_data = _collect(scorer, ext_samples, device)
-
+    # Synoptic only: this script's unique value is the multi-variant + length-control
+    # + zero-shot comparison. External known-direction sets (Jude/2Pet, LXX Chronicles)
+    # are handled by eval_external_direction.py.
     results = {
         "encoder": "dapt" if use_dapt else "zero-shot",
         "synoptic_test": _evaluate(syn_data, args.n_resamples),
-        "external_jude_2peter": _evaluate(ext_data, args.n_resamples),
     }
 
     print("\n" + "=" * 70)
