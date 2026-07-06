@@ -1,0 +1,437 @@
+% Rooting the Synoptic Tree: Unsupervised Direction Detection by Redactional Polarization
+% Compile with: xelatex main.tex && bibtex main && xelatex main.tex && xelatex main.tex
+\documentclass[11pt,letterpaper]{article}
+
+% ── Core packages ───────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage{fontspec}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage[table]{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{csquotes}
+\usepackage[authoryear,round]{natbib}
+\usepackage[letterpaper, top=0.9in, bottom=1.0in, left=1.0in, right=1.0in]{geometry}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{tcolorbox}
+\tcbuselibrary{breakable}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{ragged2e}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage[font={small,color=stone},labelfont={bf,color=marine},labelsep=quad]{caption}
+
+\setlist{nosep, leftmargin=*}
+\frenchspacing
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.55em}
+
+% ── Typography ───────────────────────────────────────────────────────
+\setmainfont{TeX Gyre Pagella}[Ligatures=TeX]
+\newfontfamily\headfont{Poppins}
+\newfontfamily\greekfont{FreeSerif}
+\newcommand{\gk}[1]{{\greekfont\itshape #1}}
+\setmonofont{Latin Modern Mono}[Scale=0.92]
+
+% ── Palette ──────────────────────────────────────────────────────────
+\definecolor{marine}{HTML}{123C48}
+\definecolor{marinelight}{HTML}{2E6272}
+\definecolor{terracotta}{HTML}{B75B36}
+\definecolor{papyrus}{HTML}{F7F2E7}
+\definecolor{stone}{HTML}{6E6A5F}
+\definecolor{rulegrey}{HTML}{D9D2C0}
+\definecolor{inkblack}{HTML}{201D1A}
+\color{inkblack}
+\arrayrulecolor{marine!65!black}
+
+\newcolumntype{P}[1]{>{\centering\arraybackslash}p{#1}}
+\newcolumntype{L}[1]{>{\RaggedRight\arraybackslash}p{#1}}
+
+\renewcommand\labelitemi{\textcolor{terracotta}{\textbullet}}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=marine,
+  citecolor=marine,
+  urlcolor=terracotta,
+  pdftitle={Rooting the Synoptic Tree: Unsupervised Direction Detection by Redactional Polarization},
+  pdfauthor={Abderahmane Ainouche}
+}
+
+% ── Section styling ─────────────────────────────────────────────────
+\titleformat{\section}
+  {\headfont\Large\bfseries\color{marine}}
+  {\color{marine}\thesection}
+  {0.65em}{}
+  [{\vspace{2pt}\color{rulegrey}\titlerule[0.9pt]}]
+\titlespacing*{\section}{0pt}{1.7em}{0.9em}
+
+\titleformat{\subsection}
+  {\headfont\large\bfseries\color{marinelight}}
+  {\thesubsection}{0.6em}{}
+\titlespacing*{\subsection}{0pt}{1.3em}{0.5em}
+
+% ── Header / footer ─────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\footnotesize\headfont\color{stone} Rooting the Synoptic Tree}
+\fancyhead[R]{\footnotesize\headfont\color{stone} Redactional Polarization}
+\fancyfoot[C]{\footnotesize\headfont\color{stone}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{{\color{rulegrey}\hrule height\headrulewidth}}
+\fancypagestyle{firstpage}{%
+  \fancyhf{}
+  \fancyfoot[C]{\footnotesize\headfont\color{stone}\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+}
+
+% ── Small helpers ────────────────────────────────────────────────────
+\newcommand{\statcard}[2]{%
+  \cellcolor{papyrus}{\begin{minipage}[c][2.05cm][c]{\linewidth}\centering
+    {\headfont\bfseries\fontsize{17}{19}\selectfont\color{marine}#1}\\[3pt]
+    {\footnotesize\headfont\color{stone}#2}
+  \end{minipage}}%
+}
+\newcommand{\tblhead}{\rowcolor{marine!12}}
+
+\begin{document}
+
+% ── Title block ──────────────────────────────────────────────────────
+\thispagestyle{firstpage}
+\begin{flushleft}
+{\headfont\footnotesize\bfseries\color{terracotta}\MakeUppercase{Digital Humanities \textbullet\ Computational Textual Criticism}}\\[7pt]
+{\headfont\bfseries\fontsize{21}{26}\selectfont\color{marine}%
+Rooting the Synoptic Tree: Unsupervised Direction Detection\\ by Redactional Polarization}\\[10pt]
+{\headfont\large\color{stone} Abderahmane Ainouche}
+\end{flushleft}
+\vspace{6pt}
+{\color{rulegrey}\rule{\linewidth}{0.9pt}}
+\vspace{1.3em}
+
+% ── Abstract ─────────────────────────────────────────────────────────
+\begin{tcolorbox}[
+  breakable,
+  colback=papyrus, colframe=marine,
+  boxrule=0pt, leftrule=2.6pt, arc=0pt, outer arc=0pt,
+  left=16pt, right=16pt, top=11pt, bottom=11pt
+]
+{\headfont\bfseries\color{marine} Abstract}\par\vspace{5pt}
+\noindent The \textit{Synoptic Problem}---the question of how Matthew, Mark, and Luke are literarily related---turns on \textit{direction}: given two parallel passages, which is the source and which the copy? We show that this is precisely the stemmatological \textit{rooting problem}, and that \textit{global} passage-level scores (embedding similarity, conditional-generation codelength, and a learned redaction head) cannot solve it: each is confounded with passage length or with Mark's distinctive style, a fact we prove with two real known-direction corpora of opposite length polarity. We then introduce the \textbf{Redactional Polarization Model (RPM)}, which scores direction at the level of the individual \textit{variant} using the classical canons of textual criticism. A single length-free canon---\textit{connective smoothing} (the redactional replacement of paratactic \gk{καί} with a smoother connective)---reaches \textbf{0.78 directed accuracy} on the Synoptic triple tradition (0.88 on pericopes carrying such an edit; 0.97 on its most confident quartile via abstention), transfers to non-Synoptic known-direction data, and survives a strict control for Mark's global \gk{καί}-density. Pooling per-pericope votes into a Bayesian posterior over the four classical hypotheses \textbf{recovers Markan priority with no Synoptic supervision} (2SH~0.64, Farrer~0.36, Griesbach and Augustinian $\approx 0$), while the Farrer--Q question is left honestly open. Because RPM is unsupervised on the Synoptics, its posterior can enter a downstream Bayesian model comparison without circularity. All code and data are released under CC-BY-SA~4.0.
+\end{tcolorbox}
+
+\vspace{1.1em}
+\begin{center}
+\renewcommand{\arraystretch}{1}
+\setlength{\tabcolsep}{7pt}
+\begin{tabular}{P{0.18\linewidth}P{0.18\linewidth}P{0.18\linewidth}P{0.18\linewidth}P{0.18\linewidth}}
+\statcard{0.78}{Directed acc.\ (synoptic)} &
+\statcard{0.97}{@ 25\% coverage} &
+\statcard{0.64}{2SH posterior} &
+\statcard{$\approx$0}{Griesbach / Aug.} &
+\statcard{3.5\,:\,1}{style-matched edits}
+\end{tabular}
+\end{center}
+\vspace{0.6em}
+
+\section{Introduction}
+\label{sec:intro}
+
+For more than two centuries, the \textit{Synoptic Problem} has asked how the first three
+Gospels---Matthew, Mark, and Luke, which share extensive verbatim parallels---are literarily
+related \citep{streeter1924}. The dominant \textbf{Two-Source Hypothesis} (2SH) holds that Mark
+was written first and that Matthew and Luke each used Mark independently, together with a lost
+sayings source \textbf{Q}. Its principal rival, the \textbf{Farrer hypothesis}, dispenses with Q
+by having Luke use Matthew directly \citep{farrer1955,goodacre2001}; the older
+\textbf{Griesbach} (Matthew first, Mark last) and \textbf{Augustinian} (Matthew first, Mark
+second) hypotheses invert the priority entirely \citep{griesbach1978}.
+
+What separates these hypotheses is not \textit{whether} the Gospels are related---they obviously
+are---but the \textit{direction} of dependence: who copied whom. This is exactly the situation
+that stemmatology, the study of manuscript genealogies, calls the \textbf{rooting problem}
+\citep{trovato2017}. Recovering the unrooted tree (the pattern of relatedness) is easy; placing
+the \textit{root} (assigning direction) is the hard part, and it is classically solved by
+\textit{polarizing individual variants}---deciding, reading by reading, which is primitive and
+which is derived---using the canons of textual criticism \citep{metzger2005}.
+
+Prior computational work on the Synoptics has modelled patterns of word agreement
+\citep{abakuks2006} but has not produced a direction detector validated against known-direction
+data. In this paper we (i) show why the natural \textit{global} approaches fail, as a principled
+negative result; (ii) introduce the \textbf{Redactional Polarization Model (RPM)}, a variant-level
+detector grounded in the textual-criticism canons; and (iii) use it to root the Synoptic tree
+without any Synoptic supervision. Because the detector never sees the disputed answer, its output
+is admissible as evidence in a downstream Bayesian test of the hypotheses---a property we regard
+as essential and that supervised classifiers trained on 2SH labels cannot claim.
+
+\section{The Direction Problem and Its Built-in Trap}
+\label{sec:trap}
+
+Under any hypothesis, the labelled Synoptic data is confounded \textit{by construction}. In the
+triple tradition---material present in all three Gospels---2SH makes Mark the source in every
+pair, and treats every Matthew--Luke pair as \textit{independent} (both descend from Mark). Thus
+``direction'' is collinear with ``is this Mark'': any classifier can score well by detecting
+Mark's style rather than the direction of copying. A genuine detector must isolate direction
+\textit{per se}, and must be validated where the answer is independently known and where a
+Synoptic author is \textit{absent}.
+
+We therefore anchor every claim on two external corpora of \textbf{known} direction and
+\textbf{opposite length polarity}: \textbf{Jude~$\rightarrow$~2~Peter} (the later text
+\textit{expands} its source) and the \textbf{Septuagint Samuel--Kings~$\rightarrow$~Chronicles}
+synopsis (the later text \textit{abridges} its source). A real detector must give the right
+answer on \textit{both}; a length or style artefact will not.
+
+\section{Why Global Passage Scores Fail}
+\label{sec:negatives}
+
+We first tested the natural family of \textit{global} scores---each reducing a passage pair to a
+single number---and found every one confounded. This is a contribution in its own right: it maps
+the boundary of what passage-level information can and cannot reveal.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{L{4.6cm}L{4.4cm}L{4.9cm}}
+\toprule
+\tblhead\textbf{Global score} & \textbf{Apparent signal} & \textbf{What it actually measures} \\
+\midrule
+Embedding cross-similarity (10 asymmetry features) & none (chance) & nothing usable \\
+Conditional-generation codelength $\mathrm{NLL}(B\!\mid\!A)-\mathrm{NLL}(A\!\mid\!B)$ & strong on synoptics & Mark's style + length \\
+Length-fair MDL / compression score & strong on synoptics, $\approx 0$ external & typicality + length \\
+Learned redaction head (synthetic training) & 0.99 on synthetic authors & generator artefact + length prior \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{The global-score dead ends.} Every passage-level score reduces, under control,
+to passage length or to Mark's (simpler, more predictable) Greek---not to copying direction.}
+\label{tab:negatives}
+\end{table}
+
+The decisive control is the two-polarity test. The conditional-codelength asymmetry, which looks
+like a strong direction signal on the Synoptics, \textit{reverses its sign} between
+Jude~$\rightarrow$~2~Peter (copy longer) and Chronicles (copy shorter): it tracks \textit{which
+text is longer}, not which is the source. The learned redaction head, which reaches 99\% on
+held-out synthetic authors, collapses to a pure length prior on real data (17\% on the expanding
+pair, 100\% on the abridging pair). The lesson is granularity: \textbf{averaging a passage into a
+single number drowns the few directional edits under length and authorial style}. This motivates
+scoring at the level of the individual variant.
+
+\section{The Redactional Polarization Model}
+\label{sec:rpm}
+
+RPM treats direction as rooting by variant polarization. Given an aligned pair $(X,Y)$ it (i)
+extracts typed \textbf{variants}---substitutions, and one-sided pluses---from the token
+alignment; (ii) scores each variant with \textit{signed, local} features drawn from the
+textual-criticism canons, with the convention that a positive value means \textit{$X$'s reading
+is primitive} (i.e.\ $X$ is the source); and (iii) aggregates them into a per-pair score.
+
+\subsection{Canon features}
+
+Three canons yield a computable, signed, per-variant feature:
+\begin{itemize}
+\item \textbf{Lectio difficilior} (harder reading is older): the lexical-rarity (markedness)
+  difference between $X$'s and $Y$'s readings, from a Koine frequency table.
+\item \textbf{Lectio brevior}, applied \textit{locally} (the shorter reading is older): the
+  length difference of \textit{this variant's} span---never the passage length.
+\item \textbf{Connective smoothing}: a redactor tends to replace rough paratactic \gk{καί}
+  (``and'') with a smoother connective (\gk{δέ}, \gk{οὖν}, \gk{τότε}, \gk{γάρ}); the rough side
+  is scored primitive. This is a \textit{directional edit at an aligned position}, not a count.
+\end{itemize}
+Because each feature negates when $X$ and $Y$ are swapped, the aggregate is antisymmetric by
+construction: swapping the inputs negates the score.
+
+\subsection{Aggregation and abstention}
+
+The per-pair score is a linear combination of summed variant features,
+$S(X,Y)=\mathbf{w}^{\!\top}\!\sum_v \boldsymbol{\phi}(v)$, with $S>0$ read as ``$X$ is the
+source''. Weights are fit by logistic regression on \textit{external} known-direction variants
+(swap-augmented, no intercept, so antisymmetry is preserved); the sign of each weight is fixed a
+priori by its canon. Confidence is $|S|$: on directionally neutral pericopes the score is near
+zero and RPM \textbf{abstains} rather than guessing---matching how sparse the evidence truly is.
+Crucially, no weight is ever fit on Synoptic data.
+
+\section{Results}
+\label{sec:results}
+
+We report five gated findings, each with pericope-grouped (clustered) bootstrap 95\% confidence
+intervals, so that the many pairs from one pericope are not treated as independent.
+
+\subsection{Which canons polarize? (H1)}
+
+Tested on the external known-direction variants across both length polarities: \textit{lectio
+brevior} is a \textbf{pure length proxy} (0.00 accuracy on the abridging corpus, 1.00 on the
+expanding one---caught red-handed) and is discarded. \textit{Lectio difficilior} is at chance.
+\textbf{Connective smoothing is the survivor}: it is consistent on both polarities and reaches
+0.80 on the Synoptics. All subsequent results use the length-free connective canon.
+
+\subsection{Aggregation, abstention, and transfer (H2--H3)}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\toprule
+\tblhead\textbf{Evaluation set} & \textbf{Directed acc.} & \textbf{@ 50\% cov.} & \textbf{@ 25\% cov.} \\
+\midrule
+\rowcolor{terracotta!12}\textbf{Synoptic} (Mark~$\rightarrow$~Matt/Luke) & \textbf{0.78 [0.71, 0.85]} & 0.93 & \textbf{0.97} \\
+Jude~$\rightarrow$~2~Peter ($n=6$) & 1.00 & 1.00 & 1.00 \\
+LXX Chronicles (in-domain) & 0.57 & --- & 0.64 \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{RPM directed accuracy with abstention.} Restricting to the most confident
+pericopes sharply raises accuracy---the confident quartile is 97\% correctly directed. Dropping
+the length feature entirely \textit{kept} the Synoptic result (0.76~$\rightarrow$~0.78), proving
+the signal is connective smoothing, not length. Connective smoothing is a Gospel-genre
+phenomenon, hence weak on Septuagintal narrative.}
+\label{tab:rpm}
+\end{table}
+
+On the 121 Synoptic pericopes that actually carry a connective edit, directed accuracy is
+\textbf{0.876}; the headline 0.78 is diluted only by the pericopes with no such edit, on which
+RPM correctly abstains (they score zero and are dropped first, yielding 0.93 and 0.97 at 50\% and
+25\% coverage).
+
+\subsection{Is it direction, or Mark's \gk{καί}-heavy style? (control)}
+
+The single most serious objection is that RPM votes ``Mark is the source'' merely because Mark
+uses \gk{καί} more \textit{globally}. We control for this directly: stratifying the Mark--$X$
+pericopes by $|\Delta|$, the gap in global \gk{καί}-density between the two texts. If the signal
+were pure style, the \textit{matched} stratum would collapse to chance.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\tblhead\textbf{Stratum (by $|\Delta\,$\gk{καί}$|$)} & \textbf{Markan-priority acc.} & \textbf{95\% CI} & \textbf{$n$} \\
+\midrule
+Overall & 0.876 & [0.82, 0.93] & 121 \\
+\rowcolor{papyrus}\textbf{$T_1$ --- matched \gk{καί}-density} & \textbf{0.784} & \textbf{[0.64, 0.90]} & 37 \\
+$T_2$ --- middle & 0.950 & [0.87, 1.00] & 40 \\
+$T_3$ --- divergent style & 0.886 & [0.78, 0.98] & 44 \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{The style-confound control.} Even where Mark and the other Gospel have matched
+global \gk{καί}-density, the signal stays at 0.78 (CI clears chance). The per-edit vote ratio
+(Mark-source\,:\,other-source) is 5.6\,:\,1 across all edits and 3.5\,:\,1 on the matched half.
+The Markan-priority signal is therefore genuine \textit{per-edit} direction (\gk{καί} smoothed to
+\gk{δέ}/\gk{τότε} at aligned positions), not global style.}
+\label{tab:control}
+\end{table}
+
+\subsection{Does editorial fatigue add a second canon? (H4)}
+
+Editorial fatigue---a copyist who makes characteristic changes early, then tires and reverts to
+the source---is directional by nature \citep{goodacre1998}. We tested its one length-robust
+feature (shared entities introduced later in the copy) as a second RPM canon. It does \textit{not}
+help on the Synoptics: fitting a blend on the external corpus over-weights fatigue (the stronger
+in-sample canon there) and \textit{collapses} the Synoptic result to 0.41, because aggregate
+fatigue is at chance on the Synoptics (0.44, CI includes 0.5). A decisive test confirms it: on the
+pericopes where the connective canon is \textit{silent}, fatigue is still at chance (0.44), so it
+adds no complementary coverage. Aggregate fatigue is a real but \textit{genre-limited} canon
+(useful on Septuagintal abridgement), complementary to connective smoothing rather than additive
+on the Gospels; capturing it on the Synoptics would require a sharper, sparse dangling-reference
+operator rather than an average.
+
+\subsection{Rooting the tree, and the Farrer--Q question (H5)}
+
+The four hypotheses are four rootings, each predicting a direction for the three pairwise
+relationships (or, for 2SH on Matthew--Luke, \textit{independence}). Pooling the unsupervised
+connective vote per pericope into a Beta--Bernoulli marginal likelihood per relationship---with
+the 2SH ``independent'' prediction modelled explicitly as $\theta=0.5$---yields a posterior over
+the four stemmata and a Bayes factor for Farrer versus Q \citep{kass1995}.
+
+\begin{table}[H]
+\centering
+\small
+\begin{minipage}[t]{0.54\linewidth}
+\centering
+\begin{tabular}{lccc}
+\toprule
+\tblhead\textbf{Relationship} & \textbf{Source vote} & \textbf{$n$} \\
+\midrule
+Matthew--Mark (triple) & Mark 75\% & 59 \\
+Mark--Luke (triple) & Mark 91\% & 57 \\
+Matthew--Luke (double / Q) & Matt 58\% & 12 \\
+\bottomrule
+\end{tabular}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.42\linewidth}
+\centering
+\begin{tabular}{lc}
+\toprule
+\tblhead\textbf{Hypothesis} & \textbf{Posterior} \\
+\midrule
+\rowcolor{terracotta!12}\textbf{2SH} & \textbf{0.64} \\
+Farrer & 0.36 \\
+Griesbach & $\approx 0.00$ \\
+Augustinian & $\approx 0.00$ \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\caption{\textbf{Unsupervised rooting.} The canon sees Mark as the source on both Markan
+relationships (75\%, 91\%), so the Matthean-priority hypotheses (Griesbach, Augustinian)---which
+require Mark to be a \textit{copy}---are excluded. 2SH and Farrer agree on Markan priority and
+differ only on Matthew--Luke.}
+\label{tab:rooting}
+\end{table}
+
+Two conclusions follow. First, \textbf{Markan priority is recovered with zero Synoptic
+supervision}: the field-consensus result emerges from a textual-criticism canon validated only on
+external corpora. Second, \textbf{Farrer versus Q is left open, leaning weakly to Q}. On the
+double tradition---the Q material, where no Markan parallel exists---the canon finds no consistent
+Matthew~$\rightarrow$~Luke direction (7 of 12 $\approx$ chance), which is what independence
+predicts; the Bayes factor Farrer\,:\,2SH is 0.56 (anecdotal, favouring Q). The strong
+Matthew-source signal on \textit{triple-tradition} Matthew--Luke ($\mathrm{BF}\approx165$) is not
+valid Farrer evidence: there both evangelists used Mark, so a Matthew-source polarity is expected
+under \textit{every} hypothesis. The clean test is the double tradition, and it is simply too
+sparse in connective edits (12 pericopes) to settle the question.
+
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{What has been shown}
+
+RPM is, to our knowledge, the first computational method to recover Synoptic copying direction
+from the text itself and to validate it against known-direction data of both length polarities.
+It is interpretable---its weights are the textual-criticism canons---length-controlled, and
+abstention-calibrated, and it reproduces Markan priority while excluding the Matthean-priority
+hypotheses. Equally important is what it does \textit{not} claim: the Farrer--Q question, which
+turns on a small and edit-sparse body of double-tradition material, remains open, and we report it
+as such rather than overreading a near-chance result.
+
+\subsection{Non-circularity and the road to a Bayesian verdict}
+
+Because RPM is unsupervised on the Synoptics---its canon signs are fixed a priori and its weights
+are fit only on external corpora---its per-pericope log-odds may be pooled into a Bayesian model
+comparison over the four hypotheses \textit{without} the circularity that would invalidate a
+classifier trained on 2SH labels. The rooting posterior of Table~\ref{tab:rooting} is a first,
+deliberately simple instance of that pooling; a full hierarchical treatment with prior-sensitivity
+analysis is the natural next step.
+
+\subsection{Limitations}
+
+Three limits bound the claims. (i) Connective smoothing is a Gospel-genre phenomenon; it transfers
+only partially to Septuagintal narrative, and a richer canon set is needed for cross-genre
+generality. (ii) The Farrer--Q test is underpowered; resolving it needs more double-tradition
+data or a sharper, sparse fatigue operator than the aggregate tested here. (iii) While the
+per-edit control (Table~\ref{tab:control}) shows the Markan-priority signal is not reducible to
+Mark's global \gk{καί}-density, connective usage remains a stylistic as well as a redactional
+variable, and independent canons agreeing on the same root would further harden the conclusion.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+We reframed Synoptic direction detection as the stemmatological rooting problem and showed that
+global passage scores cannot solve it, while variant-level polarization by the textual-criticism
+canons can. The Redactional Polarization Model reaches 0.78 directed accuracy on the Synoptic
+triple tradition (0.97 on its confident quartile), survives a strict control for Mark's style, and
+---pooled over the corpus---recovers Markan priority and excludes the Matthean-priority hypotheses
+with no Synoptic supervision, leaving the Farrer--Q question honestly open. Code and data are
+released under CC-BY-SA~4.0 to support further work in computational textual criticism.
+
+% ── References ──────────────────────────────────────────────────────
+\bibliographystyle{apalike}
+\bibliography{references}
+
+\end{document}
