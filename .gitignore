@@ -19,6 +19,7 @@ ENV/
 data/raw/
 data/processed/
 data/external/
+data/synthetic/   # regenerable via scripts/build_redaction_corpus.py
 
 # Model checkpoints (large binary files — upload to Modal volume)
 /models/
