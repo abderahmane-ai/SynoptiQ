@@ -52,6 +52,39 @@ _PARALLELS = [
     (("2Ki", 14, 1, 14), ("2Ch", 25, 1, 24), "Amaziah of Judah"),
     (("2Ki", 22, 1, 13), ("2Ch", 34, 1, 21), "Josiah and the book of the law"),
     (("2Ki", 23, 21, 30), ("2Ch", 35, 1, 27), "Josiah's passover and death"),
+    # Full-synopsis extension (empty extractions are skipped at build time).
+    (("2Sa", 8, 15, 18), ("1Ch", 18, 14, 17), "David's officials"),
+    (("2Sa", 12, 26, 31), ("1Ch", 20, 1, 3), "the capture of Rabbah"),
+    (("2Sa", 21, 18, 22), ("1Ch", 20, 4, 8), "battles with Philistine giants"),
+    (("1Ki", 6, 1, 14), ("2Ch", 3, 1, 9), "Solomon builds the temple"),
+    (("1Ki", 7, 15, 22), ("2Ch", 3, 15, 17), "the two pillars Jachin and Boaz"),
+    (("1Ki", 9, 10, 28), ("2Ch", 8, 1, 18), "Solomon's cities and activities"),
+    (("1Ki", 11, 41, 43), ("2Ch", 9, 29, 31), "the death of Solomon"),
+    (("1Ki", 15, 9, 24), ("2Ch", 14, 1, 8), "Asa's reign and reforms"),
+    (("1Ki", 15, 16, 22), ("2Ch", 16, 1, 6), "war between Asa and Baasha"),
+    (("1Ki", 22, 29, 36), ("2Ch", 18, 28, 34), "the death of Ahab"),
+    (("2Ki", 8, 16, 24), ("2Ch", 21, 1, 11), "Jehoram of Judah"),
+    (("2Ki", 8, 25, 29), ("2Ch", 22, 1, 6), "Ahaziah of Judah"),
+    (("2Ki", 11, 1, 20), ("2Ch", 22, 10, 23), "Athaliah and the rescue of Joash"),
+    (("2Ki", 15, 1, 7), ("2Ch", 26, 1, 23), "Uzziah of Judah"),
+    (("2Ki", 15, 32, 38), ("2Ch", 27, 1, 9), "Jotham of Judah"),
+    (("2Ki", 16, 1, 20), ("2Ch", 28, 1, 27), "Ahaz of Judah"),
+    (("2Ki", 18, 1, 8), ("2Ch", 29, 1, 11), "Hezekiah's reforms begin"),
+    (("2Ki", 20, 1, 11), ("2Ch", 32, 24, 26), "Hezekiah's illness"),
+    (("2Ki", 20, 12, 19), ("2Ch", 32, 27, 31), "envoys from Babylon"),
+    (("2Ki", 21, 1, 18), ("2Ch", 33, 1, 20), "Manasseh of Judah"),
+    (("2Ki", 21, 19, 26), ("2Ch", 33, 21, 25), "Amon of Judah"),
+    (("2Ki", 23, 4, 20), ("2Ch", 34, 3, 7), "Josiah's cultic reforms"),
+    (("2Ki", 23, 31, 35), ("2Ch", 36, 1, 4), "Jehoahaz of Judah"),
+    (("2Ki", 23, 36, 37), ("2Ch", 36, 5, 8), "Jehoiakim of Judah"),
+    (("2Ki", 24, 8, 17), ("2Ch", 36, 9, 10), "Jehoiachin of Judah"),
+    (("2Ki", 24, 18, 20), ("2Ch", 36, 11, 16), "Zedekiah of Judah"),
+    (("2Ki", 25, 1, 21), ("2Ch", 36, 17, 21), "the fall of Jerusalem"),
+    (("2Sa", 6, 1, 11), ("1Ch", 13, 1, 14), "the ark and the death of Uzzah (fuller)"),
+    (("1Ki", 5, 13, 18), ("2Ch", 2, 17, 18), "Solomon's forced labor"),
+    (("1Ki", 8, 31, 53), ("2Ch", 6, 22, 42), "Solomon's petitions at the dedication"),
+    (("1Ki", 10, 14, 29), ("2Ch", 9, 13, 28), "Solomon's wealth and splendor"),
+    (("1Ki", 12, 21, 24), ("2Ch", 11, 1, 4), "Shemaiah forbids war on Israel"),
 ]
 
 
@@ -105,8 +138,15 @@ def main() -> None:
     for (sb, sc, s0, s1), (cb, cc, c0, c1), topic in _PARALLELS:
         text_a = _text(verse_span, words, sb, sc, s0, s1)
         text_b = _text(verse_span, words, cb, cc, c0, c1)
-        if len(text_a.split()) < 5 or len(text_b.split()) < 5:
+        la, lb = len(text_a.split()), len(text_b.split())
+        if la < 5 or lb < 5:
             print(f"  SKIP {sb}{sc} / {cb}{cc}: empty extraction (versification mismatch)")
+            continue
+        # Guard against LXX versification artifacts (e.g. the 3 Kingdoms 12:24a-z plus):
+        # a real parallel block does not differ 4x in length.
+        if max(la, lb) / min(la, lb) > 4.0:
+            print(f"  SKIP {sb}{sc} / {cb}{cc}: length ratio {max(la, lb) / min(la, lb):.1f}x "
+                  "(likely LXX plus / versification artifact)")
             continue
         pid = f"lxx_{sb}{sc}_{cb}{cc}"
         pairs.append({

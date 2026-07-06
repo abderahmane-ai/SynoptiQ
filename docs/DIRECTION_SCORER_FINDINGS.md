@@ -1,12 +1,65 @@
 # Direction Scorer (Phase 3): Findings
 
 A rigorous, validation-gated investigation of whether copying **direction** between
-parallel Koine passages can be detected. Short version: **at the granularity of short
-parallel passages, there is no direction signal that is simultaneously
-author-independent, length-independent, and transferable across corpora.** Every signal
-that looks strong turns out to be a confound (length or Markan style) or a synthetic-
-generator artifact. This is a boundary result about the problem, established by
-experiment rather than assumed.
+parallel Koine passages can be detected.
+
+**Two-line summary.** *Global* passage scores (similarity, NLL/compression, a
+synthetic-trained head) are all confounded with length or Markan style — that boundary
+result stands (below). But reframing direction as the stemmatology **rooting problem** and
+scoring at the **variant** level with the textual-criticism canons finally works: the
+**Redactional Polarization Model (RPM)** reaches **0.78 directed accuracy on the synoptics
+(0.97 on its confident quartile via abstention)** using a single length-free canon
+(connective smoothing), and it correctly *rejects* the length confound. See "Breakthrough"
+below; the negative results that forced this design follow it.
+
+## Breakthrough: the Redactional Polarization Model (RPM)
+
+Online research reframed the task precisely: this is the stemmatology **rooting problem**
+(assign direction to an otherwise-clear tree), solved classically by **variant
+polarization** — deciding which of two readings is primitive via the 250-year-old canons
+(*lectio difficilior*, *lectio brevior*, anti-harmonization). Global scores failed because
+they never polarized individual variants. RPM aligns a pair, extracts typed **variants**,
+scores each with signed, *local*, confound-controlled canon features (positive => X is the
+source), and **aggregates** them into a per-pair score with **abstention**.
+
+Gated hypothesis tests (all with block-grouped bootstrap CIs; `scripts/analyze_polarization.py`,
+`scripts/train_polarization.py`):
+
+- **H1 — which canons polarize?** *lectio brevior* is a **pure length proxy** (0.00 on
+  copy-shorter, 1.00 on copy-longer — caught red-handed) and is dropped. *lectio difficilior*
+  (harder-reading, frequency markedness) is at **chance**. **Connective smoothing** (καί→δέ
+  is a directional edit) is the survivor: consistent on both external polarities and
+  **0.80 on the synoptics**.
+- **H2/H3 — aggregation + abstention.** Using only the length-free connective canon,
+  scaled so magnitude can't sneak length back in:
+
+  | eval set | directed acc | @50% cov | @25% cov |
+  |---|---|---|---|
+  | **synoptic** (Mark→Matt/Luke) | **0.78 [0.71, 0.85]** | 0.93 | **0.97** |
+  | Jude→2 Peter (n=6) | 1.00 | 1.00 | 1.00 |
+  | LXX Chronicles (in-domain) | 0.57 | — | 0.64 |
+
+  Dropping the length feature *kept* the synoptic result (0.76→0.78), proving it is
+  connective smoothing, not length. Abstention works: the confident 25% of pericopes are
+  97% correctly directed.
+
+**What it is and isn't.** RPM is the first component to beat chance on **real** synoptic
+direction with an **interpretable, length-controlled, abstention-calibrated** signal, and
+it directly supports Markan priority on its confident pericopes. Honest limits: connective
+smoothing is a **gospel-genre** phenomenon (weak in LXX historical narrative), so
+cross-corpus transfer is partial; and while the signal is directional *per edit* (not a
+global καί count) and shows up on non-synoptic Jude→2 Peter, its synoptic strength partly
+coincides with Mark's καί-heavy style. Next: fold in editorial fatigue as a second canon
+(R4) and pool per-pericope log-odds into a posterior over the four rooted stemmata
+(R5 → Farrer vs Q).
+
+---
+
+## The negative results that forced this design
+
+Short version: at the granularity of *whole-passage global scores*, there is no direction
+signal that is simultaneously author-independent, length-independent, and transferable.
+Every such signal is a confound (length or Markan style) or a synthetic-generator artifact.
 
 ## The question and the built-in trap
 
@@ -131,6 +184,8 @@ python scripts/build_external_pairs.py               # Jude -> 2 Peter (copy lon
 python scripts/build_lxx_pairs.py --swete-dir <path> # LXX Chronicles (30 blocks, mixed polarity)
 python scripts/eval_external_direction.py --pairs <known_direction.json>
 python scripts/analyze_fatigue.py                    # entity-level fatigue both-polarity test
+python scripts/analyze_polarization.py               # RPM H1: which canons polarize (both polarities)
+python scripts/train_polarization.py                 # RPM H2/H3: aggregation + abstention + transfer
 ```
 Reports land in `outputs/direction/`. Bootstrap CIs are pericope/block-grouped
 (`synoptiq/evaluation/bootstrap.py`).
