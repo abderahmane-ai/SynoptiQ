@@ -229,7 +229,7 @@ prior ("shorter = copy").
 
 ## Update: editorial-fatigue prototype (the first positive lead)
 
-A follow-up prototype (`synoptiq/evaluation/fatigue.py`, `scripts/analyze_fatigue.py`)
+A follow-up prototype (`synoptiq/evaluation/fatigue.py`, `scripts/legacy/analyze_fatigue.py`)
 tests *entity/reference-level* directional features instead of global scores — the key
 being that they are **position-normalized within a pair**, so global length and style
 are constants and cannot confound them. The features are signed and antisymmetric under
@@ -262,15 +262,15 @@ combined and calibrated on enough real data, are the plausible path to a confide
 ## Reproduce
 
 ```bash
-python scripts/diagnose_direction.py                 # 10-feature scorer is chance
-python scripts/analyze_direction_signal.py           # NLL variants + length control (add --no-dapt)
-python scripts/build_redaction_corpus.py             # synthetic same-author corpus
-python scripts/extract_direction_features.py         # cache NLL features (T5 passes)
-python scripts/train_direction_component.py          # train + full ladder + verdict
+python scripts/legacy/diagnose_direction.py                 # 10-feature scorer is chance
+python scripts/legacy/analyze_direction_signal.py           # NLL variants + length control (add --no-dapt)
+python scripts/legacy/build_redaction_corpus.py             # synthetic same-author corpus
+python scripts/legacy/extract_direction_features.py         # cache NLL features (T5 passes)
+python scripts/legacy/train_direction_component.py          # train + full ladder + verdict
 python scripts/build_external_pairs.py               # Jude -> 2 Peter (copy longer)
 python scripts/build_lxx_pairs.py --swete-dir <path> # LXX Chronicles (30 blocks, mixed polarity)
-python scripts/eval_external_direction.py --pairs <known_direction.json>
-python scripts/analyze_fatigue.py                    # entity-level fatigue both-polarity test
+python scripts/legacy/eval_external_direction.py --pairs <known_direction.json>
+python scripts/legacy/analyze_fatigue.py                    # entity-level fatigue both-polarity test
 python scripts/analyze_polarization.py               # RPM H1: which canons polarize (both polarities)
 python scripts/train_polarization.py                 # RPM H2/H3/H4: aggregation + abstention + fatigue
 python scripts/root_stemmata.py                      # RPM H5: pooled rooting -> stemma posterior + Farrer/Q

@@ -17,19 +17,19 @@ from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import StandardScaler
 import torch
 
-_ROOT = Path(__file__).parent.parent
+_ROOT = Path(__file__).parent.parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from transformers import AutoTokenizer  # type: ignore[import-untyped]  # noqa: E402
 
 from synoptiq.data.corpus import Corpus  # noqa: E402
-from synoptiq.models.direction import (  # noqa: E402
+from synoptiq.legacy.direction import (  # noqa: E402
     DirectionScorer,
     DirectionScorerConfig,
 )
 from synoptiq.models.koineformer import KoineFormer  # noqa: E402
-from synoptiq.training.direction import DirectionDataset  # noqa: E402
+from synoptiq.legacy.direction_training import DirectionDataset  # noqa: E402
 from synoptiq.utils.logging_ import get_logger  # noqa: E402
 
 _LOG = get_logger(__name__)

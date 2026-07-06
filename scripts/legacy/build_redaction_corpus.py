@@ -24,11 +24,11 @@ import sys
 
 import numpy as np
 
-_ROOT = Path(__file__).parent.parent
+_ROOT = Path(__file__).parent.parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from synoptiq.data.redaction import (  # noqa: E402
+from synoptiq.legacy.redaction import (  # noqa: E402
     RedactionConfig,
     RedactionGenerator,
     log_length_ratio,

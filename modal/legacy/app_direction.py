@@ -115,8 +115,8 @@ def start_training(
     from transformers import AutoTokenizer
 
     from synoptiq.data.corpus import Corpus
-    from synoptiq.models.direction import DirectionScorer, DirectionScorerConfig
-    from synoptiq.training.direction import (
+    from synoptiq.legacy.direction import DirectionScorer, DirectionScorerConfig
+    from synoptiq.legacy.direction_training import (
         DirectionDataset,
         DirectionTrainer,
         DirectionTrainingConfig,
@@ -225,8 +225,8 @@ def smoke_test() -> None:
     from transformers import AutoTokenizer
 
     from synoptiq.data.corpus import Corpus
-    from synoptiq.models.direction import DirectionScorer, DirectionScorerConfig
-    from synoptiq.training.direction import (
+    from synoptiq.legacy.direction import DirectionScorer, DirectionScorerConfig
+    from synoptiq.legacy.direction_training import (
         DirectionDataset,
         DirectionTrainer,
         DirectionTrainingConfig,

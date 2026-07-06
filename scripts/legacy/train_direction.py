@@ -21,7 +21,7 @@ import sys
 
 import torch
 
-_ROOT = Path(__file__).parent.parent
+_ROOT = Path(__file__).parent.parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
@@ -29,8 +29,8 @@ from transformers import AutoTokenizer  # type: ignore[import-untyped]  # noqa: 
 
 from scripts._cli_utils import detect_device  # noqa: E402
 from synoptiq.data.corpus import Corpus  # noqa: E402
-from synoptiq.models.direction import DirectionScorer, DirectionScorerConfig  # noqa: E402
-from synoptiq.training.direction import (  # noqa: E402
+from synoptiq.legacy.direction import DirectionScorer, DirectionScorerConfig  # noqa: E402
+from synoptiq.legacy.direction_training import (  # noqa: E402
     DirectionDataset,
     DirectionTrainer,
     DirectionTrainingConfig,

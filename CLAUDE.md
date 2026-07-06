@@ -8,8 +8,9 @@ to determine the literary relationships among Matthew, Mark, and Luke.
 
 This project has a knowledge graph at `graphify-out/` (git-ignored — generated
 locally, never committed). It covers `synoptiq/`, `scripts/`, and `modal/`:
-664 nodes, 1246 edges, 39 communities. God nodes: `Corpus`, `KoineFormer`,
-`DirectionScorer`, `DirectionDataset`, `TokenRecord`.
+1326 nodes, 2439 edges, 77 communities. God nodes: `Corpus`, `KoineFormer`,
+`TokenRecord` (live) and `DirectionDataset`, `DirectionScorer` (now under
+`synoptiq/legacy/`; the live direction path is RPM: `PolarizationScorer`, `rooting`).
 
 When the user types `/graphify`, invoke the `graphify` skill before anything else.
 
@@ -117,17 +118,17 @@ python -m pytest tests/ -q
 SynoptiQ/
 ├── synoptiq/               # Python package (pip install -e .)
 │   ├── data/               # Corpus loading, parsing, alignment, splits, augmentation
-│   ├── models/             # KoineFormer, DirectionScorer, MultiTaskEncoder
+│   ├── models/             # KoineFormer, MultiTaskEncoder, RPM PolarizationScorer
 │   │   ├── koineformer.py  # GreTa + LoRA wrapper, save/load adapters, generate
-│   │   ├── direction.py    # Phase 3: 10-feature swap-equivariant DirectionScorer
+│   │   ├── polarization.py # Phase 3 RPM: swap-antisymmetric variant-polarization aggregator
 │   │   └── encoder.py      # Multi-task encoder: POS, biaffine parser, pericope heads
-│   ├── training/           # DAPT, multi-task, direction training loops
+│   ├── training/           # DAPT, multi-task training loops
 │   │   ├── _config.py      # Frozen dataclasses: ModelConfig, TrainingConfig, et al.
 │   │   ├── dapt.py         # DAPT data loader (70/30 replay) + training loop
-│   │   ├── direction.py    # Phase 3: DirectionDataset, DirectionTrainer
 │   │   └── multitask.py    # Multi-task LoRA fine-tuning (POS dataset + trainer)
-│   ├── evaluation/         # Linear probe POS/lemma, direction metrics
+│   ├── evaluation/         # Linear probe POS/lemma; RPM variants.py + fatigue.py
 │   ├── bayesian/           # Phase 3 R5: rooting.py (stemma posterior from RPM votes); PyMC (Phase 6)
+│   ├── legacy/             # ARCHIVED Phase-3 dead-ends (global scores/NLL/redaction) — see __init__
 │   ├── interpretability/   # SHAP, Hawkins comparison, BERTViz
 │   └── utils/              # Greek text, tokenization, types, constants, logging
 ├── scripts/                # CLI entry points
@@ -135,17 +136,19 @@ SynoptiQ/
 │   ├── export_hf_dataset.py # Package SynoptiQ Corpus as HuggingFace dataset
 │   ├── train_dapt.py       # Phase 2A: KoineFormer DAPT (--smoke-test for quick check)
 │   ├── train_multitask.py  # Phase 2B: Multi-task LoRA fine-tuning
-│   ├── train_direction.py  # Phase 3: Direction scorer (--smoke-test, full GPU training)
+│   ├── analyze_polarization.py # Phase 3 RPM H1: which canons polarize (both polarities)
+│   ├── train_polarization.py   # Phase 3 RPM H2/H3/H4: aggregation + abstention + fatigue
+│   ├── root_stemmata.py    # Phase 3 RPM H5: pooled rooting → stemma posterior + Farrer/Q
 │   ├── eval_baseline.py    # Zero-shot vs DAPT evaluation (--zero-shot, --dapt-checkpoint)
 │   ├── run_ablation.py     # LoRA vs full fine-tune ablation
-│   └── diagnose_direction.py # Phase 3: 5 CPU experiments diagnosing the direction plateau
+│   └── legacy/             # ARCHIVED Phase-3 dead-end scripts (diagnose/train_direction/redaction…)
 ├── paper/                  # Paper A: KoineFormer (XeLaTeX)
 │   ├── main.tex            # Main manuscript (Poppins + TeX Gyre Pagella, Mediterranean)
 │   ├── project_overview.tex # SynoptiQ project brief for Yale/Oxford/Harvard audience
 │   └── references.bib      # BibTeX references (6 entries)
 ├── modal/                  # Modal GPU deployment
 │   ├── app_dapt.py         # Phase 2A: DAPT training, ablation, full-FT eval
-│   └── app_direction.py    # Phase 3: Direction scorer training (T4 GPU)
+│   └── legacy/app_direction.py # ARCHIVED Phase 3: dead-end direction-scorer training (T4)
 ├── datasets/               # HuggingFace dataset export (gitignored except README)
 │   └── synoptiq-corpus/    # Pushed to ainouche-abderahmane/synoptiq-corpus
 ├── tests/                  # 133 tests (mirrors synoptiq/ structure)
@@ -183,26 +186,25 @@ SynoptiQ/
 - `synoptiq/data/augmentation.py` — Bootstrap resampling, sliding windows, scribal noise injection
 - `synoptiq/training/_config.py` — Five frozen dataclasses: `ModelConfig` already has `direction_num_classes`, `asymmetry_num_features`, `direction_signed_features`, `direction_independence_features`
 - `synoptiq/models/koineformer.py` — **KoineFormer**: GreTa + LoRA wrapper, factory, save/load, generate
-- `synoptiq/models/direction.py` — **DirectionScorer** (10 asymmetry features, dead-end baseline) + **MDLDirectionHead** (swap-equivariant head over NLL codelength features, the Phase-3 component)
-- `synoptiq/evaluation/nll_direction.py` — MDL direction scoring: four NLL codelengths, length-fair MDL score, codelength→feature vector, `CachedPairScorer`
+- `synoptiq/evaluation/variants.py` — **RPM core primitive**: typed variant extraction from an alignment + signed canon features (harder_reading, local_brevior, connective_smooth)
+- `synoptiq/models/polarization.py` — **RPM aggregator**: swap-antisymmetric `PolarizationScorer` (sum variant votes → per-pair score) with abstention
+- `synoptiq/data/frequency.py` — **RPM markedness table** (Koine lemma rarity for lectio difficilior), built from SBLGNT + external pairs
+- `synoptiq/bayesian/rooting.py` — **RPM rooting (R5)**: Beta-Bernoulli marginal likelihood per pairwise relationship → posterior over the 4 stemmata + Farrer/Q Bayes factor
+- `synoptiq/evaluation/fatigue.py` — editorial-fatigue signed features (`intro_lateness` etc.); used by RPM H4 (a genre-limited canon, chance on synoptics)
 - `synoptiq/evaluation/bootstrap.py` — pericope-grouped + paired cluster bootstrap (use for ALL direction comparisons)
-- `synoptiq/data/redaction.py` — synthetic same-author, length-decorrelated redaction generator (the Phase-3 training corpus)
 - `synoptiq/data/external_pairs.py` — loader for known-direction pairs (Jude→2Pet, LXX Chronicles); no Corpus needed
 - `docs/DIRECTION_SCORER_FINDINGS.md` — **the Phase-3 conclusion**: full evidence + reproduction commands
 - `synoptiq/training/dapt.py` — **DAPT**: data loader + training loop with AMP, SIGTERM handler, crash-safe checkpointing
-- `synoptiq/training/direction.py` — **Phase 3 training**: DirectionDataset (wraps Corpus.direction_pairs), DirectionTrainer (AMP, feature calibration, checkpointing)
 - `synoptiq/evaluation/__init__.py` — Linear probe evaluation: POS + lemma accuracy
 - `scripts/train_dapt.py` — DAPT CLI: `--smoke-test` (100 steps CPU), full training (20K steps GPU)
-- `scripts/train_direction.py` — Direction scorer CLI: `--smoke-test` (100 steps CPU), full training (5K steps GPU)
+- `scripts/analyze_polarization.py` / `train_polarization.py` / `root_stemmata.py` — **RPM pipeline**: H1 (canon polarization) → H2/H3/H4 (aggregation + abstention + fatigue) → H5 (rooting)
+- `scripts/build_external_pairs.py` / `build_lxx_pairs.py` — Jude→2Pet (copy longer) and LXX Chronicles (copy shorter) known-direction sets for RPM validation
 - `scripts/eval_baseline.py` — Compare zero-shot GreTa vs DAPT KoineFormer on POS + lemma
 - `scripts/run_ablation.py` — LoRA vs full fine-tune loss curve comparison
-- `scripts/diagnose_direction.py` — 5 CPU experiments showing the 10-feature scorer is chance (asymmetry-only LR, confusion matrix, feature↔label correlation, author decodability, pooled-only)
-- `scripts/analyze_direction_signal.py` — deterministic NLL analysis: 3 score variants, length partial-correlation, `--no-dapt` ablation (this is what proved the signal is style+length)
-- `scripts/build_redaction_corpus.py` / `extract_direction_features.py` / `train_direction_component.py` — build synthetic corpus → cache NLL features → train the MDL head + full eval ladder + verdict
-- `scripts/build_external_pairs.py` / `build_lxx_pairs.py` / `eval_external_direction.py` — Jude→2Pet (copy longer) and LXX Chronicles (copy shorter) known-direction sets + their NLL evaluation
+- `synoptiq/legacy/` + `scripts/legacy/` — **ARCHIVED Phase-3 dead-ends** (10-feature `DirectionScorer`, `MDLDirectionHead`, NLL/MDL scoring, synthetic redaction generator + their trainers/scripts). Confounded by length/Markan style — kept only for Paper-B reproducibility; nothing live imports them. See `synoptiq/legacy/__init__.py`.
 - `scripts/_cli_utils.py` — Shared CLI helpers. **Canonical `detect_device()`** lives here; all training/eval scripts import it (do not re-add per-script copies).
 - `modal/app_dapt.py` — Phase 2A Modal: `upload_data`, `start_training`, `run_ablation`, `train_and_eval_full_ft`
-- `modal/app_direction.py` — Phase 3 Modal: `upload_data`, `start_training` (T4, 5K steps), `smoke_test`
+- `modal/legacy/app_direction.py` — ARCHIVED Phase 3 Modal (dead-end scorer): `upload_data`, `start_training` (T4, 5K steps), `smoke_test`
 
 ## Phase 2A results (Paper A)
 
@@ -325,18 +327,12 @@ modal run modal/app_dapt.py::run_ablation
 modal volume get synoptiq-outputs dapt/ models/koineformer/dapt/
 
 # ── Phase 3: Direction Scorer ───────────────────────────────────────
-# Upload data (once, reuses DAPT volumes):
-modal run modal/app_direction.py::upload_data
-
-# Smoke test (100 steps, T4):
-modal run modal/app_direction.py::smoke_test
-
-# Full training (5K steps, T4, ~30 min):
-modal run modal/app_direction.py::start_training
-modal app logs synoptiq-direction
-
-# Download checkpoints:
-modal volume get synoptiq-outputs direction/ outputs/direction/
+# The live RPM pipeline is CPU-only and runs locally (no Modal): see
+#   scripts/analyze_polarization.py, train_polarization.py, root_stemmata.py
+# The GPU direction-scorer training app is an ARCHIVED dead-end (kept for
+# reproducibility only):
+modal run modal/legacy/app_direction.py::smoke_test        # archived, dead-end
+modal run modal/legacy/app_direction.py::start_training    # archived, dead-end
 ```
 
 Modal volume structure:
@@ -417,17 +413,22 @@ only (~3.7M trainable, r=16 α=32, targeting W_q/W_v/W_o in attention + W_o in F
 70/30 Koine/Classical replay buffer. 20K steps, 58 min on A10G. 96.62% POS,
 81.34% lemma. 14 MB checkpoint.
 
-**Direction Scorer** (Phase 3) = **resolved as a negative result** (see
-`docs/DIRECTION_SCORER_FINDINGS.md`). Two swap-equivariant heads were built — a
-similarity-feature classifier (`DirectionScorer`) and an NLL-codelength head
-(`MDLDirectionHead`) — plus a synthetic same-author training corpus. None yields a
-transferable direction signal: the apparent signals are confounded with passage
-length and Markan style. Editorial fatigue (Phase 4) is the one unconfounded avenue
-left.
+**Direction Scorer** (Phase 3) = the **Redactional Polarization Model (RPM)** (see
+`docs/DIRECTION_SCORER_FINDINGS.md`). Direction is the stemmatology *rooting* problem:
+align a pair → extract typed variants → score each with signed textual-criticism canon
+features (connective smoothing is the survivor; positive ⇒ X is the source) → aggregate
+with abstention → pool per-pericope votes into a posterior over the four stemmata. Reaches
+0.78 synoptic directed accuracy (0.876 on evidenced pericopes) and recovers Markan priority
+unsupervised (2SH 0.64 / Farrer 0.36 / Griesbach ≈ 0 / Augustinian ≈ 0). The earlier
+*global-score* heads (10-feature `DirectionScorer`, NLL `MDLDirectionHead`, synthetic
+redaction corpus) are a documented negative result — confounded with length and Markan
+style — now archived under `synoptiq/legacy/`.
 
 **Editorial Fatigue** (Phase 4) = Position-weighted KL divergence between
 editing distribution and source distribution, with exponential decay weight.
-Detects copying author reverting to own style over the course of a pericope.
+Detects copying author reverting to own style over the course of a pericope. The
+built prototype (`synoptiq/evaluation/fatigue.py`, aggregate `intro_lateness`) is a
+genre-limited canon — chance on the synoptics (RPM H4), real but weak on LXX narrative.
 
 **Q Reconstruction** (Phase 5) = Fusion-in-Decoder: Matthew + Luke encoded
 independently → concatenated hidden states → decoder cross-attention. Trained

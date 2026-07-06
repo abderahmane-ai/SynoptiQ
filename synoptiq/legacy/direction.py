@@ -442,7 +442,7 @@ class DirectionScorer(nn.Module):
 # ── MDL codelength head ─────────────────────────────────────────────────────────
 #
 # A second swap-equivariant head over a different feature paradigm: the conditional-NLL
-# codelength features (synoptiq.evaluation.nll_direction.FEATURE_NAMES) rather than the
+# codelength features (synoptiq.legacy.nll_direction.FEATURE_NAMES) rather than the
 # similarity-matrix asymmetry features above. It is trained on the synthetic redaction
 # corpus; see docs/DIRECTION_SCORER_FINDINGS.md for why neither paradigm yields a
 # transferable direction signal on real data.

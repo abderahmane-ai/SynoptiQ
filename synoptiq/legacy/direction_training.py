@@ -20,7 +20,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from synoptiq.data.augmentation import add_scribal_noise
 from synoptiq.data.corpus import Corpus
-from synoptiq.models.direction import DirectionScorer
+from synoptiq.legacy.direction import DirectionScorer
 from synoptiq.utils.logging_ import get_logger
 from synoptiq.utils.types_ import Book
 

@@ -23,13 +23,13 @@ import numpy as np
 import torch
 from torch import nn
 
-_ROOT = Path(__file__).parent.parent
+_ROOT = Path(__file__).parent.parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from synoptiq.evaluation.bootstrap import accuracy_ci  # noqa: E402
-from synoptiq.evaluation.nll_direction import FEATURE_NAMES  # noqa: E402
-from synoptiq.models.direction import MDLDirectionHead  # noqa: E402
+from synoptiq.legacy.nll_direction import FEATURE_NAMES  # noqa: E402
+from synoptiq.legacy.direction import MDLDirectionHead  # noqa: E402
 from synoptiq.utils.logging_ import get_logger  # noqa: E402
 
 _LOG = get_logger(__name__)

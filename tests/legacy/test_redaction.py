@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 
-from synoptiq.data.redaction import (
+from synoptiq.legacy.redaction import (
     RedactionConfig,
     RedactionGenerator,
     windows,

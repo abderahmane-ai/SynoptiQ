@@ -23,7 +23,7 @@ import sys
 import numpy as np
 import torch
 
-_ROOT = Path(__file__).parent.parent
+_ROOT = Path(__file__).parent.parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
@@ -31,13 +31,13 @@ from transformers import AutoTokenizer  # noqa: E402
 
 from synoptiq.data.corpus import Corpus  # noqa: E402
 from synoptiq.data.external_pairs import load_external_pairs  # noqa: E402
-from synoptiq.evaluation.nll_direction import (  # noqa: E402
+from synoptiq.legacy.nll_direction import (  # noqa: E402
     CachedPairScorer,
     codelengths_to_features,
     make_empty_source,
 )
 from synoptiq.models.koineformer import KoineFormer  # noqa: E402
-from synoptiq.training.direction import DirectionDataset  # noqa: E402
+from synoptiq.legacy.direction_training import DirectionDataset  # noqa: E402
 from synoptiq.utils.logging_ import get_logger  # noqa: E402
 
 _LOG = get_logger(__name__)

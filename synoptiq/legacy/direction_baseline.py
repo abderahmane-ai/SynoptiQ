@@ -41,7 +41,7 @@ def _encode_passages(
         y: [N] — direction labels (0=A→B, 1=B→A, 2=independent)
         meta: list of dicts with book_a, book_b, pericope_id
     """
-    from synoptiq.training.direction import DirectionDataset
+    from synoptiq.legacy.direction_training import DirectionDataset
 
     ds = DirectionDataset(
         corpus, tokenizer,

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import torch
 import torch.nn as nn
 
-from synoptiq.models.direction import (
+from synoptiq.legacy.direction import (
     DirectionClassifier,
     DirectionScorer,
     DirectionScorerConfig,
