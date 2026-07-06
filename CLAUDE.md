@@ -29,12 +29,12 @@ Rules:
 
 ## Session handoff (read me first)
 
-**Last commit:** `feat(phase3): RPM — variant-polarization rooting beats chance on
-synoptic direction`. Tree clean; ruff F/E passes; 127 tests pass. Full story in
-`docs/DIRECTION_SCORER_FINDINGS.md` (read it first — it now LEADS with the RPM
-breakthrough, then the negatives that forced it).
+**Last commit:** `feat(phase3): R5/H5 — RPM rooting recovers Markan priority, Farrer/Q
+open`. Tree clean; ruff F/E passes; 133 tests pass. Full story in
+`docs/DIRECTION_SCORER_FINDINGS.md` (read it first — it LEADS with the RPM breakthrough +
+H4/H5, then the negatives that forced it).
 
-**Phase 3 — BREAKTHROUGH after a long negative arc. Read `docs/DIRECTION_SCORER_FINDINGS.md`.**
+**Phase 3 — COMPLETE. The full RPM arc (R0–R5 / H1–H5) landed. Read `docs/DIRECTION_SCORER_FINDINGS.md`.**
 
 Negatives (settled, do NOT re-try): all *global passage scores* — similarity features
 (chance), NLL/MDL compression (Markan style + length; sign flips with length polarity),
@@ -50,41 +50,40 @@ reading is primitive) via the textual-criticism canons — NOT by global scores.
   across polarity → dropped); *lectio difficilior* = chance; **connective smoothing**
   (καί→δέ, directional per edit) is the survivor.
 - **H2/H3** (`scripts/train_polarization.py`): connective-only, scaled, length-free →
-  **synoptic directed acc 0.78 [0.71,0.85], 0.97 on the confident 25% (abstention)**;
-  Jude→2 Peter 1.0 (n=6); LXX weak 0.57 (connective is a gospel-genre phenomenon).
-  Dropping the length feature KEPT the synoptic result → genuine, not length.
+  **synoptic directed acc 0.78 [0.71,0.85], 0.876 on evidenced pericopes, 0.97 @25% cov**;
+  Jude→2 Peter 1.0 (n=6); LXX weak 0.57. Dropping length KEPT the result → genuine.
+- **H4** (`scripts/train_polarization.py`, do NOT re-try aggregate fatigue on synoptics):
+  folding fatigue (`intro_lateness`) in COLLAPSES synoptic 0.78→0.41 — it is chance on the
+  synoptics (fatigue_only 0.44) but stronger on LXX, so an LXX-fit blend over-weights it.
+  H4b: where connective is silent, fatigue is still chance → zero complementary coverage.
+  Fatigue is genre-limited, complementary not additive. RPM stays connective-only+abstention.
+- **H5** (`scripts/root_stemmata.py`, `synoptiq/bayesian/rooting.py`): pool per-pericope
+  canon votes → Beta-Bernoulli marginal likelihood per pair → posterior over the 4 stemmata.
+  Mark voted source 75% (Mt-Mk) / 91% (Mk-Lk) → **Markan priority recovered unsupervised**;
+  **posterior 2SH 0.64 / Farrer 0.36 / Griesbach ≈0 / Augustinian ≈0**. Farrer-vs-Q left
+  OPEN: double-tradition Mt-Lk is near chance (7/12), BF Farrer:2SH=0.56 (weak, →Q); the
+  triple-tradition Mt-Lk BF≈165 is CONFOUNDED (both used Mark) and is NOT Farrer evidence.
 
 RPM is the first component to beat chance on real synoptic direction — interpretable
-(weights = canons), length-controlled, abstention-calibrated. Caveat: synoptic strength
-partly coincides with Mark's καί-heavy style (but it is per-edit directional and appears
-on non-synoptic Jude). Key modules: `synoptiq/evaluation/variants.py`,
-`synoptiq/models/polarization.py`, `synoptiq/data/frequency.py`.
+(weights = canons), length-controlled, abstention-calibrated, and it roots the tree to
+Markan priority with zero synoptic supervision (non-circular for Phase 6). Caveat: the
+Markan-priority verdict partly coincides with Mark's καί-heavy style (but per-edit
+directional, validated on non-synoptic Jude; the Griesbach/Augustinian *exclusion* is robust
+since it needs Mark to smooth away its own καί, which the canon never sees). Key modules:
+`synoptiq/evaluation/variants.py`, `synoptiq/models/polarization.py`,
+`synoptiq/data/frequency.py`, `synoptiq/bayesian/rooting.py`.
 
-**R4 DONE — H4 is a validated NEGATIVE for the synoptics (do NOT re-try aggregate fatigue
-there).** Folding the length-robust fatigue feature (`intro_lateness`) into RPM as a second
-canon COLLAPSES the synoptic result (0.78 → 0.41): `intro_lateness` is the stronger in-sample
-canon on LXX narrative (0.57→0.63) but is at **chance on the synoptics** (fatigue_only 0.44,
-CI includes 0.5), so an LXX-fit linear blend over-weights it and suppresses connective. The
-decisive H4b check: where connective is SILENT (n=32) fatigue is still chance (0.44) → **no
-complementary coverage**. Fatigue is a real but **genre-limited** canon (weak signal on LXX
-abbreviation + Jude), complementary in genre to connective, not additive on the gospels.
-Making it work on the synoptics would need a sharp per-pericope dangling-reference operator,
-not the aggregate proxy. **Refinement discovered:** on the 121 synoptic pericopes where the
-connective canon actually fires, directed accuracy is **0.876** (the 0.78 headline is dragged
-down by 32 evidence-free pericopes it guesses on — the abstention curve already handles this:
-0.93@50%, 0.97@25%). RPM posture on synoptics = connective-only + abstention. Full table in
-`docs/DIRECTION_SCORER_FINDINGS.md` (H4/H4b section). Driver: `scripts/train_polarization.py`
-(now compares canon / canon+fatigue / fatigue_only + H4b silent-coverage split).
-
-**NEXT — R5 (the payoff, approved plan `~/.claude/plans/buzzing-squishing-fairy.md`):**
-pool per-pericope RPM log-odds into a posterior over the four rooted stemmata
-(2SH/Farrer/Griesbach/Augustinian) via `synoptiq/bayesian/`; put the **Farrer-vs-Q**
-question to a quantitative test (H5). Keep Phase 6 non-circular: RPM is unsupervised on the
-synoptics (trained on external LXX).
+**NEXT (open leads, not yet planned):** Farrer-vs-Q needs more Q-material data or a sharper
+canon (the connective edit is too sparse on the 17 double-tradition pericopes). A per-pericope
+dangling-reference fatigue operator (vs the dead aggregate) is the other route to a second
+canon. Phase 6 can consume the RPM rooting posterior directly — it is unsupervised on the
+synoptics, so feeding it into the Bayesian model comparison is non-circular.
 
 Do-not-repeat rules: global passage scores are dead; `local_brevior` is a confirmed length
-proxy (excluded by design); always test on BOTH length polarities and use
-pericope-grouped bootstrap CIs (`synoptiq/evaluation/bootstrap.py`).
+proxy (excluded by design); aggregate `intro_lateness` fatigue is chance on the synoptics
+(H4 — do NOT re-add it as a synoptic canon); always test on BOTH length polarities and use
+pericope-grouped bootstrap CIs (`synoptiq/evaluation/bootstrap.py`). The plan file
+`~/.claude/plans/buzzing-squishing-fairy.md` (R0–R5) is now fully executed.
 
 ## Cold start (fresh clone / new machine)
 
@@ -105,7 +104,7 @@ modal volume get synoptiq-outputs dapt/ models/koineformer/dapt/
 #    Option B (HuggingFace, no Modal):
 python -c "from huggingface_hub import snapshot_download; snapshot_download('ainouche-abderahmane/koineformer', local_dir='models/koineformer/dapt/final')"
 
-# 4. Verify everything is wired up (all 87 must pass)
+# 4. Verify everything is wired up (all 133 must pass)
 python -m pytest tests/ -q
 
 # 5. Rebuild the knowledge graph (git-ignored) — invoke the `graphify` skill,
@@ -128,7 +127,7 @@ SynoptiQ/
 │   │   ├── direction.py    # Phase 3: DirectionDataset, DirectionTrainer
 │   │   └── multitask.py    # Multi-task LoRA fine-tuning (POS dataset + trainer)
 │   ├── evaluation/         # Linear probe POS/lemma, direction metrics
-│   ├── bayesian/           # PyMC models, bridge sampling, prior sensitivity
+│   ├── bayesian/           # Phase 3 R5: rooting.py (stemma posterior from RPM votes); PyMC (Phase 6)
 │   ├── interpretability/   # SHAP, Hawkins comparison, BERTViz
 │   └── utils/              # Greek text, tokenization, types, constants, logging
 ├── scripts/                # CLI entry points
@@ -149,7 +148,7 @@ SynoptiQ/
 │   └── app_direction.py    # Phase 3: Direction scorer training (T4 GPU)
 ├── datasets/               # HuggingFace dataset export (gitignored except README)
 │   └── synoptiq-corpus/    # Pushed to ainouche-abderahmane/synoptiq-corpus
-├── tests/                  # 87 tests (mirrors synoptiq/ structure)
+├── tests/                  # 133 tests (mirrors synoptiq/ structure)
 ├── data/                   # Git-ignored: raw corpora, processed Parquet files
 ├── models/                 # Git-ignored: downloaded HF models, trained adapters
 ├── outputs/                # Git-ignored: logs, eval results, checkpoints
@@ -166,7 +165,7 @@ SynoptiQ/
 | Phase 1 | ✓ Data Pipeline | SynoptiQ Corpus: 49,061 tokens, 170 pericopes, 235 alignments, 87 tests |
 | Phase 2A | ✓ DAPT | KoineFormer trained: 96.62% POS, 81.34% lemma, 14 MB |
 | Phase 2B | ○ Multi-task | Code ready, not yet trained |
-| Phase 3 | ◐ Direction Scorer | **RPM breakthrough** — variant-polarization (connective-smoothing canon) beats chance on synoptic direction: 0.78, 0.97 @25% coverage, length-controlled + interpretable. Global scores are dead. R4/R5 next. See `docs/DIRECTION_SCORER_FINDINGS.md` |
+| Phase 3 | ✓ Direction Scorer | **RPM complete (R0–R5)** — variant-polarization (connective canon) beats chance on synoptic direction (0.78, 0.876 on evidenced pericopes, 0.97 @25% cov), length-controlled + interpretable; pooled rooting **recovers Markan priority unsupervised** (2SH 0.64 / Farrer 0.36 / Griesbach ≈0 / Augustinian ≈0), Farrer-vs-Q left open. Fatigue does not add a 2nd canon (H4). Global scores dead. See `docs/DIRECTION_SCORER_FINDINGS.md` |
 | Phase 4 | ○ Editorial Drift | Not started |
 | Phase 5 | ○ Q Reconstruction | Not started |
 | Phase 6 | ○ Bayesian | Not started |
@@ -394,7 +393,7 @@ Uses Overleaf if local TeX is unavailable.
 # 1. Lint — must show zero F or E level errors
 python3 -m ruff check synoptiq/ tests/ scripts/ --fix
 
-# 2. Full test suite — all 87 must pass
+# 2. Full test suite — all 133 must pass
 python3 -m pytest tests/ -q --tb=short
 
 # 3. Clean all caches
@@ -456,7 +455,7 @@ Paper A is complete (paper/main.tex). Paper B architecture implemented (Phase 3 
 - Python 3.12+, PyTorch 2.6+, HuggingFace transformers 4.51+, PEFT
 - Modal (GPU cloud: A10G for DAPT, T4 for direction scorer)
 - BioPython (token alignment), PyMC + ArviZ (Bayesian), SHAP + BERTViz
-- ruff (linting), pytest (87 tests), XeLaTeX (paper)
+- ruff (linting), pytest (133 tests), XeLaTeX (paper)
 - Data: SBLGNT (CC-BY), MorphGNT (CC-BY-SA), Apostolic Fathers, First1KGreek (CC-BY-SA)
 - GitHub: [abderahmane-ai/SynoptiQ](https://github.com/abderahmane-ai/SynoptiQ)
 - HF model: [ainouche-abderahmane/koineformer](https://huggingface.co/ainouche-abderahmane/koineformer)

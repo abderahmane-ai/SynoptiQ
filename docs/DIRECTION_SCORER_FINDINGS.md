@@ -3,13 +3,17 @@
 A rigorous, validation-gated investigation of whether copying **direction** between
 parallel Koine passages can be detected.
 
-**Two-line summary.** *Global* passage scores (similarity, NLL/compression, a
+**Three-line summary.** *Global* passage scores (similarity, NLL/compression, a
 synthetic-trained head) are all confounded with length or Markan style — that boundary
-result stands (below). But reframing direction as the stemmatology **rooting problem** and
-scoring at the **variant** level with the textual-criticism canons finally works: the
-**Redactional Polarization Model (RPM)** reaches **0.78 directed accuracy on the synoptics
-(0.97 on its confident quartile via abstention)** using a single length-free canon
-(connective smoothing), and it correctly *rejects* the length confound. See "Breakthrough"
+result stands (below). Reframing direction as the stemmatology **rooting problem** and scoring
+at the **variant** level with the textual-criticism canons finally works: the **Redactional
+Polarization Model (RPM)** reaches **0.78 directed accuracy on the synoptics (0.876 on the
+pericopes where it has evidence; 0.97 on its confident quartile via abstention)** using a
+single length-free canon (connective smoothing), and correctly *rejects* the length confound.
+Pooled over the corpus it **recovers Markan priority with zero synoptic supervision** (posterior
+2SH 0.64 / Farrer 0.36 / Griesbach ≈ 0 / Augustinian ≈ 0); the Farrer-vs-Q question is left
+open (the Q material carries too few connective edits to settle it). Adding editorial fatigue
+as a second canon does **not** help on the synoptics (H4, genre-limited). See "Breakthrough"
 below; the negative results that forced this design follow it.
 
 ## Breakthrough: the Redactional Polarization Model (RPM)
@@ -87,8 +91,54 @@ pericopes it is forced to guess on; on the **121 pericopes where it actually has
 variant, directed accuracy is 0.876**. The existing abstention curve already realizes this
 (silent pericopes score 0 and are dropped first → 0.93@50%, 0.97@25%). The right RPM posture
 is therefore connective-only + abstention on the synoptics; making fatigue useful *there*
-would need a sharp per-pericope dangling-reference operator, not the aggregate. Next: R5 pools
-per-pericope log-odds into a posterior over the four rooted stemmata (→ Farrer vs Q).
+would need a sharp per-pericope dangling-reference operator, not the aggregate.
+
+### H5 (R5): rooting the tree — Markan priority recovered; Farrer vs Q left open.
+
+The four hypotheses are four *rootings* of the one Matthew–Mark–Luke relationship. Pooling the
+unsupervised connective-canon vote over every synoptic pericope into a Beta-Bernoulli marginal
+likelihood per pairwise relationship (`synoptiq/bayesian/rooting.py`, `scripts/root_stemmata.py`)
+gives a posterior over the four stemmata. The 2SH "independent" prediction on Matthew–Luke is
+modelled explicitly as θ=0.5 (no consistent direction), so it competes on equal footing.
+
+Per-relationship votes (k = pericopes voting the *first* book is the source, of n non-silent):
+
+| relationship | k / n | source vote | reads as |
+|---|---|---|---|
+| Matthew–Mark (triple) | 15 / 59 | Mark 75% | **Markan priority** |
+| Mark–Luke (triple) | 52 / 57 | Mark 91% | **Markan priority (decisive)** |
+| Matthew–Luke (triple) | 36 / 48 | Matthew 75% | *confounded* (both used Mark here) |
+| Matthew–Luke (double / Q) | 7 / 12 | Matthew 58% | **near chance — no consistent direction** |
+
+Stemma posterior (Mt–Mk & Mk–Lk triple + Mt–Lk double, uniform prior):
+
+| hypothesis | posterior |
+|---|---|
+| **2SH** | **0.64** |
+| **Farrer** | **0.36** |
+| Griesbach | ~0.00 |
+| Augustinian | ~0.00 |
+
+**Two clean conclusions.** (1) **Markan priority is recovered by an unsupervised canon.**
+Griesbach and Augustinian are annihilated because both require Mark to be a *copy* (Mt→Mk),
+yet the canon sees Mark as the *source* on both Markan relationships (75% and 91%). This is the
+field-consensus result, reproduced with zero synoptic supervision. (2) **Farrer vs Q is left
+open, leaning weakly to Q.** 2SH and Farrer agree on Markan priority and differ *only* on
+Matthew–Luke; on the double tradition (the Q material) the canon finds **no consistent Mt→Lk
+direction** (7/12 ≈ chance), which is what independence/Q predicts → **Bayes factor
+Farrer:2SH = 0.56** (anecdotal, favouring Q). The striking triple-tradition Mt–Lk signal
+(BF≈165) is **not** valid Farrer evidence: there both evangelists used Mark, so a Mt-source
+connective polarity is expected under *every* hypothesis and says nothing about direct Mt→Lk
+dependence. Using the double tradition is essential, and there the signal is simply too sparse
+(only 12 pericopes carry a connective edit) to settle the question.
+
+**Honest caveats.** The Markan-priority verdict partly coincides with Mark's καί-heavy style:
+the canon judges the καί-richer text as primitive, and Mark is καί-richer. It is nonetheless
+*per-edit* directional (καί→δέ substitutions, not a global count) and validated on non-synoptic
+Jude→2 Peter; and crucially the *exclusion* of Griesbach/Augustinian is robust because those
+require Mark to have smoothed away its own καί, an edit the canon does not see anywhere. The
+Farrer/Q result is underpowered and should be read as "the connective canon alone cannot settle
+it — more Q-material data or a sharper canon is needed," not as a refutation of Farrer.
 
 ---
 
@@ -222,7 +272,8 @@ python scripts/build_lxx_pairs.py --swete-dir <path> # LXX Chronicles (30 blocks
 python scripts/eval_external_direction.py --pairs <known_direction.json>
 python scripts/analyze_fatigue.py                    # entity-level fatigue both-polarity test
 python scripts/analyze_polarization.py               # RPM H1: which canons polarize (both polarities)
-python scripts/train_polarization.py                 # RPM H2/H3: aggregation + abstention + transfer
+python scripts/train_polarization.py                 # RPM H2/H3/H4: aggregation + abstention + fatigue
+python scripts/root_stemmata.py                      # RPM H5: pooled rooting -> stemma posterior + Farrer/Q
 ```
 Reports land in `outputs/direction/`. Bootstrap CIs are pericope/block-grouped
 (`synoptiq/evaluation/bootstrap.py`).
