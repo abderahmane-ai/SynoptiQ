@@ -35,6 +35,23 @@ _PARALLELS = [
     (("1Ki", 10, 1, 13), ("2Ch", 9, 1, 12), "the queen of Sheba"),
     (("1Ki", 22, 1, 9), ("2Ch", 18, 1, 8), "Micaiah and Ahab"),
     (("2Ki", 18, 13, 19), ("2Ch", 32, 1, 8), "Sennacherib threatens Hezekiah"),
+    # Additional well-established Chronicles-synopsis blocks (all Samuel-Kings source).
+    (("2Sa", 5, 11, 25), ("1Ch", 14, 1, 16), "Hiram, David's house, Philistine wars"),
+    (("2Sa", 23, 8, 39), ("1Ch", 11, 10, 47), "David's mighty men"),
+    (("2Sa", 6, 12, 19), ("1Ch", 15, 25, 29), "the ark brought up with rejoicing"),
+    (("1Ki", 5, 1, 12), ("2Ch", 2, 1, 16), "preparations for the temple"),
+    (("1Ki", 7, 23, 51), ("2Ch", 4, 1, 22), "the temple furnishings"),
+    (("1Ki", 8, 12, 21), ("2Ch", 6, 1, 11), "Solomon's address to the assembly"),
+    (("1Ki", 8, 54, 66), ("2Ch", 7, 1, 10), "fire from heaven, dedication feast"),
+    (("1Ki", 9, 1, 9), ("2Ch", 7, 11, 22), "the Lord's second appearance to Solomon"),
+    (("1Ki", 12, 1, 19), ("2Ch", 10, 1, 19), "Rehoboam and the northern revolt"),
+    (("1Ki", 14, 21, 31), ("2Ch", 12, 1, 16), "Rehoboam's reign and Shishak"),
+    (("1Ki", 15, 1, 8), ("2Ch", 13, 1, 22), "Abijah of Judah"),
+    (("1Ki", 22, 41, 50), ("2Ch", 20, 31, 37), "Jehoshaphat's reign"),
+    (("2Ki", 12, 1, 16), ("2Ch", 24, 1, 14), "Joash repairs the temple"),
+    (("2Ki", 14, 1, 14), ("2Ch", 25, 1, 24), "Amaziah of Judah"),
+    (("2Ki", 22, 1, 13), ("2Ch", 34, 1, 21), "Josiah and the book of the law"),
+    (("2Ki", 23, 21, 30), ("2Ch", 35, 1, 27), "Josiah's passover and death"),
 ]
 
 

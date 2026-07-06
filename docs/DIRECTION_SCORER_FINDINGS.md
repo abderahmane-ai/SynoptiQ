@@ -87,6 +87,38 @@ prior ("shorter = copy").
   aligned data and careful semantic modelling, and can only be validated where direction
   is already known.
 
+## Update: editorial-fatigue prototype (the first positive lead)
+
+A follow-up prototype (`synoptiq/evaluation/fatigue.py`, `scripts/analyze_fatigue.py`)
+tests *entity/reference-level* directional features instead of global scores — the key
+being that they are **position-normalized within a pair**, so global length and style
+are constants and cannot confound them. The features are signed and antisymmetric under
+an A↔B swap; each is scored against the both-length-polarity criterion.
+
+Result on real known-direction data (directed accuracy, block-grouped bootstrap CI):
+
+| feature | Jude→2Pet (copy longer) | LXX Chronicles (mixed polarity, 30 pairs) | synoptic |
+|---|---|---|---|
+| `coverage_asym` | 0.50 | **0.50** (collapsed from 0.79 once length was decorrelated) | 0.57 |
+| `intro_lateness_asym` | 0.67 [0.33,1.0] | **0.67 [0.50,0.82]** (did NOT collapse) | 0.45 |
+
+Two things matter here. First, the harness *works*: `coverage_asym` was length in
+disguise and died the moment the LXX set was made length-balanced — exactly the failure
+mode that fooled every earlier global score. Second, `intro_lateness_asym` (shared
+entities are introduced *later* in the copy — an abbreviator drops early introductions)
+is the **first feature in the whole investigation that survives length-decorrelation and
+points the same way on both external sets** (~0.67). It is real but weak and underpowered
+(CIs touch chance), and it is at chance on the synoptics — where the crude aggregate proxy
+misses Goodacre's *sparse, specific* inconsistencies.
+
+**The lead, concretely:** direction detection needs (a) reference/edit-level features, not
+global scores — confirmed, they don't length-collapse; (b) far more real known-direction
+data with rich shared content (the LXX Chronicles synopsis is ~80 sections vs the 30 used;
+Josephus paraphrases the LXX at length; patristic NT quotation; classical epitomes); and
+(c) a sharper per-pericope fatigue operator that flags specific dangling-reference events
+and *abstains* elsewhere, rather than averaging. Several weak-but-real entity-level signals,
+combined and calibrated on enough real data, are the plausible path to a confident detector.
+
 ## Reproduce
 
 ```bash
@@ -96,8 +128,9 @@ python scripts/build_redaction_corpus.py             # synthetic same-author cor
 python scripts/extract_direction_features.py         # cache NLL features (T5 passes)
 python scripts/train_direction_component.py          # train + full ladder + verdict
 python scripts/build_external_pairs.py               # Jude -> 2 Peter (copy longer)
-python scripts/build_lxx_pairs.py --swete-dir <path> # LXX Chronicles (copy shorter)
+python scripts/build_lxx_pairs.py --swete-dir <path> # LXX Chronicles (30 blocks, mixed polarity)
 python scripts/eval_external_direction.py --pairs <known_direction.json>
+python scripts/analyze_fatigue.py                    # entity-level fatigue both-polarity test
 ```
 Reports land in `outputs/direction/`. Bootstrap CIs are pericope/block-grouped
 (`synoptiq/evaluation/bootstrap.py`).
