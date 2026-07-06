@@ -362,6 +362,43 @@ def experiment_5_pooled_only(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+def _centroid_initialize(
+    scorer: DirectionScorer,
+    corpus: Corpus,
+    tokenizer: object,
+    device: str,
+) -> None:
+    """Fit the constrained classifier from train-split centroids (no gradient step).
+
+    Extracts the deterministic asymmetry features for the train split, sets the
+    feature-standardisation buffers, and initialises the two constrained heads via
+    the shared-covariance centroid rule. This reproduces the model's decision rule
+    closely enough for the diagnostics without requiring a trained checkpoint.
+    """
+    ds = DirectionDataset(
+        corpus, tokenizer, split="train", max_length=512,
+        min_aligned_tokens=5, use_scribal_noise=False,
+    )
+    feats: list[torch.Tensor] = []
+    labels: list[torch.Tensor] = []
+    scorer.eval()
+    with torch.no_grad():
+        for i in range(len(ds)):
+            s = ds[i]
+            out = scorer(
+                input_ids_a=s["input_ids_a"].unsqueeze(0).to(device),
+                attention_mask_a=s["attention_mask_a"].unsqueeze(0).to(device),
+                input_ids_b=s["input_ids_b"].unsqueeze(0).to(device),
+                attention_mask_b=s["attention_mask_b"].unsqueeze(0).to(device),
+            )
+            feats.append(out["asymmetry_features"][0].cpu())
+            labels.append(s["direction_label"])
+    features = torch.stack(feats).to(device)
+    label_tensor = torch.stack(labels).to(device)
+    scorer.classifier.set_feature_stats(features.mean(dim=0), features.std(dim=0))
+    scorer.classifier.initialize_from_centroids(features, label_tensor)
+
+
 def main() -> None:
     """Load the trained scorer and run the five direction-scorer diagnostics."""
     parser = _build_parser()
@@ -391,15 +428,37 @@ def main() -> None:
 
     encoder = koine.model.base_model.encoder
     scorer = DirectionScorer(encoder, DirectionScorerConfig())
+    scorer.to(device)
 
-    # Load trained checkpoint
+    # Load a trained checkpoint if one is compatible with the current classifier.
+    # Older checkpoints predate the swap-equivariant two-head classifier (they used
+    # a per-sample LayerNorm + single linear layer) and their keys will not match.
+    # In that case fall back to a centroid-initialised classifier so exps 2 & 5 still
+    # reflect the current architecture's decision rule. Exps 1, 3, 4 read only the
+    # deterministic asymmetry features and are unaffected either way.
     ckpt_path = args.checkpoint
     if not ckpt_path or not Path(ckpt_path).exists():
         ckpt_path = Path("outputs/direction/best/model.pt")
+
+    loaded = False
     if ckpt_path.exists():
-        print(f"Loading checkpoint: {ckpt_path}")
-        scorer.load_state_dict(torch.load(ckpt_path, map_location=device, weights_only=True))
-        scorer.to(device)
+        try:
+            state = torch.load(ckpt_path, map_location=device, weights_only=True)
+            scorer.load_state_dict(state)
+            loaded = True
+            print(f"Loaded trained checkpoint: {ckpt_path}")
+        except RuntimeError as exc:
+            print(
+                f"WARNING: checkpoint {ckpt_path} is incompatible with the current "
+                f"classifier ({type(exc).__name__}); falling back to centroid init.",
+            )
+    if not loaded:
+        print(
+            "Centroid-initializing classifier from train-split features "
+            "(no compatible checkpoint found).",
+        )
+        _centroid_initialize(scorer, corpus, tokenizer, device)
+    scorer.to(device)
 
     # Run all experiments
     results = {}

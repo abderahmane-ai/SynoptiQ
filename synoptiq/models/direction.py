@@ -134,17 +134,23 @@ def _compute_asymmetry_features(
         entropy_asym = _mean_row_entropy(S) - _mean_row_entropy(S.T)
 
         # ── Feature 7: Diagonal alignment strength ────────────────────────
-        # For each A-token, the index of its best B-match.
         # If copying preserves word order, best matches cluster near the diagonal.
-        row_argmax = S.argmax(dim=1).float()        # [len_a]
-        expected_pos = (
-            torch.arange(len_a, device=device).float()
-            / len_a * len_b
+        # This must be SWAP-INVARIANT: the classifier places it in the symmetric
+        # feature group, so it has to have the same value under A↔B. A row-only
+        # computation (each A-token's best B-match) uses S; swapping inputs uses
+        # S.T and yields a different number, silently breaking the model's
+        # end-to-end swap equivariance. We therefore average the row-based and
+        # column-based closeness, which is invariant by construction.
+        def _diagonal_closeness(mat: torch.Tensor) -> torch.Tensor:
+            """Mean closeness of each row's best-match index to the diagonal."""
+            n_rows, n_cols = mat.shape
+            row_argmax = mat.argmax(dim=1).float()
+            expected_pos = torch.arange(n_rows, device=device).float() / n_rows * n_cols
+            return (1.0 - (row_argmax - expected_pos).abs() / (n_cols + eps)).mean()
+
+        diagonal_closeness = 0.5 * (
+            _diagonal_closeness(S) + _diagonal_closeness(S.T)
         )
-        # Closeness ∈ [0, 1]; 1.0 = perfectly diagonal
-        diagonal_closeness = (
-            1.0 - (row_argmax - expected_pos).abs() / (len_b + eps)
-        ).mean()
 
         # ── Feature 8: Log length ratio ───────────────────────────────────
         # Copies are often shorter (compression) or longer (expansion).

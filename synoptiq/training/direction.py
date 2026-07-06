@@ -108,8 +108,8 @@ class DirectionDataset(Dataset):
 
     def _build_samples(self, split: str) -> None:
         """Build samples from direction_pairs, applying augmentation."""
-        for book_a, tokens_a, book_b, tokens_b, alignment in self.corpus.direction_pairs(
-            split=split,
+        for pericope_id, book_a, tokens_a, book_b, tokens_b, alignment in (
+            self.corpus.iter_direction_pairs(split=split)
         ):
             # Filter to aligned token pairs (both non-None)
             aligned = [(i, j) for i, j in alignment if i is not None and j is not None]
@@ -129,9 +129,11 @@ class DirectionDataset(Dataset):
                     "book_a": book_a,
                     "book_b": book_b,
                     "direction": direction,
+                    "pericope_id": pericope_id,
                 })
 
-        # Augment: swap A↔B for inverse labels
+        # Augment: swap A↔B for inverse labels. The swapped copy keeps the source
+        # pericope_id so both halves group together in pericope-level evaluation.
         swapped = []
         for s in self.samples:
             if s["direction"] == "A_to_B":
@@ -146,6 +148,7 @@ class DirectionDataset(Dataset):
                 "book_a": s["book_b"],
                 "book_b": s["book_a"],
                 "direction": new_dir,
+                "pericope_id": s["pericope_id"],
             })
         self.samples.extend(swapped)
 

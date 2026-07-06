@@ -357,6 +357,40 @@ class Corpus:
                 alignment=pericope_alignments,
             )
 
+    def iter_direction_pairs(
+        self,
+        *,
+        tradition: Tradition | None = None,
+        split: str | None = None,
+    ) -> Iterator[
+        tuple[
+            str, Book, list[TokenRecord], Book, list[TokenRecord],
+            list[tuple[int | None, int | None]],
+        ]
+    ]:
+        """Like :meth:`direction_pairs` but also yields the source ``pericope_id``.
+
+        The pericope_id is needed to group samples for pericope-level evaluation
+        (e.g. bootstrap CIs), where multiple book pairs and their swap-augmented
+        copies all originate from a single pericope and are therefore not
+        statistically independent.
+
+        Yields:
+            Tuples of (pericope_id, book_a, tokens_a, book_b, tokens_b, alignment_pairs).
+        """
+        for pericope in self.iter_pericopes(tradition=tradition, split=split):
+            pericope_id = pericope["pericope_id"]
+            books = pericope["books"]
+            for book_a, book_b in combinations(books, 2):
+                tokens_a = pericope["tokens"].get(book_a, [])
+                tokens_b = pericope["tokens"].get(book_b, [])
+                alignment_pairs = pericope["alignment"].get(
+                    (book_a, book_b),
+                    pericope["alignment"].get((book_b, book_a), []),
+                )
+                if tokens_a and tokens_b:
+                    yield pericope_id, book_a, tokens_a, book_b, tokens_b, alignment_pairs
+
     def direction_pairs(
         self,
         *,
@@ -377,17 +411,10 @@ class Corpus:
         Yields:
             Tuples of (book_a, tokens_a, book_b, tokens_b, alignment_pairs).
         """
-        for pericope in self.iter_pericopes(tradition=tradition, split=split):
-            books = pericope["books"]
-            for book_a, book_b in combinations(books, 2):
-                tokens_a = pericope["tokens"].get(book_a, [])
-                tokens_b = pericope["tokens"].get(book_b, [])
-                alignment_pairs = pericope["alignment"].get(
-                    (book_a, book_b),
-                    pericope["alignment"].get((book_b, book_a), []),
-                )
-                if tokens_a and tokens_b:
-                    yield book_a, tokens_a, book_b, tokens_b, alignment_pairs
+        for _pid, book_a, tokens_a, book_b, tokens_b, alignment_pairs in (
+            self.iter_direction_pairs(tradition=tradition, split=split)
+        ):
+            yield book_a, tokens_a, book_b, tokens_b, alignment_pairs
 
     def get_tokens(
         self,
