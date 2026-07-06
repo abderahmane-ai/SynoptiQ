@@ -60,14 +60,27 @@ partly coincides with Mark's καί-heavy style (but it is per-edit directional 
 on non-synoptic Jude). Key modules: `synoptiq/evaluation/variants.py`,
 `synoptiq/models/polarization.py`, `synoptiq/data/frequency.py`.
 
-**NEXT (approved plan, gate-by-gate — plan file
-`~/.claude/plans/buzzing-squishing-fairy.md`):**
-- **R4** — fold **editorial fatigue** (`synoptiq/evaluation/fatigue.py`, already built as a
-  weak-but-length-robust lead) in as a SECOND canon feature; test incremental value (H4).
-- **R5** — pool per-pericope RPM log-odds into a posterior over the four rooted stemmata
-  (2SH/Farrer/Griesbach/Augustinian) via `synoptiq/bayesian/`; put the **Farrer-vs-Q**
-  question (does Luke show fatigue on double-tradition material?) to a quantitative test (H5).
-Keep Phase 6 non-circular: RPM is unsupervised on the synoptics (trained on external LXX).
+**R4 DONE — H4 is a validated NEGATIVE for the synoptics (do NOT re-try aggregate fatigue
+there).** Folding the length-robust fatigue feature (`intro_lateness`) into RPM as a second
+canon COLLAPSES the synoptic result (0.78 → 0.41): `intro_lateness` is the stronger in-sample
+canon on LXX narrative (0.57→0.63) but is at **chance on the synoptics** (fatigue_only 0.44,
+CI includes 0.5), so an LXX-fit linear blend over-weights it and suppresses connective. The
+decisive H4b check: where connective is SILENT (n=32) fatigue is still chance (0.44) → **no
+complementary coverage**. Fatigue is a real but **genre-limited** canon (weak signal on LXX
+abbreviation + Jude), complementary in genre to connective, not additive on the gospels.
+Making it work on the synoptics would need a sharp per-pericope dangling-reference operator,
+not the aggregate proxy. **Refinement discovered:** on the 121 synoptic pericopes where the
+connective canon actually fires, directed accuracy is **0.876** (the 0.78 headline is dragged
+down by 32 evidence-free pericopes it guesses on — the abstention curve already handles this:
+0.93@50%, 0.97@25%). RPM posture on synoptics = connective-only + abstention. Full table in
+`docs/DIRECTION_SCORER_FINDINGS.md` (H4/H4b section). Driver: `scripts/train_polarization.py`
+(now compares canon / canon+fatigue / fatigue_only + H4b silent-coverage split).
+
+**NEXT — R5 (the payoff, approved plan `~/.claude/plans/buzzing-squishing-fairy.md`):**
+pool per-pericope RPM log-odds into a posterior over the four rooted stemmata
+(2SH/Farrer/Griesbach/Augustinian) via `synoptiq/bayesian/`; put the **Farrer-vs-Q**
+question to a quantitative test (H5). Keep Phase 6 non-circular: RPM is unsupervised on the
+synoptics (trained on external LXX).
 
 Do-not-repeat rules: global passage scores are dead; `local_brevior` is a confirmed length
 proxy (excluded by design); always test on BOTH length polarities and use

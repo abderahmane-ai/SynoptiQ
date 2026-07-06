@@ -49,9 +49,46 @@ it directly supports Markan priority on its confident pericopes. Honest limits: 
 smoothing is a **gospel-genre** phenomenon (weak in LXX historical narrative), so
 cross-corpus transfer is partial; and while the signal is directional *per edit* (not a
 global καί count) and shows up on non-synoptic Jude→2 Peter, its synoptic strength partly
-coincides with Mark's καί-heavy style. Next: fold in editorial fatigue as a second canon
-(R4) and pool per-pericope log-odds into a posterior over the four rooted stemmata
-(R5 → Farrer vs Q).
+coincides with Mark's καί-heavy style.
+
+### H4 (R4): does editorial fatigue add a second canon? — No, on the synoptics.
+
+Folding the one length-robust fatigue feature (`intro_lateness`, shared entities introduced
+later in the copy) into the RPM as a second feature was tested three ways
+(`scripts/train_polarization.py`, models `canon` / `canon+fatigue` / `fatigue_only`):
+
+| model | synoptic dir. acc | @25% cov | LXX in-sample | learned weights |
+|---|---|---|---|---|
+| canon (connective) | **0.78 [0.71,0.85]** | **0.97** | 0.57 | connective=0.078 |
+| canon+fatigue | 0.41 [0.33,0.49] | 0.37 | 0.63 | fatigue=0.45, connective=−0.007 |
+| fatigue_only | 0.44 [0.36,0.53] | 0.40 | 0.63 | fatigue=0.45 |
+
+The naive blend *collapses* the synoptic result. The mechanism is diagnostic, not noise:
+`intro_lateness` is the **stronger in-sample canon on LXX narrative** (0.57→0.63) but is at
+**chance on the synoptics** (`fatigue_only` 0.44, CI includes 0.5). A linear blend fit on the
+LXX training corpus therefore over-weights fatigue and suppresses the connective weight, then
+carries that LXX weighting to a genre where fatigue is noise.
+
+**The decisive fairness check (H4b).** A second canon can only help where the first is
+*silent*. Partitioning the 153 synoptic pairs by whether any connective variant fires:
+
+- connective **fires** (n=121): connective directed acc **0.876**; fatigue there 0.45 (chance).
+- connective **silent** (n=32): fatigue 0.44 (chance) — **no complementary coverage**.
+
+So fatigue adds nothing on the synoptics under *any* combination scheme, because it is at
+chance both where the connective canon fires and where it is silent. This matches the earlier
+prototype note: the crude aggregate proxy misses Goodacre's *sparse, specific* dangling
+references. Fatigue is a real-but-**genre-limited** canon (it carries weak signal on LXX
+abbreviation and on Jude), *complementary in genre* to connective smoothing rather than
+additive on the gospels.
+
+**Corollary (a real refinement).** RPM's headline 0.78 is dragged down by the 32 evidence-free
+pericopes it is forced to guess on; on the **121 pericopes where it actually has a connective
+variant, directed accuracy is 0.876**. The existing abstention curve already realizes this
+(silent pericopes score 0 and are dropped first → 0.93@50%, 0.97@25%). The right RPM posture
+is therefore connective-only + abstention on the synoptics; making fatigue useful *there*
+would need a sharp per-pericope dangling-reference operator, not the aggregate. Next: R5 pools
+per-pericope log-odds into a posterior over the four rooted stemmata (→ Farrer vs Q).
 
 ---
 
