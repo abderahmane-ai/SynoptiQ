@@ -140,6 +140,29 @@ require Mark to have smoothed away its own καί, an edit the canon does not se
 Farrer/Q result is underpowered and should be read as "the connective canon alone cannot settle
 it — more Q-material data or a sharper canon is needed," not as a refutation of Farrer.
 
+### The style-confound control (does Markan priority survive matching καί-density?)
+
+The one confound that could sink the headline: RPM might vote "Mark is source" simply because
+Mark uses καί more *globally*, not because of any per-edit smoothing. The control
+(`scripts/control_style_confound.py`) stratifies the triple-tradition Mark–X pericopes into
+tertiles by |Δκαί-density| (the global καί-rate gap between the two texts) and measures directed
+accuracy with pericope-grouped bootstrap CIs. If the signal were pure style, the *matched* (low
+|Δκαί|) stratum would collapse to chance.
+
+| stratum | Markan-priority acc | 95% CI | n |
+|---|---|---|---|
+| overall | 0.876 | [0.82, 0.93] | 121 |
+| **T1 — matched καί-density** | **0.784** | **[0.64, 0.90]** | 37 |
+| T2 — middle | 0.95 | [0.87, 1.00] | 40 |
+| T3 — divergent style | 0.886 | [0.78, 0.98] | 44 |
+
+The matched stratum stays at **0.78, CI clearing chance** — the signal does *not* vanish when the
+global καί-rate is equalised. The per-edit vote ratio (Mark-source : other-source) is 5.6 : 1
+across all edits and still **3.5 : 1 on the matched half**. Conclusion: the Markan-priority signal
+is genuine per-edit direction (Mark's rough καί smoothed to δέ/τότε at aligned positions), not an
+artefact of Mark's global style. The style caveat is thereby *controlled*, not merely
+acknowledged.
+
 ---
 
 ## The negative results that forced this design
@@ -274,6 +297,7 @@ python scripts/legacy/analyze_fatigue.py                    # entity-level fatig
 python scripts/analyze_polarization.py               # RPM H1: which canons polarize (both polarities)
 python scripts/train_polarization.py                 # RPM H2/H3/H4: aggregation + abstention + fatigue
 python scripts/root_stemmata.py                      # RPM H5: pooled rooting -> stemma posterior + Farrer/Q
+python scripts/control_style_confound.py             # R6: Markan priority survives matching καί-density
 ```
 Reports land in `outputs/direction/`. Bootstrap CIs are pericope/block-grouped
 (`synoptiq/evaluation/bootstrap.py`).

@@ -30,10 +30,15 @@ Rules:
 
 ## Session handoff (read me first)
 
-**Last commit:** `feat(phase3): R5/H5 — RPM rooting recovers Markan priority, Farrer/Q
-open`. Tree clean; ruff F/E passes; 133 tests pass. Full story in
+**Last commit:** `feat(phase3): R6 — Markan-priority signal survives καί-style control`.
+Tree clean; ruff F/E passes; 133 tests pass. Full story in
 `docs/DIRECTION_SCORER_FINDINGS.md` (read it first — it LEADS with the RPM breakthrough +
-H4/H5, then the negatives that forced it).
+H4/H5 + the R6 style-confound control, then the negatives that forced it).
+
+**Next up: DRAFT PAPER B** (Phase 3+4 — RPM direction scorer + the fatigue negative). The
+science is complete and hardened (RPM recovers Markan priority, rules out Griesbach/
+Augustinian, Farrer/Q honestly open, style confound controlled). Reuse `paper/` XeLaTeX
+setup (fonts/palette in the "Paper compilation" section). Task #20.
 
 **Phase 3 — COMPLETE. The full RPM arc (R0–R5 / H1–H5) landed. Read `docs/DIRECTION_SCORER_FINDINGS.md`.**
 
@@ -67,11 +72,15 @@ reading is primitive) via the textual-criticism canons — NOT by global scores.
 
 RPM is the first component to beat chance on real synoptic direction — interpretable
 (weights = canons), length-controlled, abstention-calibrated, and it roots the tree to
-Markan priority with zero synoptic supervision (non-circular for Phase 6). Caveat: the
-Markan-priority verdict partly coincides with Mark's καί-heavy style (but per-edit
-directional, validated on non-synoptic Jude; the Griesbach/Augustinian *exclusion* is robust
-since it needs Mark to smooth away its own καί, which the canon never sees). Key modules:
-`synoptiq/evaluation/variants.py`, `synoptiq/models/polarization.py`,
+Markan priority with zero synoptic supervision (non-circular for Phase 6).
+- **R6 style-confound control PASSED** (`scripts/control_style_confound.py`): the
+  Markan-priority signal survives matching global καί-density. Stratifying Mark-X pericopes
+  by |Δκαί-density|, the *matched* stratum still scores **0.784 [0.64, 0.90]** (would be ~0.5
+  if it were pure καί-style); per-edit vote ratio 5.6:1 overall, 3.5:1 on the matched half. So
+  the signal is genuine per-edit direction (καί→δέ/τότε at aligned positions), not global style
+  — the one reviewer-killer caveat is now controlled, not just acknowledged.
+
+Key modules: `synoptiq/evaluation/variants.py`, `synoptiq/models/polarization.py`,
 `synoptiq/data/frequency.py`, `synoptiq/bayesian/rooting.py`.
 
 **NEXT (open leads, not yet planned):** Farrer-vs-Q needs more Q-material data or a sharper
@@ -197,7 +206,7 @@ SynoptiQ/
 - `synoptiq/training/dapt.py` — **DAPT**: data loader + training loop with AMP, SIGTERM handler, crash-safe checkpointing
 - `synoptiq/evaluation/__init__.py` — Linear probe evaluation: POS + lemma accuracy
 - `scripts/train_dapt.py` — DAPT CLI: `--smoke-test` (100 steps CPU), full training (20K steps GPU)
-- `scripts/analyze_polarization.py` / `train_polarization.py` / `root_stemmata.py` — **RPM pipeline**: H1 (canon polarization) → H2/H3/H4 (aggregation + abstention + fatigue) → H5 (rooting)
+- `scripts/analyze_polarization.py` / `train_polarization.py` / `root_stemmata.py` / `control_style_confound.py` — **RPM pipeline**: H1 (canon polarization) → H2/H3/H4 (aggregation + abstention + fatigue) → H5 (rooting) → R6 (καί-style confound control)
 - `scripts/build_external_pairs.py` / `build_lxx_pairs.py` — Jude→2Pet (copy longer) and LXX Chronicles (copy shorter) known-direction sets for RPM validation
 - `scripts/eval_baseline.py` — Compare zero-shot GreTa vs DAPT KoineFormer on POS + lemma
 - `scripts/run_ablation.py` — LoRA vs full fine-tune loss curve comparison
