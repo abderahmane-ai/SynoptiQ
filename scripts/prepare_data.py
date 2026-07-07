@@ -129,16 +129,16 @@ def validate_corpus(corpus: Corpus) -> bool:  # noqa: F821
     else:
         _LOG.info("✓ double tradition pericopes found", extra={"count": len(double_pericopes)})
 
-    # Check 5: Direction pairs can be iterated
-    n_pairs = sum(1 for _ in corpus.direction_pairs(tradition="triple"))
+    # Check 5: Parallel book pairs can be iterated
+    n_pairs = sum(1 for _ in corpus.parallel_pairs(tradition="triple"))
     if n_pairs < 50:
         _LOG.error(
-            "too few direction pairs",
+            "too few parallel pairs",
             extra={"n_pairs": n_pairs, "minimum": 50},
         )
         passed = False
     else:
-        _LOG.info("✓ direction pairs OK", extra={"n_pairs": n_pairs})
+        _LOG.info("✓ parallel pairs OK", extra={"n_pairs": n_pairs})
 
     # Check 6: Alignment quality spot-check (random 10 pericopes)
     import random

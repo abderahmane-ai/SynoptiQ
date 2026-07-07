@@ -13,8 +13,8 @@ Tradition classification rules:
   - Combinations like (Matthew+Mark only) are uncommon and labeled by books.
 
 The tradition classification is foundational to the research:
-  - Triple tradition → ground-truth labels for direction detection
-  - Double tradition → Q detection / Bayesian model inputs
+  - Triple tradition → Matthew/Mark/Luke parallels (Q-reconstruction supervision)
+  - Double tradition → Matthew/Luke parallels (proto-Q material)
   - Unique material → authorship/editorial style baselines
 """
 

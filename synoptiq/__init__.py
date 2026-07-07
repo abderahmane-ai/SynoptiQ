@@ -4,17 +4,13 @@ SynoptiQ — A Multi-Task Neural Source Criticism Framework for the Synoptic Pro
 This package provides tools for:
 - Corpus loading and alignment of the Synoptic Gospels
 - Domain-adaptive language model pre-training on Koine Greek (KoineFormer)
-- Causal direction detection in parallel passages (Direction Scorer)
-- Editorial tendency modeling with fatigue detection (Editorial Drift)
 - Proto-Q reconstruction via Fusion-in-Decoder (QReconstructor)
-- Bayesian model comparison of four Synoptic source hypotheses
 - Model interpretability via SHAP and Hawkins 1899 comparison
 
 Public API (stable across phases):
     Corpus          — The central data access object
     Book            — Type alias for gospel names
     Tradition       — Type alias for tradition types
-    Direction       — Type alias for copying direction
     TokenRecord     — TypedDict for a single annotated token
     PericopeAlignment — TypedDict for aligned parallel passages
 """
@@ -30,11 +26,7 @@ from synoptiq.data.corpus import Corpus
 from synoptiq.utils.types_ import (
     Book,
     ConlluToken,
-    Direction,
-    DirectionScores,
-    EditorialFatigueScores,
     Genre,
-    HypothesisSpec,
     MorphRecord,
     PericopeAlignment,
     SplitResult,
@@ -53,14 +45,10 @@ __all__ = [
     # Types
     "Book",
     "Tradition",
-    "Direction",
     "Genre",
     "TokenRecord",
     "MorphRecord",
     "ConlluToken",
     "PericopeAlignment",
-    "DirectionScores",
-    "EditorialFatigueScores",
-    "HypothesisSpec",
     "SplitResult",
 ]

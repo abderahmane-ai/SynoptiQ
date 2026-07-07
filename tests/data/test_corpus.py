@@ -50,15 +50,15 @@ class TestIterPericopes:
             assert len(p["tokens"]["Luke"]) > 0
 
 
-class TestDirectionPairs:
-    """Direction pair generation."""
+class TestParallelPairs:
+    """Parallel book-pair generation."""
 
     def test_triple_has_pairs(self, tiny_corpus: Any) -> None:
-        pairs = list(tiny_corpus.direction_pairs(tradition="triple"))
+        pairs = list(tiny_corpus.parallel_pairs(tradition="triple"))
         assert len(pairs) > 0
 
     def test_pairs_have_alignment(self, tiny_corpus: Any) -> None:
-        for book_a, tokens_a, book_b, tokens_b, alignment in tiny_corpus.direction_pairs(
+        for book_a, tokens_a, book_b, tokens_b, alignment in tiny_corpus.parallel_pairs(
             tradition="triple"
         ):
             assert isinstance(book_a, str)

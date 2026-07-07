@@ -88,12 +88,6 @@ class ModelConfig:
     lora_dropout: float = 0.05
     lora_target_modules: tuple[str, ...] = ("q", "k", "v", "o")
 
-    # Direction scorer head: 10 fixed features + swap-equivariant classifier
-    direction_num_classes: int = 3  # A→B, B→A, independent
-    asymmetry_num_features: int = 10
-    direction_signed_features: int = 6
-    direction_independence_features: int = 10
-
     # Q reconstruction (FiD)
     fid_num_beams: int = 5
     fid_temperature: float = 1.0
@@ -184,29 +178,3 @@ class DAPTConfig:
     # Go/no-go benchmark: MLM perplexity ratio ≤ this threshold
     # (KoineFormer perplexity / from-scratch baseline perplexity)
     target_mlm_perplexity_ratio: float = 1.05
-
-
-@dataclass(frozen=True)
-class BayesianConfig:
-    """Bayesian model comparison configuration (Phase 6)."""
-
-    # MCMC (PyMC NUTS sampler)
-    num_chains: int = 4
-    num_warmup: int = 500
-    num_samples: int = 2000
-    target_accept: float = 0.90
-    random_seed: int = 42
-
-    # Bridge sampling via rpy2 → R bridgesampling
-    bridge_n_iterations: int = 50_000
-
-    # Prior sensitivity grid: Gamma(alpha, beta) priors on Beta distribution params
-    prior_alpha_range: tuple[float, float, int] = (1.0, 5.0, 5)  # start, stop, n_steps
-    prior_beta_range: tuple[float, float, int] = (1.0, 5.0, 5)
-
-    # Convergence diagnostics thresholds
-    r_hat_threshold: float = 1.01  # R-hat < 1.01 required for all parameters
-    min_ess: int = 400  # Minimum effective sample size
-
-    # MC Dropout for uncertainty estimation (Phase 6 input generation)
-    mc_dropout_passes: int = 20  # Number of stochastic forward passes per pericope

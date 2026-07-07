@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from synoptiq.utils.constants import (
     ALAND_PERICOPES,
-    GOODACRE_FATIGUE_PERICOPES,
     PERICOPE_GENRES,
     parse_morph_tag,
 )
@@ -121,25 +120,6 @@ class TestAlandPericopes:
         assert entry["Matthew"] == ((6, 9), (6, 13))
         assert entry["Luke"] == ((11, 1), (11, 4))
         assert entry["Mark"] is None
-
-
-class TestGoodacreFatiguePericopes:
-    """Validate Goodacre fatigue test-case pericope IDs are correct."""
-
-    def test_cleansing_leper_id(self) -> None:
-        pericope_id = GOODACRE_FATIGUE_PERICOPES["cleansing_leper"]["pericope_id"]
-        assert pericope_id == "020"
-        assert "020" in ALAND_PERICOPES
-
-    def test_feeding_5000_id(self) -> None:
-        pericope_id = GOODACRE_FATIGUE_PERICOPES["feeding_5000"]["pericope_id"]
-        assert pericope_id == "058"
-        assert "058" in ALAND_PERICOPES
-
-    def test_parable_pounds_talents_id(self) -> None:
-        pericope_id = GOODACRE_FATIGUE_PERICOPES["parable_pounds_talents"]["pericope_id"]
-        assert pericope_id == "147"
-        assert "147" in ALAND_PERICOPES
 
 
 class TestMorphTagParser:

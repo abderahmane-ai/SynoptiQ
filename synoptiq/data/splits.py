@@ -11,8 +11,8 @@ Splits pericopes into train/val/test sets with these invariants:
 Stratification key: (tradition, genre) — e.g., ("triple", "narrative").
 We use sklearn's StratifiedGroupKFold for this purpose.
 
-Pericope-atomic splitting is critical because the direction scorer's
-test set must contain pericopes the model has NEVER seen ANY version of.
+Pericope-atomic splitting is critical because a model's
+test set must contain pericopes it has NEVER seen ANY version of.
 If Matt 14:13-21 (Feeding of 5K) is in training, then the "Mark 6:30-44"
 version of the same pericope cannot be in the test set — they are the same
 parallel passage, so the model has effectively seen the test example.

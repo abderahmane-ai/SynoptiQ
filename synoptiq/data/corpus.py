@@ -4,7 +4,7 @@
 It provides:
   - Lazy loading from Parquet cache (avoids re-parsing on every run)
   - Iteration over pericopes filtered by tradition, book, genre
-  - Direction pair generation (the primary input to the direction scorer)
+  - Parallel book-pair generation (e.g. Matthew+Luke pairs for Q reconstruction)
   - Token and verse-level access
 
 Usage:
@@ -23,8 +23,8 @@ Usage:
         mark_tokens = pericope["tokens"]["Mark"]
         ...
 
-    # Iterate direction pairs:
-    for book_a, tokens_a, book_b, tokens_b, alignment_pairs in corpus.direction_pairs():
+    # Iterate parallel book pairs:
+    for book_a, tokens_a, book_b, tokens_b, alignment_pairs in corpus.parallel_pairs():
         ...
 """
 
@@ -357,7 +357,7 @@ class Corpus:
                 alignment=pericope_alignments,
             )
 
-    def iter_direction_pairs(
+    def iter_parallel_pairs(
         self,
         *,
         tradition: Tradition | None = None,
@@ -368,12 +368,11 @@ class Corpus:
             list[tuple[int | None, int | None]],
         ]
     ]:
-        """Like :meth:`direction_pairs` but also yields the source ``pericope_id``.
+        """Like :meth:`parallel_pairs` but also yields the source ``pericope_id``.
 
         The pericope_id is needed to group samples for pericope-level evaluation
-        (e.g. bootstrap CIs), where multiple book pairs and their swap-augmented
-        copies all originate from a single pericope and are therefore not
-        statistically independent.
+        (e.g. bootstrap CIs), where multiple book pairs all originate from a single
+        pericope and are therefore not statistically independent.
 
         Yields:
             Tuples of (pericope_id, book_a, tokens_a, book_b, tokens_b, alignment_pairs).
@@ -391,7 +390,7 @@ class Corpus:
                 if tokens_a and tokens_b:
                     yield pericope_id, book_a, tokens_a, book_b, tokens_b, alignment_pairs
 
-    def direction_pairs(
+    def parallel_pairs(
         self,
         *,
         tradition: Tradition | None = None,
@@ -399,7 +398,7 @@ class Corpus:
     ) -> Iterator[
         tuple[Book, list[TokenRecord], Book, list[TokenRecord], list[tuple[int | None, int | None]]]
     ]:
-        """Iterate over book pairs for direction detection training.
+        """Iterate over aligned parallel book pairs (e.g. for Q reconstruction).
 
         For triple tradition, yields 3 pairs: (Matt, Mark), (Matt, Luke), (Mark, Luke).
         For double tradition, yields 1 pair: (Matthew, Luke).
@@ -412,7 +411,7 @@ class Corpus:
             Tuples of (book_a, tokens_a, book_b, tokens_b, alignment_pairs).
         """
         for _pid, book_a, tokens_a, book_b, tokens_b, alignment_pairs in (
-            self.iter_direction_pairs(tradition=tradition, split=split)
+            self.iter_parallel_pairs(tradition=tradition, split=split)
         ):
             yield book_a, tokens_a, book_b, tokens_b, alignment_pairs
 

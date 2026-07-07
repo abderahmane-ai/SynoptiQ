@@ -1,10 +1,10 @@
-"""Bootstrap confidence intervals for direction-scorer evaluation.
+"""Pericope-grouped bootstrap confidence intervals for corpus evaluation.
 
-Direction evaluation has very few independent units: a triple-tradition pericope
-produces three book pairs, and swap augmentation doubles each, so up to six
-samples share one pericope and are *not* independent. Point accuracy on ~14 test
-pericopes therefore has a very wide sampling distribution, and two models that
-differ by a few points may be indistinguishable.
+Synoptic evaluation has very few independent units: a triple-tradition pericope
+produces three book pairs, so several samples share one pericope and are *not*
+independent. Point accuracy on a few dozen pericopes therefore has a very wide
+sampling distribution, and two models that differ by a few points may be
+indistinguishable.
 
 This module provides a *cluster* (grouped) bootstrap that resamples whole
 pericopes with replacement, so the reported confidence intervals reflect the real

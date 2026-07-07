@@ -27,9 +27,9 @@ _ROOT = Path(__file__).parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from scripts._cli_utils import detect_device  # noqa: E402
 from transformers import AutoTokenizer  # type: ignore[import-untyped]  # noqa: E402
 
-from scripts._cli_utils import detect_device  # noqa: E402
 from synoptiq.models.koineformer import KoineFormer  # noqa: E402
 from synoptiq.training.dapt import DAPTConfig, DAPTTrainer  # noqa: E402
 from synoptiq.utils.logging_ import get_logger  # noqa: E402

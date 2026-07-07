@@ -15,8 +15,6 @@ Book: TypeAlias = Literal["Matthew", "Mark", "Luke", "John"]
 
 Tradition: TypeAlias = Literal["triple", "double", "mark_unique", "matthean_unique", "lukan_unique"]
 
-Direction: TypeAlias = Literal["A_to_B", "B_to_A", "independent"]
-
 Genre: TypeAlias = Literal["narrative", "discourse", "wisdom", "passion", "other"]
 
 # ── Token-level data ──────────────────────────────────────────────────────────
@@ -61,54 +59,6 @@ class PericopeAlignment(TypedDict):
     tokens: dict[Book, list[TokenRecord]]
     # (idx_in_A, idx_in_B) — None means gap
     alignment: dict[tuple[Book, Book], list[tuple[int | None, int | None]]]
-
-
-# ── Model outputs ─────────────────────────────────────────────────────────────
-
-
-class DirectionScores(TypedDict):
-    """Output of the DirectionScorer for a single pericope pair.
-
-    Emits calibrated direction probabilities plus a confidence and the regime used
-    ("triangulated" when a third witness is present, else "pair_only"). These per-pericope
-    probabilities are the observations consumed by the Phase-6 Bayesian model comparison.
-    """
-
-    pericope_id: str
-    book_a: Book
-    book_b: Book
-    prob_a_to_b: float
-    prob_b_to_a: float
-    prob_independent: float
-    predicted_direction: Direction
-    confidence: float          # 1 - prob_independent; low => the scorer abstains
-    regime: str                # "triangulated" | "pair_only"
-
-
-class EditorialFatigueScores(TypedDict):
-    """Output of the EditorialFatigue detector for a single pericope."""
-
-    pericope_id: str
-    source_book: Book
-    target_book: Book
-    has_fatigue: bool
-    fatigue_score: float  # 0–1, higher = more fatigue detected
-    estimated_fatigue_position: float  # Normalized position (0–1) where fatigue begins
-    consistency_score: float  # How consistent the editing is throughout
-
-
-# ── Hypothesis definitions ────────────────────────────────────────────────────
-
-
-class HypothesisSpec(TypedDict):
-    """Specification of a Synoptic source hypothesis."""
-
-    name: str  # e.g., "Two-Source Hypothesis"
-    abbreviation: str  # e.g., "2SH"
-    order: list[Book]  # Composition order
-    dependencies: list[tuple[Book, Book]]  # (source, target) pairs
-    has_q: bool  # Does it posit Q?
-    description: str
 
 
 # ── Data split results ────────────────────────────────────────────────────────
