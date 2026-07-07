@@ -30,7 +30,8 @@ Rules:
 
 ## Session handoff (read me first)
 
-**Direction + hypotheses code removed (2026-07-07); tree dirty (uncommitted); ruff F/E clean.**
+**Direction + hypotheses code removed (2026-07-07); committed on branch
+`cleanup/remove-direction-hypotheses` (not yet merged to `main`); ruff F/E clean; 91 tests pass.**
 The whole Phase-3 direction scorer and Phase-6 Bayesian comparison were deleted after the
 investigation closed as a negative result (`docs/DIRECTION_NEGATIVE_RESULT.md`). Removed:
 `synoptiq/direction/`, `synoptiq/bayesian/`, `synoptiq/legacy/`, `synoptiq/data/external_pairs.py`,
