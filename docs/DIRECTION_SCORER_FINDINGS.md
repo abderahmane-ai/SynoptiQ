@@ -1,20 +1,40 @@
 # Direction Scorer (Phase 3): Findings
 
 A rigorous, validation-gated investigation of whether copying **direction** between
-parallel Koine passages can be detected.
+parallel Koine passages can be detected, and the component that resulted.
 
-**Three-line summary.** *Global* passage scores (similarity, NLL/compression, a
-synthetic-trained head) are all confounded with length or Markan style — that boundary
-result stands (below). Reframing direction as the stemmatology **rooting problem** and scoring
-at the **variant** level with the textual-criticism canons finally works: the **Redactional
-Polarization Model (RPM)** reaches **0.78 directed accuracy on the synoptics (0.876 on the
-pericopes where it has evidence; 0.97 on its confident quartile via abstention)** using a
-single length-free canon (connective smoothing), and correctly *rejects* the length confound.
-Pooled over the corpus it **recovers Markan priority with zero synoptic supervision** (posterior
-2SH 0.64 / Farrer 0.36 / Griesbach ≈ 0 / Augustinian ≈ 0); the Farrer-vs-Q question is left
-open (the Q material carries too few connective edits to settle it). Adding editorial fatigue
-as a second canon does **not** help on the synoptics (H4, genre-limited). See "Breakthrough"
-below; the negative results that forced this design follow it.
+## The delivered component: a two-regime DirectionScorer (`synoptiq/direction/`)
+
+The Phase-3 objective (master plan §4.1) is a component that emits, per pericope, calibrated
+direction probabilities `[A→B, B→A, independent]` for the Phase-6 comparison. The
+`DirectionScorer` (`synoptiq/direction/scorer.py`) does this in **two regimes**, because the
+robust signal fundamentally needs a **third witness**:
+
+- **Triangulated** (a third gospel is present — all triple-tradition pairs): the dominant
+  feature is the theory-neutral **agreement-structure `centrality`** signal (the text that
+  agrees more with the third witness is the more primitive one — Abakuks/Goodacre, *not* a
+  taste judgement about readings). **G1: directed accuracy 0.79 [0.72, 0.86], 0.985 on the
+  confident half**, and it is length-decorrelated (corr with Δlength = 0.25). This beats and is
+  far more robust than the single-canon RPM.
+- **Pair-only** (a bare two-text pair — double tradition, external corpora): falls back to the
+  weak connective + fatigue features and **abstains heavily**. On external known-direction pairs
+  its confident calls are correct on **both length polarities** (Jude 1.0), and it abstains on
+  most of the LXX narrative (connective is genre-limited) — honest, not a length flip.
+
+Pooled through Phase 6 (`synoptiq/bayesian/rooting.py` ← `scripts/compare_hypotheses.py`) the
+scorer's output **recovers Markan priority with zero synoptic supervision** (posterior
+**2SH 0.64 / Farrer 0.36 / Griesbach ≈ 0 / Augustinian ≈ 0**); Farrer-vs-Q is left open.
+
+**Three-line history of how we got here.** *Global* passage scores (similarity, NLL/compression,
+a synthetic-trained head) are all confounded with length or Markan style (the boundary result,
+below). The **Redactional Polarization Model (RPM)** — one length-free canon, connective
+smoothing — was the first thing to beat chance (0.78, 0.876 on evidenced pericopes) and is
+retained as a **demoted, documented feature** of the pair-only regime. It was then superseded as
+the *primary* signal by the robust, theory-neutral **agreement structure** (Markan-hub 15:1,
+Griesbach excluded via a 0.22 singular rate, Mark-Q overlaps rediscovered), because a single
+lexical canon is close to a Markan-style detector even after the καί-density control. The RPM
+sections below are kept as the documented baseline; the negatives that forced the whole design
+follow them.
 
 ## Breakthrough: the Redactional Polarization Model (RPM)
 
@@ -26,8 +46,7 @@ they never polarized individual variants. RPM aligns a pair, extracts typed **va
 scores each with signed, *local*, confound-controlled canon features (positive => X is the
 source), and **aggregates** them into a per-pair score with **abstention**.
 
-Gated hypothesis tests (all with block-grouped bootstrap CIs; `scripts/analyze_polarization.py`,
-`scripts/train_polarization.py`):
+Gated hypothesis tests (all with block-grouped bootstrap CIs; `scripts/direction_report.py`):
 
 - **H1 — which canons polarize?** *lectio brevior* is a **pure length proxy** (0.00 on
   copy-shorter, 1.00 on copy-longer — caught red-handed) and is dropped. *lectio difficilior*
@@ -59,7 +78,7 @@ coincides with Mark's καί-heavy style.
 
 Folding the one length-robust fatigue feature (`intro_lateness`, shared entities introduced
 later in the copy) into the RPM as a second feature was tested three ways
-(`scripts/train_polarization.py`, models `canon` / `canon+fatigue` / `fatigue_only`):
+(`scripts/direction_report.py`, models `canon` / `canon+fatigue` / `fatigue_only`):
 
 | model | synoptic dir. acc | @25% cov | LXX in-sample | learned weights |
 |---|---|---|---|---|
@@ -97,7 +116,7 @@ would need a sharp per-pericope dangling-reference operator, not the aggregate.
 
 The four hypotheses are four *rootings* of the one Matthew–Mark–Luke relationship. Pooling the
 unsupervised connective-canon vote over every synoptic pericope into a Beta-Bernoulli marginal
-likelihood per pairwise relationship (`synoptiq/bayesian/rooting.py`, `scripts/root_stemmata.py`)
+likelihood per pairwise relationship (`synoptiq/bayesian/rooting.py`, `scripts/compare_hypotheses.py`)
 gives a posterior over the four stemmata. The 2SH "independent" prediction on Matthew–Luke is
 modelled explicitly as θ=0.5 (no consistent direction), so it competes on equal footing.
 
@@ -144,7 +163,7 @@ it — more Q-material data or a sharper canon is needed," not as a refutation o
 
 The one confound that could sink the headline: RPM might vote "Mark is source" simply because
 Mark uses καί more *globally*, not because of any per-edit smoothing. The control
-(`scripts/control_style_confound.py`) stratifies the triple-tradition Mark–X pericopes into
+(`scripts/direction_report.py`) stratifies the triple-tradition Mark–X pericopes into
 tertiles by |Δκαί-density| (the global καί-rate gap between the two texts) and measures directed
 accuracy with pericope-grouped bootstrap CIs. If the signal were pure style, the *matched* (low
 |Δκαί|) stratum would collapse to chance.
@@ -291,13 +310,13 @@ python scripts/legacy/build_redaction_corpus.py             # synthetic same-aut
 python scripts/legacy/extract_direction_features.py         # cache NLL features (T5 passes)
 python scripts/legacy/train_direction_component.py          # train + full ladder + verdict
 python scripts/build_external_pairs.py               # Jude -> 2 Peter (copy longer)
-python scripts/build_lxx_pairs.py --swete-dir <path> # LXX Chronicles (30 blocks, mixed polarity)
+python scripts/build_lxx_pairs.py --swete-dir <path> # LXX Chronicles (mixed polarity)
 python scripts/legacy/eval_external_direction.py --pairs <known_direction.json>
-python scripts/legacy/analyze_fatigue.py                    # entity-level fatigue both-polarity test
-python scripts/analyze_polarization.py               # RPM H1: which canons polarize (both polarities)
-python scripts/train_polarization.py                 # RPM H2/H3/H4: aggregation + abstention + fatigue
-python scripts/root_stemmata.py                      # RPM H5: pooled rooting -> stemma posterior + Farrer/Q
-python scripts/control_style_confound.py             # R6: Markan priority survives matching καί-density
+
+# ── the live DirectionScorer pipeline ────────────────────────────────
+python scripts/train_direction_scorer.py   # calibrate + G1-G3 + emit outputs/direction/scores.json
+python scripts/compare_hypotheses.py       # Phase 6: scores.json -> stemma posterior + Farrer/Q
+python scripts/direction_report.py         # agreement structure + style-confound control (findings)
 ```
 Reports land in `outputs/direction/`. Bootstrap CIs are pericope/block-grouped
 (`synoptiq/evaluation/bootstrap.py`).

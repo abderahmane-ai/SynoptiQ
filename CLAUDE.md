@@ -10,7 +10,7 @@ This project has a knowledge graph at `graphify-out/` (git-ignored — generated
 locally, never committed). It covers `synoptiq/`, `scripts/`, and `modal/`:
 1326 nodes, 2439 edges, 77 communities. God nodes: `Corpus`, `KoineFormer`,
 `TokenRecord` (live) and `DirectionDataset`, `DirectionScorer` (now under
-`synoptiq/legacy/`; the live direction path is RPM: `PolarizationScorer`, `rooting`).
+`synoptiq/legacy/`; the live direction path is `synoptiq/direction/` + `bayesian/rooting`).
 
 When the user types `/graphify`, invoke the `graphify` skill before anything else.
 
@@ -30,64 +30,51 @@ Rules:
 
 ## Session handoff (read me first)
 
-**Last commit:** `feat(phase3): R6 — Markan-priority signal survives καί-style control`.
-Tree clean; ruff F/E passes; 133 tests pass. Full story in
-`docs/DIRECTION_SCORER_FINDINGS.md` (read it first — it LEADS with the RPM breakthrough +
-H4/H5 + the R6 style-confound control, then the negatives that forced it).
+**Last commit:** `refactor(phase3): unify direction scorer into synoptiq/direction/ + wire
+Phase 6`. Tree clean; ruff F/E passes; 133 tests pass. Full story in
+`docs/DIRECTION_SCORER_FINDINGS.md` (read it first — it LEADS with the delivered two-regime
+`DirectionScorer`, then the RPM baseline, then the negatives).
 
-**Next up: DRAFT PAPER B** (Phase 3+4 — RPM direction scorer + the fatigue negative). The
-science is complete and hardened (RPM recovers Markan priority, rules out Griesbach/
-Augustinian, Farrer/Q honestly open, style confound controlled). Reuse `paper/` XeLaTeX
-setup (fonts/palette in the "Paper compilation" section). Task #20.
+**Phase 3 DELIVERED as a real component (`synoptiq/direction/`).** The objective (master plan
+§4.1) — a per-pericope direction-probability sensor feeding Phase 6 — now exists:
+- `synoptiq/direction/scorer.py` — **DirectionScorer**: per pericope, per pair, emits calibrated
+  `[A→B, B→A, independent]` + confidence + abstention (`DirectionScores` in `utils/types_.py`).
+- **Two regimes** (the robust signal needs a 3rd witness): **triangulated** (agreement-structure
+  `centrality` — theory-neutral: the text agreeing more with the third gospel is more primitive;
+  **G1 0.79 [0.72,0.86], 0.985 on the confident half, length-decorrelated corr 0.25**) and
+  **pair-only** (weak connective+fatigue, abstains heavily; both-polarity honest on external).
+- `synoptiq/direction/{alignment3,features}.py` — 3-way multiple alignment + all signed features
+  (agreement spectrum, centrality, connective [demoted RPM], fatigue). `data/frequency.py` kept.
+- **Phase 6 wired**: `bayesian/rooting.py` now CONSUMES `DirectionScores` (`relationship_counts`);
+  `scripts/compare_hypotheses.py` runs corpus→scorer→posterior end-to-end and reproduces
+  **2SH 0.64 / Farrer 0.36 / Griesbach ≈0 / Augustinian ≈0** from the robust signal.
+- **Phase 4 (fatigue) merged into Phase 3** (one feature). RPM connective kept as a documented
+  feature. Scripts: `train_direction_scorer.py` (calibrate+G1-G3+emit scores.json),
+  `compare_hypotheses.py` (Phase 6), `direction_report.py` (findings). Old RPM scripts/modules
+  folded/deleted; dead-end code stays under `synoptiq/legacy/`.
 
-**Phase 3 — COMPLETE. The full RPM arc (R0–R5 / H1–H5) landed. Read `docs/DIRECTION_SCORER_FINDINGS.md`.**
+**Next up:** update Paper B to headline the two-regime DirectionScorer (agreement structure
+primary, RPM the baseline). The `paper_b/` draft still describes RPM as primary — revise.
 
-Negatives (settled, do NOT re-try): all *global passage scores* — similarity features
-(chance), NLL/MDL compression (Markan style + length; sign flips with length polarity),
-a synthetic-trained head (99% synthetic = generator artifact, pure length prior on real
-data). Proven by two real known-direction sets of opposite length polarity: Jude→2 Peter
-(copy longer) and LXX Chronicles (copy shorter). Global scores track *which text is
-longer*, not which is the source.
+**The scientific history (settled — full detail in `docs/DIRECTION_SCORER_FINDINGS.md`):**
 
-Breakthrough — the **Redactional Polarization Model (RPM)**. Reframe: direction is the
-stemmatology **rooting problem**, solved by polarizing individual **variants** (which
-reading is primitive) via the textual-criticism canons — NOT by global scores. Gated tests:
-- **H1** (`scripts/analyze_polarization.py`): *lectio brevior* = pure length (0.0/1.0
-  across polarity → dropped); *lectio difficilior* = chance; **connective smoothing**
-  (καί→δέ, directional per edit) is the survivor.
-- **H2/H3** (`scripts/train_polarization.py`): connective-only, scaled, length-free →
-  **synoptic directed acc 0.78 [0.71,0.85], 0.876 on evidenced pericopes, 0.97 @25% cov**;
-  Jude→2 Peter 1.0 (n=6); LXX weak 0.57. Dropping length KEPT the result → genuine.
-- **H4** (`scripts/train_polarization.py`, do NOT re-try aggregate fatigue on synoptics):
-  folding fatigue (`intro_lateness`) in COLLAPSES synoptic 0.78→0.41 — it is chance on the
-  synoptics (fatigue_only 0.44) but stronger on LXX, so an LXX-fit blend over-weights it.
-  H4b: where connective is silent, fatigue is still chance → zero complementary coverage.
-  Fatigue is genre-limited, complementary not additive. RPM stays connective-only+abstention.
-- **H5** (`scripts/root_stemmata.py`, `synoptiq/bayesian/rooting.py`): pool per-pericope
-  canon votes → Beta-Bernoulli marginal likelihood per pair → posterior over the 4 stemmata.
-  Mark voted source 75% (Mt-Mk) / 91% (Mk-Lk) → **Markan priority recovered unsupervised**;
-  **posterior 2SH 0.64 / Farrer 0.36 / Griesbach ≈0 / Augustinian ≈0**. Farrer-vs-Q left
-  OPEN: double-tradition Mt-Lk is near chance (7/12), BF Farrer:2SH=0.56 (weak, →Q); the
-  triple-tradition Mt-Lk BF≈165 is CONFOUNDED (both used Mark) and is NOT Farrer evidence.
+- **Negatives (do NOT re-try):** all *global passage scores* — similarity features (chance),
+  NLL/MDL compression (Markan style + length; sign flips with length polarity), a synthetic-
+  trained head (generator artifact + length prior). Proven by two known-direction sets of
+  opposite length polarity (Jude→2 Peter copy-longer; LXX Chronicles copy-shorter): global
+  scores track *which text is longer*, not the source.
+- **RPM baseline (now the demoted connective feature):** variant polarization via the
+  connective-smoothing canon (καί→δέ) reached 0.78 synoptic / 0.876 on evidenced pericopes /
+  0.97 @25% cov, length-controlled (R6: survives matching καί-density, matched stratum 0.784
+  [0.64,0.90], per-edit ratio 3.5:1). Fatigue does not add a second canon on the synoptics
+  (chance there; genre-limited). Superseded as the *primary* signal by agreement structure.
+- **Robust signal (now primary):** the agreement structure across three witnesses — Markan-hub
+  15:1, Griesbach excluded (singular rate 0.22), Mark-Q overlaps rediscovered; theory-neutral,
+  uses all shared words. This is the DirectionScorer's triangulated `centrality` feature.
 
-RPM is the first component to beat chance on real synoptic direction — interpretable
-(weights = canons), length-controlled, abstention-calibrated, and it roots the tree to
-Markan priority with zero synoptic supervision (non-circular for Phase 6).
-- **R6 style-confound control PASSED** (`scripts/control_style_confound.py`): the
-  Markan-priority signal survives matching global καί-density. Stratifying Mark-X pericopes
-  by |Δκαί-density|, the *matched* stratum still scores **0.784 [0.64, 0.90]** (would be ~0.5
-  if it were pure καί-style); per-edit vote ratio 5.6:1 overall, 3.5:1 on the matched half. So
-  the signal is genuine per-edit direction (καί→δέ/τότε at aligned positions), not global style
-  — the one reviewer-killer caveat is now controlled, not just acknowledged.
-
-Key modules: `synoptiq/evaluation/variants.py`, `synoptiq/models/polarization.py`,
-`synoptiq/data/frequency.py`, `synoptiq/bayesian/rooting.py`.
-
-**NEXT (open leads, not yet planned):** Farrer-vs-Q needs more Q-material data or a sharper
-canon (the connective edit is too sparse on the 17 double-tradition pericopes). A per-pericope
-dangling-reference fatigue operator (vs the dead aggregate) is the other route to a second
-canon. Phase 6 can consume the RPM rooting posterior directly — it is unsupervised on the
-synoptics, so feeding it into the Bayesian model comparison is non-circular.
+**NEXT (open leads):** revise Paper B to the two-regime scorer; Farrer-vs-Q still needs more
+Q-material data or a sharper canon (double tradition too sparse); Phase 6 can be extended to a
+hierarchical PyMC model with prior-sensitivity (it consumes the scorer non-circularly).
 
 Do-not-repeat rules: global passage scores are dead; `local_brevior` is a confirmed length
 proxy (excluded by design); aggregate `intro_lateness` fatigue is chance on the synoptics
@@ -126,28 +113,29 @@ python -m pytest tests/ -q
 ```
 SynoptiQ/
 ├── synoptiq/               # Python package (pip install -e .)
-│   ├── data/               # Corpus loading, parsing, alignment, splits, augmentation
-│   ├── models/             # KoineFormer, MultiTaskEncoder, RPM PolarizationScorer
+│   ├── data/               # Corpus loading, parsing, alignment, splits, frequency, external pairs
+│   ├── direction/          # Phase 3 DirectionScorer (the sensor; absorbs Phase 4 fatigue)
+│   │   ├── alignment3.py   # Mark-anchored 3-way multiple alignment (align_three, Column)
+│   │   ├── features.py     # agreement spectrum + centrality (triangulation) + connective + fatigue
+│   │   └── scorer.py       # DirectionScorer: two-regime → calibrated DirectionScores + abstention
+│   ├── models/             # KoineFormer, MultiTaskEncoder
 │   │   ├── koineformer.py  # GreTa + LoRA wrapper, save/load adapters, generate
-│   │   ├── polarization.py # Phase 3 RPM: swap-antisymmetric variant-polarization aggregator
 │   │   └── encoder.py      # Multi-task encoder: POS, biaffine parser, pericope heads
-│   ├── training/           # DAPT, multi-task training loops
-│   │   ├── _config.py      # Frozen dataclasses: ModelConfig, TrainingConfig, et al.
-│   │   ├── dapt.py         # DAPT data loader (70/30 replay) + training loop
-│   │   └── multitask.py    # Multi-task LoRA fine-tuning (POS dataset + trainer)
-│   ├── evaluation/         # Linear probe POS/lemma; RPM variants.py + fatigue.py
-│   ├── bayesian/           # Phase 3 R5: rooting.py (stemma posterior from RPM votes); PyMC (Phase 6)
+│   ├── training/           # DAPT, multi-task training loops (_config, dapt, multitask)
+│   ├── evaluation/         # Linear probe POS/lemma; bootstrap.py (pericope-grouped CIs)
+│   ├── bayesian/           # Phase 6: rooting.py — CONSUMES DirectionScores → stemma posterior
 │   ├── legacy/             # ARCHIVED Phase-3 dead-ends (global scores/NLL/redaction) — see __init__
 │   ├── interpretability/   # SHAP, Hawkins comparison, BERTViz
-│   └── utils/              # Greek text, tokenization, types, constants, logging
+│   └── utils/              # Greek text, tokenization, types (DirectionScores), constants, logging
 ├── scripts/                # CLI entry points
 │   ├── prepare_data.py     # Phase 1: download → parse → align → split → cache
 │   ├── export_hf_dataset.py # Package SynoptiQ Corpus as HuggingFace dataset
 │   ├── train_dapt.py       # Phase 2A: KoineFormer DAPT (--smoke-test for quick check)
 │   ├── train_multitask.py  # Phase 2B: Multi-task LoRA fine-tuning
-│   ├── analyze_polarization.py # Phase 3 RPM H1: which canons polarize (both polarities)
-│   ├── train_polarization.py   # Phase 3 RPM H2/H3/H4: aggregation + abstention + fatigue
-│   ├── root_stemmata.py    # Phase 3 RPM H5: pooled rooting → stemma posterior + Farrer/Q
+│   ├── train_direction_scorer.py # Phase 3: calibrate DirectionScorer + G1-G3 + emit scores.json
+│   ├── compare_hypotheses.py     # Phase 6: scores.json → stemma posterior + Farrer/Q
+│   ├── direction_report.py       # Phase 3: agreement structure + style-confound control (findings)
+│   ├── build_external_pairs.py / build_lxx_pairs.py  # known-direction validation sets
 │   ├── eval_baseline.py    # Zero-shot vs DAPT evaluation (--zero-shot, --dapt-checkpoint)
 │   ├── run_ablation.py     # LoRA vs full fine-tune ablation
 │   └── legacy/             # ARCHIVED Phase-3 dead-end scripts (diagnose/train_direction/redaction…)
@@ -177,13 +165,13 @@ SynoptiQ/
 | Phase 1 | ✓ Data Pipeline | SynoptiQ Corpus: 49,061 tokens, 170 pericopes, 235 alignments, 87 tests |
 | Phase 2A | ✓ DAPT | KoineFormer trained: 96.62% POS, 81.34% lemma, 14 MB |
 | Phase 2B | ○ Multi-task | Code ready, not yet trained |
-| Phase 3 | ✓ Direction Scorer | **RPM complete (R0–R5)** — variant-polarization (connective canon) beats chance on synoptic direction (0.78, 0.876 on evidenced pericopes, 0.97 @25% cov), length-controlled + interpretable; pooled rooting **recovers Markan priority unsupervised** (2SH 0.64 / Farrer 0.36 / Griesbach ≈0 / Augustinian ≈0), Farrer-vs-Q left open. Fatigue does not add a 2nd canon (H4). Global scores dead. See `docs/DIRECTION_SCORER_FINDINGS.md` |
-| Phase 4 | ○ Editorial Drift | Not started |
+| Phase 3 | ✓ Direction Scorer | **DirectionScorer delivered** (`synoptiq/direction/`) — two-regime, per-pericope calibrated `[A→B,B→A,indep]` + abstention. Triangulated (agreement-structure `centrality`): **G1 0.79 [0.72,0.86], 0.985 confident half, length-decorrelated (0.25)**; pair-only (connective+fatigue) abstains. RPM connective = documented feature. See `docs/DIRECTION_SCORER_FINDINGS.md` |
+| Phase 4 | ✓ merged into Phase 3 | Editorial fatigue (`intro_lateness`) is one pair-only feature of the DirectionScorer; genre-limited (chance on synoptics) |
 | Phase 5 | ○ Q Reconstruction | Not started |
-| Phase 6 | ○ Bayesian | Not started |
+| Phase 6 | ◐ Bayesian | `bayesian/rooting.py` CONSUMES DirectionScores → posterior **2SH 0.64 / Farrer 0.36 / Griesbach ≈0 / Aug ≈0** (`compare_hypotheses.py`); hierarchical PyMC + prior-sensitivity still to do |
 | Phase 7 | ○ Interpretability | Not started |
 | Paper A | ✓ Draft | paper/main.tex — complete manuscript, verified numbers |
-| Paper B | ○ Design | Architecture designed, core code implemented |
+| Paper B | ◐ Draft | paper_b/main.tex — describes RPM as primary; revise to headline the two-regime DirectionScorer |
 
 ## Key files to know
 
@@ -195,18 +183,18 @@ SynoptiQ/
 - `synoptiq/data/augmentation.py` — Bootstrap resampling, sliding windows, scribal noise injection
 - `synoptiq/training/_config.py` — Five frozen dataclasses: `ModelConfig` already has `direction_num_classes`, `asymmetry_num_features`, `direction_signed_features`, `direction_independence_features`
 - `synoptiq/models/koineformer.py` — **KoineFormer**: GreTa + LoRA wrapper, factory, save/load, generate
-- `synoptiq/evaluation/variants.py` — **RPM core primitive**: typed variant extraction from an alignment + signed canon features (harder_reading, local_brevior, connective_smooth)
-- `synoptiq/models/polarization.py` — **RPM aggregator**: swap-antisymmetric `PolarizationScorer` (sum variant votes → per-pair score) with abstention
-- `synoptiq/data/frequency.py` — **RPM markedness table** (Koine lemma rarity for lectio difficilior), built from SBLGNT + external pairs
-- `synoptiq/bayesian/rooting.py` — **RPM rooting (R5)**: Beta-Bernoulli marginal likelihood per pairwise relationship → posterior over the 4 stemmata + Farrer/Q Bayes factor
-- `synoptiq/evaluation/fatigue.py` — editorial-fatigue signed features (`intro_lateness` etc.); used by RPM H4 (a genre-limited canon, chance on synoptics)
+- `synoptiq/direction/scorer.py` — **DirectionScorer**: two-regime, swap-antisymmetric; `score_pair` → `DirectionScores`. Weights fit on external pairs only (`fit`); centrality is a fixed prior. `with_priors()` for the unfit centrality-led scorer.
+- `synoptiq/direction/features.py` — all signed features (positive ⇒ A source): `centrality_asym` (triangulation, the robust one), `connective_vote` (demoted RPM canon), `intro_lateness` (fatigue), plus `agreement_spectrum` + `align_three` re-export
+- `synoptiq/direction/alignment3.py` — Mark-anchored 3-way multiple alignment (`align_three`, `Column`)
+- `synoptiq/data/frequency.py` — Koine lemma-rarity markedness table (feature resource)
+- `synoptiq/bayesian/rooting.py` — **Phase 6**: `relationship_counts(DirectionScores)` → Beta-Bernoulli marginal likelihood per relationship → posterior over the 4 stemmata + Farrer/Q Bayes factor
 - `synoptiq/evaluation/bootstrap.py` — pericope-grouped + paired cluster bootstrap (use for ALL direction comparisons)
 - `synoptiq/data/external_pairs.py` — loader for known-direction pairs (Jude→2Pet, LXX Chronicles); no Corpus needed
 - `docs/DIRECTION_SCORER_FINDINGS.md` — **the Phase-3 conclusion**: full evidence + reproduction commands
 - `synoptiq/training/dapt.py` — **DAPT**: data loader + training loop with AMP, SIGTERM handler, crash-safe checkpointing
 - `synoptiq/evaluation/__init__.py` — Linear probe evaluation: POS + lemma accuracy
 - `scripts/train_dapt.py` — DAPT CLI: `--smoke-test` (100 steps CPU), full training (20K steps GPU)
-- `scripts/analyze_polarization.py` / `train_polarization.py` / `root_stemmata.py` / `control_style_confound.py` — **RPM pipeline**: H1 (canon polarization) → H2/H3/H4 (aggregation + abstention + fatigue) → H5 (rooting) → R6 (καί-style confound control)
+- `scripts/train_direction_scorer.py` — calibrate the DirectionScorer + gated validation G1-G3 + emit `outputs/direction/scores.json`; `scripts/compare_hypotheses.py` — Phase 6 consumer (scores → posterior); `scripts/direction_report.py` — agreement structure + style-confound control
 - `scripts/build_external_pairs.py` / `build_lxx_pairs.py` — Jude→2Pet (copy longer) and LXX Chronicles (copy shorter) known-direction sets for RPM validation
 - `scripts/eval_baseline.py` — Compare zero-shot GreTa vs DAPT KoineFormer on POS + lemma
 - `scripts/run_ablation.py` — LoRA vs full fine-tune loss curve comparison
@@ -244,15 +232,14 @@ but not vocabulary.
 
 ## Phase 3: Direction Scorer
 
-> **Read `docs/DIRECTION_SCORER_FINDINGS.md` first.** Global passage scores (the
-> 10-feature scorer below, NLL/MDL, synthetic-trained head) are all DEAD — confounded
-> with length + Markan style, proven on both length polarities. The working approach is
-> the **Redactional Polarization Model (RPM)**: variant-level polarization via the
-> textual-criticism canons (`synoptiq/models/polarization.py`,
-> `synoptiq/evaluation/variants.py`). RPM reaches 0.78 synoptic directed accuracy (0.97
-> on its confident quartile) with the length-free connective-smoothing canon. The
-> architecture below is retained as the documented dead-end baseline; R4 (fatigue as a
-> 2nd canon) and R5 (rooting → Farrer/Q) are the next gated steps.
+> **Read `docs/DIRECTION_SCORER_FINDINGS.md` first.** The live component is the two-regime
+> **`DirectionScorer`** (`synoptiq/direction/`): per pericope it emits calibrated
+> `[A→B, B→A, independent]` + abstention. The robust signal is the agreement-structure
+> `centrality` feature (triangulated regime); the connective canon (RPM) and fatigue are
+> demoted pair-only features. Global passage scores (the 10-feature encoder scorer, NLL/MDL,
+> synthetic-trained head) are DEAD (confounded with length + Markan style, proven on both
+> length polarities) and archived under `synoptiq/legacy/`. The section below documents the
+> old encoder-probe baseline for reference only.
 
 ### Architecture
 
@@ -337,7 +324,7 @@ modal volume get synoptiq-outputs dapt/ models/koineformer/dapt/
 
 # ── Phase 3: Direction Scorer ───────────────────────────────────────
 # The live RPM pipeline is CPU-only and runs locally (no Modal): see
-#   scripts/analyze_polarization.py, train_polarization.py, root_stemmata.py
+#   scripts/train_direction_scorer.py, compare_hypotheses.py, direction_report.py
 # The GPU direction-scorer training app is an ARCHIVED dead-end (kept for
 # reproducibility only):
 modal run modal/legacy/app_direction.py::smoke_test        # archived, dead-end
@@ -436,7 +423,7 @@ style — now archived under `synoptiq/legacy/`.
 **Editorial Fatigue** (Phase 4) = Position-weighted KL divergence between
 editing distribution and source distribution, with exponential decay weight.
 Detects copying author reverting to own style over the course of a pericope. The
-built prototype (`synoptiq/evaluation/fatigue.py`, aggregate `intro_lateness`) is a
+feature (`synoptiq/direction/features.py`, `intro_lateness`) is a
 genre-limited canon — chance on the synoptics (RPM H4), real but weak on LXX narrative.
 
 **Q Reconstruction** (Phase 5) = Fusion-in-Decoder: Matthew + Luke encoded
