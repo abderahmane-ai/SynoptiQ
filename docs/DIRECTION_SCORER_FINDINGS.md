@@ -36,6 +36,37 @@ lexical canon is close to a Markan-style detector even after the καί-density 
 sections below are kept as the documented baseline; the negatives that forced the whole design
 follow them.
 
+## The identifiability ceiling (what per-pair direction can actually do)
+
+A both-polarity sweep on the **known-direction** external corpora (`scripts/identifiability_check.py`;
+Jude→2 Peter copy-longer, LXX Kings→Chronicles copy-shorter) establishes the honest ceiling for
+detecting direction from a bare pair. A feature is a length **confound** if its sign flips across
+polarities; it is genuinely directional only if correctly-signed (>0.5) on **both**.
+
+| feature | copy-shorter | copy-longer | verdict |
+|---|---|---|---|
+| length ratio *(control)* | 1.00 | 0.00 | FLIPS |
+| type-token ratio | 0.25 | 0.81 | FLIPS |
+| hapax rate | 0.28 | 0.69 | FLIPS |
+| coverage asymmetry | 0.00 | 0.96 | FLIPS |
+| **connective (καί→δέ)** | 0.14 | 0.23 | **BACKWARDS** |
+| markedness (harder reading) | 0.53 | 0.58 | directional? (weak) |
+| **editorial fatigue (`intro_lateness`)** | **0.61** | **0.65** | **directional? (weak)** |
+
+**Three consequences.** (1) All length/lexical features are confounds. (2) **The connective canon
+is *backwards* on real known-direction data** — it only "worked" on the synoptics because Mark is
+καί-heavy, i.e. it is a Markan-*style* detector, not a per-pair direction signal (RPM's per-pair
+claim is therefore not sound). (3) **Only editorial fatigue and markedness are correctly-signed on
+both polarities**, and both are weak/underpowered (~0.6, CIs touch 0.5 on ~62 pairs). Sharp fatigue
+operators (dangling-article, late-convergence) plateaued at the crude level — fatigue is a **sparse,
+event-level** signal, not an aggregate, and is limited by data volume + annotation (external pairs
+are raw words with no POS/coref). **It is not impossible — fatigue is real — but it is data-and-
+annotation-limited, and it cannot presently root the tree.** This also reframes the whole component:
+the triangulated `centrality` feature measures the *hub*, and "hub = source" is a fork-topology
+assumption (in a chain the hub is the middle), so the corpus Markan-priority result rests on the
+**agreement structure** (topology + the Griesbach singular-rate kill), not a validated per-pair
+direction signal.
+
 ## Breakthrough: the Redactional Polarization Model (RPM)
 
 Online research reframed the task precisely: this is the stemmatology **rooting problem**

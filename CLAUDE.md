@@ -53,8 +53,43 @@ Phase 6`. Tree clean; ruff F/E passes; 133 tests pass. Full story in
   `compare_hypotheses.py` (Phase 6), `direction_report.py` (findings). Old RPM scripts/modules
   folded/deleted; dead-end code stays under `synoptiq/legacy/`.
 
-**Next up:** update Paper B to headline the two-regime DirectionScorer (agreement structure
-primary, RPM the baseline). The `paper_b/` draft still describes RPM as primary — revise.
+**⚠️ CRITICAL CAVEAT — the identifiability ceiling (read before trusting per-pair direction).**
+A rigorous both-polarity sweep on the KNOWN-direction external pairs
+(`scripts/identifiability_check.py`; Jude→2Pet copy-longer, LXX Kings→Chronicles copy-shorter)
+established what per-pair direction detection can actually achieve:
+- **Every length/lexical feature FLIPS sign across polarities** (len ratio, TTR, hapax,
+  coverage) → pure length confounds.
+- **The connective canon is BACKWARDS on external data (0.14 / 0.23).** It points the WRONG way
+  on real known-direction pairs — it only ever "worked" on the synoptics via Mark's καί-heavy
+  style. So RPM's per-pair signal is **not sound**; it was a Markan-style detector.
+- **Only editorial fatigue (`intro_lateness` 0.61/0.65) and markedness (0.53/0.58) are
+  correctly-signed on BOTH polarities** — real but WEAK/underpowered (CIs touch 0.5 on ~62 pairs).
+- **Sharp fatigue operators plateaued** at the crude level (dangling-article = length-biased;
+  late-convergence flips). Fatigue is a **sparse, event-level** signal, not an aggregate.
+
+**Consequence (the user was right to distrust the scorer):** the `DirectionScorer`'s
+triangulated `centrality` measures the **hub**, and "hub = source" is a fork-topology assumption
+(for a chain the hub is the *middle*, not the source). So the corpus "Markan priority" result
+rests on the **agreement STRUCTURE** (topology + the Griesbach singular-rate kill), **NOT** on a
+validated per-pair direction signal. `centrality`/`connective` should be treated as topology /
+demoted features, not earned direction.
+
+**Approved path (user chose "both — sharp operator + more data"):** direction is NOT impossible
+but its only genuine signal is fatigue, which is data+annotation-limited. Binding constraints:
+(1) **DATA** — only 62 known-direction pairs; (2) **ANNOTATION** — external pairs are raw words
+(no POS/lemma), so sharp fatigue operators (pronoun-without-antecedent, article-on-first-mention)
+can't fire properly. Feasible next moves for a fresh session:
+- **Expand known-direction data**: full LXX Chronicles synopsis (~80 vs 56; Swete source was at
+  `/private/tmp/claude-501/*/f0650658-*/scratchpad/lxx_swete` — likely GONE, re-download via
+  `scripts/build_lxx_pairs.py --swete-dir <path>`); add Josephus↔LXX, patristic NT quotation.
+- **POS-annotate the external pairs with KoineFormer** so sharp fatigue operators can use real
+  pronoun/article/proper-noun features, then re-run the sharp-operator battery with power.
+- Only after external validation (both polarities) with power, apply to the synoptics.
+
+**Also still open:** revise `paper_b/` (still frames RPM as primary — and per above, RPM's
+per-pair signal is now known unsound; Paper B should become a boundary result: agreement
+structure recovers Markan priority + excludes Griesbach/Aug via topology, while honest per-pair
+direction is fatigue-only and weak).
 
 **The scientific history (settled — full detail in `docs/DIRECTION_SCORER_FINDINGS.md`):**
 
@@ -77,10 +112,15 @@ Q-material data or a sharper canon (double tradition too sparse); Phase 6 can be
 hierarchical PyMC model with prior-sensitivity (it consumes the scorer non-circularly).
 
 Do-not-repeat rules: global passage scores are dead; `local_brevior` is a confirmed length
-proxy (excluded by design); aggregate `intro_lateness` fatigue is chance on the synoptics
-(H4 — do NOT re-add it as a synoptic canon); always test on BOTH length polarities and use
-pericope-grouped bootstrap CIs (`synoptiq/evaluation/bootstrap.py`). The plan file
-`~/.claude/plans/buzzing-squishing-fairy.md` (R0–R5) is now fully executed.
+proxy (excluded by design); **all length/lexical features (len ratio, TTR, hapax, coverage)
+FLIP across polarities — confounds, do NOT use**; **the connective canon is BACKWARDS on
+external data — it is a Markan-style detector, not per-pair direction**; **`centrality` = hub,
+NOT source (fork assumption)**; aggregate `intro_lateness` sharpening plateaus (fatigue is
+sparse/event-level). Always test on BOTH length polarities on the KNOWN-direction external
+data (`scripts/identifiability_check.py`) and use pericope-grouped bootstrap CIs
+(`synoptiq/evaluation/bootstrap.py`). Only fatigue + markedness survive both polarities (weak).
+Prior plan files (`~/.claude/plans/buzzing-squishing-fairy.md` R0–R5; `shimmering-stirring-pie.md`
+the direction-scorer consolidation) are fully executed.
 
 ## Cold start (fresh clone / new machine)
 
