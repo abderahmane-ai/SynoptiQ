@@ -1,5 +1,5 @@
-"""Bayesian rooting — pool per-pericope RPM directional votes into a posterior over the
-four synoptic stemmata.
+"""Phase 6 — pool the DirectionScorer's per-pericope direction probabilities into a
+posterior over the four synoptic stemmata.
 
 The four classical hypotheses are four *rootings* of the one three-taxon (Matthew, Mark,
 Luke) relationship. Each predicts a definite copying direction for the three pairwise
@@ -11,11 +11,10 @@ relationships (or, for 2SH on Matthew-Luke, *independence* — no consistent dir
     Mark-Luke     | Mk->Lk   Mk->Lk    Lk->Mk     Mk->Lk
     Matthew-Luke  | (indep)  Mt->Lk    Mt->Lk     Mt->Lk
 
-RPM (the connective-smoothing canon, unsupervised on the synoptics) gives, per pericope, a
-signed directional vote for each relationship. We summarise a relationship by (k, n): among
-the ``n`` pericopes where the canon is not silent, ``k`` vote that the *first-named* book is
-the source. Each hypothesis's prediction for that relationship is scored by a Beta-Bernoulli
-**marginal likelihood**:
+This module is the **consumer** of the Phase-3 DirectionScorer: :func:`relationship_counts`
+turns a list of per-pericope ``DirectionScores`` into (k, n) per relationship — among the
+``n`` non-abstaining pericopes, ``k`` predict the *first-named* book is the source. Each
+hypothesis's prediction is then scored by a Beta-Bernoulli **marginal likelihood**:
 
     * "first book is source" : theta ~ Uniform(0.5, 1)   (a consistent majority > 1/2)
     * "second book is source": theta ~ Uniform(0, 0.5)
@@ -25,17 +24,20 @@ These three models share the same (k, n) data, so their marginal likelihoods are
 comparable — a proper Bayes factor. The stemma posterior is the product of per-relationship
 marginal likelihoods times a uniform prior over the four hypotheses.
 
-Non-circularity: the canon sign is fixed a priori by textual criticism (a rough ``καί``
-replaced by a smooth connective marks the rough side as primitive) and validated only on
-*external* known-direction corpora (LXX, Jude). Nothing here is trained on synoptic labels.
+Non-circularity: the scorer is unsupervised on the synoptics (its triangulation sign is a
+fixed prior, its pair-only weights are fit only on external known-direction corpora), so
+feeding its output here is not circular.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
 from scipy.special import betainc, betaln
+
+from synoptiq.utils.types_ import DirectionScores
 
 # Canonical ordering of the three pairwise relationships (first, second).
 RELATIONSHIPS: tuple[tuple[str, str], ...] = (
@@ -162,3 +164,31 @@ def bayes_factor(counts: dict[tuple[str, str], RelationshipCount],
     log_den = sum(relationship_log_ml(c.k, c.n, HYPOTHESES[h_den][r], r)
                   for r, c in counts.items())
     return float(np.exp(log_num - log_den))
+
+
+def _canonical(a: str, b: str) -> tuple[str, str] | None:
+    """Map an unordered book pair to its canonical (first, second) relationship."""
+    for rel in RELATIONSHIPS:
+        if {a, b} == set(rel):
+            return rel
+    return None
+
+
+def relationship_counts(
+    scores: Sequence[DirectionScores],
+) -> dict[tuple[str, str], RelationshipCount]:
+    """Turn per-pericope DirectionScores into (k, n) per pairwise relationship.
+
+    ``n`` counts the non-abstaining (``predicted_direction != "independent"``) pericopes for a
+    relationship; ``k`` counts those predicting the canonical *first-named* book is the source.
+    """
+    tally: dict[tuple[str, str], list[int]] = {rel: [0, 0] for rel in RELATIONSHIPS}
+    for ds in scores:
+        rel = _canonical(ds["book_a"], ds["book_b"])
+        if rel is None or ds["predicted_direction"] == "independent":
+            continue
+        source = ds["book_a"] if ds["predicted_direction"] == "A_to_B" else ds["book_b"]
+        tally[rel][1] += 1
+        if source == rel[0]:
+            tally[rel][0] += 1
+    return {rel: RelationshipCount(rel, k, n) for rel, (k, n) in tally.items()}

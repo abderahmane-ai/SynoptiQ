@@ -67,7 +67,12 @@ class PericopeAlignment(TypedDict):
 
 
 class DirectionScores(TypedDict):
-    """Output of the DirectionScorer for a single pericope pair."""
+    """Output of the DirectionScorer for a single pericope pair.
+
+    Emits calibrated direction probabilities plus a confidence and the regime used
+    ("triangulated" when a third witness is present, else "pair_only"). These per-pericope
+    probabilities are the observations consumed by the Phase-6 Bayesian model comparison.
+    """
 
     pericope_id: str
     book_a: Book
@@ -76,8 +81,8 @@ class DirectionScores(TypedDict):
     prob_b_to_a: float
     prob_independent: float
     predicted_direction: Direction
-    attention_asymmetry: float
-    entropy_ratio: float
+    confidence: float          # 1 - prob_independent; low => the scorer abstains
+    regime: str                # "triangulated" | "pair_only"
 
 
 class EditorialFatigueScores(TypedDict):
