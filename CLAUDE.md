@@ -44,10 +44,76 @@ iteration, useful for Q reconstruction).
 **What stands:** KoineFormer + the SynoptiQ corpus (Paper A) — self-contained and done. The
 `evaluation/` linear probes (POS/lemma) and `evaluation/bootstrap.py` (pericope-grouped CIs) remain.
 
-**Next:** **Phase 5 — Q reconstruction** (Fusion-in-Decoder): encode Matthew + Luke, reconstruct
-Mark on the triple tradition (ground-truth eval via `Corpus.parallel_pairs(tradition="triple")`),
-then transfer to the double tradition to reconstruct proto-Q. A genuine generative task that does
-not depend on solving direction. `ModelConfig` already carries the `fid_*` fields.
+**Next:** **Phase 5** — two tracks (see `docs/SOURCE_CRITICISM_STUDY.md`, a frozen preregistration).
+**Track A** = Q reconstruction (Fusion-in-Decoder): reconstruct Mark on the triple tradition
+(ground truth), then transfer to the double tradition for proto-Q. **Track B** = source
+identification *without* re-opening direction: compare generative models of the double tradition
+(2SH bottleneck vs Farrer/MPH direct) trained only on hypothesis-neutral triple-tradition
+supervision (Mk→Mt, Mk→Lk, which every live hypothesis accepts). Neither depends on solving
+per-pair direction; `docs/DIRECTION_NEGATIVE_RESULT.md` still stands. `ModelConfig` carries `fid_*`.
+
+**Phase-5 M0 delivered (2026-07-08), tests green (132 pass):** `synoptiq/data/study_design.py`
+(full-triple folds, overlap partition, census, prereg hashing), `StudyConfig` in `_config.py`,
+`MARK_Q_OVERLAP_{CORE,EXTENDED}` in `constants.py`, `synoptiq/evaluation/model_comparison.py`
+(lift/DiD/MDE power sim) + `statistic_ci`/`difference_in_differences` in `bootstrap.py`,
+`synoptiq/evaluation/scoring.py` (NLL backbone; the M2 redactor/FiD models go in `synoptiq/models/`).
+Script: `scripts/prepare_study.py` (`freeze` + `power` subcommands) → `outputs/study/`.
+**Key data-driven corrections:** effective triple-tradition N is **65 full
+triples, not 88** (23 lack a book); the DT `wisdom` stratum (4/17) has **no triple analog** →
+unidentifiable a priori. Power analysis: DiD contrast (5 overlap pericopes) is the binding
+bottleneck (MDE ~3× the whole-TT lift).
+
+**M1 code delivered (2026-07-08), 148 tests pass:** DAPT decontamination (`exclude_books` on the
+operative `DAPTConfig` in `dapt.py`; SBLGNT stem filter in `_extract_text_from_dir`, verified on
+real data — drops 12 gospel files), `--no-synoptics` flag on `scripts/train_dapt.py`, Modal
+`start_training_ns` (→ `/outputs/dapt_ns`), audit stats `synoptiq/evaluation/contamination.py`
+(perplexity, DiD memorization gap, exact-match) + `scripts/audit_contamination.py`. **M1 GPU run
+still pending** — `modal run modal/app_dapt.py::start_training_ns` (~1 hr A10G), then
+`audit_contamination.py --compare-adapters models/koineformer/dapt/final models/koineformer_ns/final`.
+Current KoineFormer DAPT includes SBLGNT (= the eval gospels), so likelihood verdicts need the NS
+adapters.
+
+**M1 GPU run DONE (2026-07-08): contamination is negligible.** NS adapters trained
+(`modal .../start_training_ns`, `excluded_files=12`) and audited: memorization gap **0.016**
+(threshold 0.25), verse-completion exact-match **0%**, gospel vs control perplexity 2.08/1.66
+(original) ≈ 2.12/1.66 (NS). LoRA's 1.5% capacity can't memorize verbatim — the likelihood
+approach is safe. NS model at `models/koineformer_ns/final`; audit in `outputs/study/audit.md`.
+(Download quirk: `modal volume get` mangles directory downloads — fetch the two adapter files
+individually; `audit_contamination.py` auto-resolves nested adapter paths.)
+
+**M2 fold-0 GPU run DONE (2026-07-08). Two-part result — see `docs/SOURCE_CRITICISM_STUDY.md` §3b.**
+Modules: `synoptiq/models/{redactor,fid,_seq2seq_base}.py`, `synoptiq/data/redaction.py`,
+`synoptiq/evaluation/reconstruction.py`, `scripts/train_{redactors,fid}.py`, `modal/app_fid.py`.
+- **Loader bug fixed:** `_seq2seq_base.load_greta_seq2seq` must NOT add a `[PAD]` token / resize
+  embeddings — GreTa ships `<pad>`=0 and `</s>`=1; adding a new pad desyncs the tokenizer pad id
+  from the model's decoder-start id and collapses generation to empty (and inflates NLL ~4×).
+- **Operators: strong PASS.** Held-out NLL ≈ 2 nats; real source beats a *mismatched* source by
+  ~1 nat (R_Lk 1.995 vs 3.094) — they use pericope-specific content, not just style. This is the
+  validated signal the E2/E1 verdicts build on (scoring path, no generation).
+- **Track A reconstruction: bounded negative.** FiD (Mt+Lk→Mark) F1 0.31 vs nearest-witness 0.56;
+  overfits (train loss 2.17→1.28, held-out F1 flat). Demoted from headline to a reported limitation
+  — witnesses are too close to Mark for abstractive fusion to beat copying at 52-pericope scale.
+
+**M3/M4 code DONE (2026-07-09), 186 tests pass. M4 E2 (Lk-target) verdict DONE (pooled CV below);
+M3 G1/G2/G4 gates still need GPU.** `synoptiq/evaluation/verdict.py`
+(`minor_agreement_test` = excess-lift E2, `did_contrast`, `null_threshold` = G3 floor,
+`channel_recovery_gate` = G1/G2; all unit-tested). `scripts/run_mai_test.py` runs the E2 verdict
+(per-pericope excess lift of Mk+Mt→Lk vs a mismatched-Matthew control + overlap-vs-rest DiD + G3
+floor) — CPU-smoke-tested end-to-end on real GreTa. `train_fid.py` now takes `--witnesses/--target`
+so it also trains the E2 model. Modal: `train_fid_mai`, `run_mai`, `mai_cv`; `scripts/pool_mai.py`
+pools per-fold rows into the CV verdict.
+
+**E2 pooled CV verdict DONE (2026-07-09): NULL-after-calibration on both axes.** `mai_cv` trained
++ scored all 5 folds → `outputs/study/mai/mai_pooled.json` (65 held-out pericopes, 5 overlap in one
+DiD). **Pooled excess lift +0.169 [CI 0.127,0.213] P(>0)=1.00 but does NOT clear the G3 null floor
+0.194**; **DiD overlap(5) vs rest(60) +0.096 [CI −0.049,+0.296] spans zero (not overlap-concentrated).**
+So the Lk-target minor-agreement signal is null once calibrated against the mismatched-Matthew control —
+the prereg floor + DiD kill what a naive test (CI excludes 0) would have published as Farrer support.
+Reads as §4's **strict-independence-beyond-Mark** row (MAs = text-critical noise; a publishable null).
+Confirms + generalizes fold 0 across the full CV. Results folded into `docs/SOURCE_CRITICISM_STUDY.md`
+§3b + M4. **Then:** symmetric **Mt-target** E2 model (distinguishes Farrer vs MPH + the T4 symmetry
+check) and edition-swap ablation (T8) — both flip this from "null" to "null and robust"; M3 G1/G2 + G4;
+M5 E1 (only if K2 powered); M6 write-up.
 
 ## Cold start (fresh clone / new machine)
 
@@ -79,29 +145,58 @@ python -m pytest tests/ -q
 SynoptiQ/
 ├── synoptiq/               # Python package (pip install -e .)
 │   ├── data/               # Corpus loading, parsing, alignment, splits, pericope classification
-│   ├── models/             # KoineFormer, MultiTaskEncoder
+│   │   ├── study_design.py # Phase 5: full-triple folds, overlap partition, census, prereg hashing
+│   │   └── redaction.py    # Phase 5: source→target pairs, fusion examples, source-dropout
+│   ├── models/             # KoineFormer, MultiTaskEncoder, + Phase-5 redactor/FiD
 │   │   ├── koineformer.py  # GreTa + LoRA wrapper, save/load adapters, generate
-│   │   └── encoder.py      # Multi-task encoder: POS, biaffine parser, pericope heads
-│   ├── training/           # DAPT + multi-task training loops (_config, dapt, multitask)
-│   ├── evaluation/         # Linear probe POS/lemma; bootstrap.py (pericope-grouped CIs)
+│   │   ├── encoder.py      # Multi-task encoder: POS, biaffine parser, pericope heads
+│   │   ├── redactor.py     # Phase 5: R_Lk/R_Mt/G_Mt/G_Lk seq2seq LoRA operators + NLL scoring
+│   │   ├── fid.py          # Phase 5: Fusion-in-Decoder (witnesses fused in the decoder) — Track A
+│   │   └── _seq2seq_base.py# shared GreTa(+NS)+LoRA loader for redactor/FiD
+│   ├── training/           # DAPT + multi-task training (_config incl. StudyConfig, dapt, multitask)
+│   ├── evaluation/         # bootstrap CIs, scoring (NLL), model_comparison (power/DiD),
+│   │                       #   contamination audit, reconstruction F1, linear probes
 │   ├── interpretability/   # SHAP, Hawkins comparison, BERTViz
 │   └── utils/              # Greek text, tokenization, shared types, constants, logging
 ├── scripts/                # CLI entry points
 │   ├── prepare_data.py     # Phase 1: download → parse → align → split → cache
-│   ├── export_hf_dataset.py # Package SynoptiQ Corpus as a HuggingFace dataset
-│   ├── train_dapt.py       # Phase 2A: KoineFormer DAPT (--smoke-test for quick check)
-│   ├── train_multitask.py  # Phase 2B: Multi-task LoRA fine-tuning
+│   ├── train_dapt.py       # Phase 2A: KoineFormer DAPT (--no-synoptics → KoineFormer-NS)
 │   ├── eval_baseline.py    # Zero-shot vs DAPT evaluation (--zero-shot, --dapt-checkpoint)
-│   ├── run_ablation.py     # LoRA vs full fine-tune ablation
+│   ├── prepare_study.py    # Phase 5 M0: `freeze` (census/folds/hashes) + `power` subcommands
+│   ├── audit_contamination.py # Phase 5 M1: memorization audit (original vs KoineFormer-NS)
+│   ├── train_redactors.py  # Phase 5 M2: train R_*/G_* operators with TT CV
+│   ├── train_fid.py        # Phase 5 M2: train FiD, any --witnesses/--target (Track A or E2)
+│   ├── run_mai_test.py     # Phase 5 M4: E2 excess-lift verdict + DiD + G3 floor
 │   └── _cli_utils.py       # Shared CLI helpers (canonical detect_device())
 ├── paper/                  # Paper A: KoineFormer (XeLaTeX)
-├── modal/                  # Modal GPU deployment (app_dapt.py: DAPT, ablation, full-FT eval)
-├── datasets/               # HuggingFace dataset export (gitignored except README)
-├── tests/                  # pytest suite (mirrors synoptiq/ structure)
+├── modal/                  # Modal GPU: app_dapt.py (DAPT), app_fid.py (M2), app_koine_t5.py (Koine-T5)
+├── tests/                  # pytest suite (mirrors synoptiq/ structure) — 176 pass
 ├── data/ models/ outputs/  # All git-ignored (corpora, adapters, logs)
-├── docs/DIRECTION_NEGATIVE_RESULT.md  # why copying-direction detection was closed
-├── PROJECT_OVERVIEW.md · SYNOPTIQ_MASTER_PLAN.md · IMPLEMENTATION_PLAN.md
+├── docs/DIRECTION_NEGATIVE_RESULT.md   # why copying-direction detection was closed
+├── docs/SOURCE_CRITICISM_STUDY.md      # Phase 5 preregistration (Q reconstruction + source ID)
+├── paper/project_overview.tex · {SYNOPTIQ_MASTER,IMPLEMENTATION}_PLAN.md (local planning, git-ignored)
 ```
+
+## Koine-T5 — standalone general-purpose model (`modal/app_koine_t5.py`)
+
+A second, self-contained model line, **distinct from the KoineFormer encoder work above**.
+`modal/app_koine_t5.py` trains **Koine-T5**: a general-purpose multitask Ancient Greek seq2seq
+model (GreTa + LoRA r=32), sibling to `app_dapt.py` (which trained KoineFormer #1). One model,
+**four balanced task pools** sampled every batch so none is starved:
+
+1. `denoise` — online T5 span corruption on **raw** Greek prose
+2. `pos` — POS tagging (MorphGNT tagset)
+3. `lemma` — lemmatization
+4. `synoptic` — Mark→Matthew / Mark→Luke style transfer (the tiny curated pool, upsampled)
+
+`pos`/`lemma`/`denoise` are fed by the Gospel corpus **plus the UD_Ancient_Greek-PROIEL treebank**
+(NT Koine + Herodotus Classical, ~214K tokens). PROIEL's granular **XPOS** column is mapped to the
+13-code MorphGNT tagset (`S-`→`RA` etc. — *not* UPOS/FEATS, whose `PronType=Dem` on the article is a
+trap); this cures the POS "task collapse" that afflicted the 401-example version. Validation is POS
+**Exact-Match on PROIEL dev, reported NT vs Classical**, with the best-EM adapter saved to `best/`.
+Config-fingerprinted checkpoints prevent a stale run from resuming into a changed config. Standalone
+(no `synoptiq` imports). Run: `modal run modal/app_koine_t5.py::train` ·
+`python modal/app_koine_t5.py demo` · outputs to the `koine-t5-outputs` volume (`best/` + `final/`).
 
 ## Current status
 
@@ -112,7 +207,7 @@ SynoptiQ/
 | Phase 2A | ✓ DAPT | KoineFormer trained: 96.62% POS, 81.34% lemma, 14 MB |
 | Phase 2B | ○ Multi-task | Code ready, not yet trained |
 | Phase 3 | ✗ Removed | Direction detection — **closed negative result** (`docs/DIRECTION_NEGATIVE_RESULT.md`) |
-| Phase 5 | ○ Q Reconstruction | **Next.** Fusion-in-Decoder (Mt+Lk → Mark, then → proto-Q) |
+| Phase 5 | ◐ In progress | **M0–M2 done; M3/M4 code done; M4 E2 (Lk-target) pooled CV DONE** (186 tests). Operators strong PASS; Track A reconstruction = bounded negative (demoted). **E2 verdict: null-after-calibration** (lift +0.169 < G3 floor 0.194; DiD spans 0) → strict-independence-beyond-Mark. See `docs/SOURCE_CRITICISM_STUDY.md` |
 | Phase 6 | ✗ Removed | Bayesian hypothesis "scoring" — removed with Phase 3 (depended on it) |
 | Phase 7 | ○ Interpretability | Not started |
 | Paper A | ✓ Draft | paper/main.tex — complete manuscript, verified numbers |
@@ -130,15 +225,30 @@ SynoptiQ/
 - `synoptiq/data/{pericope,splits}.py` — tradition classification + pericope-atomic stratified splits
 - `synoptiq/models/koineformer.py` — **KoineFormer**: GreTa + LoRA wrapper, factory, save/load, generate
 - `synoptiq/models/encoder.py` — MultiTaskEncoder (POS / biaffine parser / pericope heads) for Phase 2B
-- `synoptiq/training/_config.py` — frozen dataclasses (`DataConfig`, `ModelConfig` [incl. `fid_*` for
-  Q reconstruction], `TrainingConfig`, `DAPTConfig`)
-- `synoptiq/training/dapt.py` — **DAPT**: data loader + AMP training loop, SIGTERM-safe checkpointing
-- `synoptiq/evaluation/__init__.py` — linear-probe POS + lemma accuracy
-- `synoptiq/evaluation/bootstrap.py` — pericope-grouped + paired cluster bootstrap CIs
+- `synoptiq/models/redactor.py` — **Redactor** (Phase 5): source→target seq2seq LoRA operator; the four
+  instances R_Lk/R_Mt/G_Mt/G_Lk differ only in training data. `score()` = teacher-forced conditional NLL
+- `synoptiq/models/fid.py` — **FusionInDecoder** (Phase 5, Track A): encodes witnesses separately, `torch.cat`
+  their encoder states, decoder cross-attends over the fusion → reconstruct Mark from Mt+Lk (then proto-Q)
+- `synoptiq/training/_config.py` — frozen dataclasses (`DataConfig`, `ModelConfig` [incl. `fid_*`],
+  `TrainingConfig`, `DAPTConfig`, **`StudyConfig`** [the hashed Phase-5 prereg artifact])
+- `synoptiq/training/dapt.py` — **DAPT**: data loader (+ `exclude_books` decontamination) + AMP loop
+- `synoptiq/data/study_design.py` — Phase-5 folds/census/overlap partition/prereg hashing
+- `synoptiq/data/redaction.py` — Phase-5 training-data builder (redaction pairs, fusion examples, dropout)
+- `synoptiq/evaluation/scoring.py` — teacher-forced per-token NLL + log-mean-exp bottleneck estimator
+- `synoptiq/evaluation/verdict.py` — **M3/M4 decision core**: `minor_agreement_test` (E2 excess-lift),
+  `did_contrast`, `null_threshold` (G3 floor), `channel_recovery_gate` (G1/G2) — pure, unit-tested
+- `synoptiq/evaluation/model_comparison.py` — lift/DiD statistics + MDE/power simulation (Track B)
+- `synoptiq/evaluation/contamination.py` — memorization audit (perplexity gap, exact-match)
+- `synoptiq/evaluation/reconstruction.py` — bag-of-tokens F1 vs nearest-witness (Track A grading)
+- `synoptiq/evaluation/bootstrap.py` — pericope-grouped + paired cluster bootstrap CIs; `statistic_ci`,
+  `difference_in_differences` (real-valued, for NLL-lift verdicts)
 - `scripts/_cli_utils.py` — canonical `detect_device()`; all training/eval scripts import it
-- `scripts/{train_dapt,eval_baseline,run_ablation}.py` — DAPT training, zero-shot vs DAPT eval, ablation
-- `modal/app_dapt.py` — Phase 2A Modal: `upload_data`, `start_training`, `run_ablation`, `train_and_eval_full_ft`
+- `scripts/{train_dapt,eval_baseline}.py` — DAPT (+`--no-synoptics`), zero-shot vs DAPT eval
+- `scripts/{prepare_study,audit_contamination,train_redactors,train_fid,run_mai_test}.py` — Phase-5 CLIs
+- `modal/app_dapt.py` — Modal: `start_training`, `start_training_ns`; `modal/app_fid.py` —
+  `train_redactors`, `train_fid`, `train_fid_mai` (E2 model), `run_mai` (E2 verdict)
 - `docs/DIRECTION_NEGATIVE_RESULT.md` — the closed direction investigation (do not re-attempt)
+- `docs/SOURCE_CRITICISM_STUDY.md` — Phase-5 preregistration (design, gates, kill criteria, freeze block)
 
 ## Phase 2A results (Paper A)
 
@@ -237,10 +347,25 @@ corpus (SBLGNT + Apostolic Fathers ~1.5M tokens). LoRA adapters only (~3.7M trai
 W_q/W_v/W_o attention + W_o FFN). 70/30 Koine/Classical replay. 20K steps, 58 min on A10G. 96.62%
 POS, 81.34% lemma, 14 MB checkpoint.
 
-**Q Reconstruction** (Phase 5, next) = Fusion-in-Decoder: Matthew + Luke encoded independently →
-concatenated hidden states → decoder cross-attention. Train on the triple tradition (Mt+Lk →
-reconstruct Mark, ground truth available), then transfer to the double tradition to reconstruct
-proto-Q. Uses `Corpus.parallel_pairs` and the `fid_*` fields on `ModelConfig`.
+**Source-criticism study** (Phase 5, in progress — `docs/SOURCE_CRITICISM_STUDY.md`). Two tracks
+share one primitive: the **teacher-forced conditional NLL** `−log p(target | context)` (`synoptiq/
+evaluation/scoring.py`); every verdict is a paired difference of these on the *same* target, so
+length/style cancel (threat T1). **Redaction operators** (`models/redactor.py`): GreTa+NS+LoRA
+seq2seq models `p(target|source)` — R_Lk/R_Mt (forward) and G_Mt/G_Lk (inverse) — each a learned
+approximation of one evangelist's editing, fit on hypothesis-neutral triple-tradition pairs.
+**Track A = Fusion-in-Decoder** (`models/fid.py`): witnesses encoded independently → encoder states
+`torch.cat` along the sequence axis → one decoder cross-attends over the fusion. Trained on
+(Mt+Lk)→Mark (ground truth), transferred to the double tradition for proto-Q. **Source-dropout**
+training keeps one- and two-witness conditionals in the *same* weights (capacity-fairness rule).
+**Track B** compares those conditionals (E2 minor-agreement lift; E1 direct-vs-bottleneck channel)
+to weigh 2SH vs Farrer — never per-pair direction (`docs/DIRECTION_NEGATIVE_RESULT.md` stands).
+The E2 verdict (`evaluation/verdict.py` + `scripts/run_mai_test.py`) is a paired excess-lift:
+`NLL(Lk|Mk,control) − NLL(Lk|Mk,Mt)`, clustered over pericopes, plus the overlap-vs-rest DiD and
+the G3 null floor — all from the scoring path, no generation. **Fold-0 result (§3b): the operators
+learn strongly (~1-nat real-vs-mismatch gap), but Track A reconstruction is a bounded negative**
+(FiD F1 0.31 < nearest-witness 0.56; witnesses too close to Mark) → reconstruction demoted from
+headline to a reported limitation; the study leans on the operators + scoring verdicts.
+M0–M2 + M3/M4 code delivered (186 tests); remaining: GPU E2 verdict + CV, G1/G2/G4, M5 E1, M6 paper.
 
 **Interpretability** (Phase 7, later) = SHAP feature importance vs Hawkins (1899); BERTViz attention;
 multi-edition sensitivity (NA28/TR/Majority/WH).
