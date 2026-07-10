@@ -1353,3 +1353,39 @@ PERICOPE_GENRES: Final[dict[str, str]] = {
     # Resurrection
     **dict.fromkeys(["280", "281", "282", "283", "284", "285", "286"], "narrative"),
 }
+
+# ── Mark-Q overlap pericopes (Phase 5, E2 difference-in-differences) ───────────
+#
+# Pericopes in the triple tradition where Matthew and Luke are widely held to
+# preserve a *second* (Q) version of material Mark also carries. Under the
+# Two-Source Hypothesis, Matthew→Luke information *beyond Mark* is expected HERE
+# (both used Q) but nowhere else in the triple tradition (Lk ⟂ Mt | Mk). Under
+# Farrer, that excess information is expected uniformly. The E2 test contrasts
+# these two partitions, so genre/style/model confounds cancel (they hit both).
+#
+# This list is FROZEN before any double-tradition unblinding (see
+# docs/SOURCE_CRITICISM_STUDY.md §6). It is deliberately conservative and split into a
+# CORE set (undisputed across the literature) and an EXTENDED set (commonly
+# listed but more debated), so the DiD test can be reported at both scopes.
+#
+# Sources:
+#   Fleddermann, H. T. (1995). Mark and Q: A Study of the Overlap Texts. BETL 122.
+#   Kloppenborg, J. S. (2000). Excavating Q, ch. 1 (Mark-Q overlaps).
+#   Neirynck, F. (1974). The Minor Agreements of Matthew and Luke against Mark.
+#   Aland Synopsis marginal cross-references (15th ed.).
+# Aland pericope IDs below use SynoptiQ's own ALAND_PERICOPES keys above.
+
+MARK_Q_OVERLAP_CORE: Final[tuple[str, ...]] = (
+    "009",  # Preaching of John the Baptist (Mt 3:7-12 // Lk 3:7-9,15-17)
+    "012",  # Temptation of Jesus (Mk 1:12-13 vs the long Mt/Lk version)
+    "037",  # Beelzebul Controversy (Mt 12:22-30 // Mk 3:22-27 // Lk 11:14-23)
+    "045",  # Parable of the Mustard Seed (+ Leaven)
+    "057",  # Mission of the Twelve (Mk 6:7-13 // Q mission charge)
+)
+
+MARK_Q_OVERLAP_EXTENDED: Final[tuple[str, ...]] = (
+    "038",  # Demand for a Sign / Sign of Jonah
+    "075",  # Dispute about who is greatest
+    "077",  # On temptations to sin (millstone, salt sayings)
+    "145",  # Eschatological discourse (apocalyptic Q overlaps)
+)

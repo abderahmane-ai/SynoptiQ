@@ -40,6 +40,22 @@ KOINE_SOURCES: list[str] = ["sblgnt", "lxx", "apostolic"]
 # Sources for Classical Greek text (replay buffer anchor).
 CLASSICAL_SOURCES: list[str] = ["first1k"]
 
+# SBLGNT stores one file per NT book; the stem is the book abbreviation. This maps
+# canonical book names to those stems so the DAPT text can be decontaminated (the
+# synoptic gospels are held out to build KoineFormer-NS, which the source-criticism
+# study scores likelihoods with — see docs/SOURCE_CRITICISM_STUDY.md §5-T7).
+SBLGNT_BOOK_STEMS: dict[str, str] = {
+    "Matthew": "Matt",
+    "Mark": "Mark",
+    "Luke": "Luke",
+    "John": "John",
+}
+
+
+def sblgnt_stems_for_books(books: tuple[str, ...] | list[str]) -> frozenset[str]:
+    """Map canonical book names to the SBLGNT file stems to exclude from DAPT."""
+    return frozenset(SBLGNT_BOOK_STEMS.get(b, b) for b in books)
+
 # Replay buffer ratio: 70% Koine, 30% Classical.
 REPLAY_KOINE_RATIO: float = 0.70
 
@@ -54,7 +70,12 @@ DEFAULT_MAX_LENGTH: int = 512
 # ── Text extraction ─────────────────────────────────────────────────────────
 
 
-def _extract_text_from_dir(data_dir: Path, source_name: str) -> Iterator[str]:
+def _extract_text_from_dir(
+    data_dir: Path,
+    source_name: str,
+    *,
+    exclude_stems: frozenset[str] = frozenset(),
+) -> Iterator[str]:
     """Yield Greek text chunks from a downloaded corpus directory.
 
     Handles plain-text (``*.txt``), XML (``*.xml``), and TEI XML files.
@@ -63,6 +84,10 @@ def _extract_text_from_dir(data_dir: Path, source_name: str) -> Iterator[str]:
     Args:
         data_dir: Root ``data/raw/`` directory.
         source_name: Subdirectory name (e.g. ``"sblgnt"``, ``"lxx"``).
+        exclude_stems: File stems to skip entirely (case-sensitive), e.g.
+            ``{"Matt", "Mark", "Luke"}`` to hold the synoptic gospels out of DAPT.
+            SBLGNT stores one file per book, so a stem filter cleanly removes a
+            whole book (including its apparatus copy under ``sblgntapp/``).
 
     Yields:
         Greek text chunks (strings of 50-500 chars).
@@ -74,6 +99,7 @@ def _extract_text_from_dir(data_dir: Path, source_name: str) -> Iterator[str]:
 
     skip_names = {"README", "LICENSE", "NOTES", "Makefile", "makefile", "Pipfile"}
     text_files = 0
+    excluded_files = 0
 
     for filepath in sorted(src_dir.rglob("*")):
         if filepath.is_dir():
@@ -81,6 +107,9 @@ def _extract_text_from_dir(data_dir: Path, source_name: str) -> Iterator[str]:
         if filepath.suffix not in {".txt", ".xml", ".tei", ".tf"}:
             continue
         if any(s in filepath.name for s in skip_names):
+            continue
+        if filepath.stem in exclude_stems:
+            excluded_files += 1
             continue
 
         try:
@@ -112,7 +141,7 @@ def _extract_text_from_dir(data_dir: Path, source_name: str) -> Iterator[str]:
 
     _LOG.info(
         "text extraction complete",
-        extra={"source": source_name, "text_files": text_files},
+        extra={"source": source_name, "text_files": text_files, "excluded_files": excluded_files},
     )
 
 
@@ -141,6 +170,7 @@ class DAPTIterableDataset(IterableDataset):
         koine_ratio: float = REPLAY_KOINE_RATIO,
         noise_density: float = NOISE_DENSITY,
         mean_span_length: float = NOISE_MEAN_SPAN_LENGTH,
+        exclude_book_stems: frozenset[str] = frozenset(),
     ) -> None:
         self._data_dir = data_dir
         self._tokenizer = tokenizer
@@ -148,6 +178,7 @@ class DAPTIterableDataset(IterableDataset):
         self._koine_ratio = koine_ratio
         self._noise_density = noise_density
         self._mean_span_length = mean_span_length
+        self._exclude_book_stems = exclude_book_stems
 
         # Ensure pad token is set (required for batching).
         if tokenizer.pad_token is None:
@@ -209,7 +240,9 @@ class DAPTIterableDataset(IterableDataset):
         """Yield text chunks from the given source directories, cycled forever."""
         while True:
             for source_name in sources:
-                for chunk in _extract_text_from_dir(self._data_dir, source_name):
+                for chunk in _extract_text_from_dir(
+                    self._data_dir, source_name, exclude_stems=self._exclude_book_stems
+                ):
                     yield chunk
 
     def _tokenize_with_noise(
@@ -262,6 +295,9 @@ class DAPTConfig:
         max_length: Maximum token length for input sequences.
         use_amp: Enable Automatic Mixed Precision (FP16) for ~2× speedup.
         output_dir: Directory for checkpoints and logs.
+        exclude_books: Canonical book names to hold out of the DAPT text (e.g.
+            ``("Matthew", "Mark", "Luke")`` produces the contamination-free
+            KoineFormer-NS used for likelihood scoring in the source-criticism study).
     """
 
     batch_size: int = 8
@@ -274,6 +310,7 @@ class DAPTConfig:
     max_length: int = 512
     use_amp: bool = True
     output_dir: Path = field(default_factory=lambda: Path("outputs/dapt"))
+    exclude_books: tuple[str, ...] = ()
 
 
 # ── Trainer ──────────────────────────────────────────────────────────────────
@@ -359,8 +396,12 @@ class DAPTTrainer:
         if self._scheduler is None:
             self._scheduler = CosineAnnealingLR(self._optimizer, T_max=config.max_steps)
 
+        exclude_stems = sblgnt_stems_for_books(config.exclude_books)
+        if exclude_stems:
+            _LOG.info("DAPT decontamination active", extra={"exclude_books": config.exclude_books})
         dataset = DAPTIterableDataset(
             self._data_dir, self._tokenizer, max_length=config.max_length,
+            exclude_book_stems=exclude_stems,
         )
         data_iter = iter(dataset)
 
@@ -562,7 +603,10 @@ class DAPTTrainer:
     def _validate(self, *, num_samples: int = 20) -> float:
         """Compute mean loss on *num_samples* fresh chunks."""
         self._model.eval()
-        dataset = DAPTIterableDataset(self._data_dir, self._tokenizer, max_length=512)
+        dataset = DAPTIterableDataset(
+            self._data_dir, self._tokenizer, max_length=512,
+            exclude_book_stems=sblgnt_stems_for_books(self._config.exclude_books),
+        )
         data_iter = iter(dataset)
 
         total = 0.0

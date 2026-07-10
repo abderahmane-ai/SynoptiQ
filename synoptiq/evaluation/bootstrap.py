@@ -52,6 +52,27 @@ class PairedBootstrapResult:
     ci_level: float
 
 
+@dataclass(frozen=True)
+class StatisticResult:
+    """Clustered bootstrap of a real-valued per-unit statistic (e.g. an NLL delta).
+
+    Unlike :class:`BootstrapResult` (accuracy of 0/1 correctness), this summarises
+    the *mean of an arbitrary real statistic* — used for Phase-5 likelihood-lift
+    tests, where each pericope contributes a signed nats-per-token difference and
+    the sign of the mean is the verdict.
+    """
+
+    estimate: float          # observed mean of the statistic on the full sample
+    ci_low: float
+    ci_high: float
+    boot_mean: float
+    boot_std: float
+    prob_positive: float     # fraction of resamples with mean > 0 (a one-sided p-proxy)
+    n_units: int
+    n_samples: int
+    ci_level: float
+
+
 def _as_correct(y_true: ArrayLike, y_pred: ArrayLike) -> np.ndarray:
     """Return a boolean correctness vector, validating shape agreement."""
     true = np.asarray(y_true)
@@ -129,6 +150,121 @@ def accuracy_ci(
         boot_std=float(accs.std()),
         n_units=n_units,
         n_samples=n,
+        ci_level=ci_level,
+    )
+
+
+def statistic_ci(
+    values: ArrayLike,
+    *,
+    groups: ArrayLike | None = None,
+    n_resamples: int = 10_000,
+    ci_level: float = 0.95,
+    seed: int = 42,
+) -> StatisticResult:
+    """Clustered bootstrap of the mean of a real-valued per-sample statistic.
+
+    This is the workhorse for Phase-5 verdicts: pass one signed value per sample
+    (typically one per pericope, e.g. the excess likelihood lift ``Δ_p − Δ̃_p``),
+    optionally grouped, and get a percentile CI on the mean plus the fraction of
+    resamples in which the mean is strictly positive.
+
+    Args:
+        values: Real-valued statistic per sample, shape [N].
+        groups: Group id per sample (cluster unit). ``None`` → per-sample bootstrap.
+        n_resamples: Number of bootstrap resamples.
+        ci_level: Central interval mass.
+        seed: RNG seed.
+
+    Returns:
+        StatisticResult with the observed mean, CI, and ``prob_positive``.
+    """
+    vals = np.asarray(values, dtype=np.float64)
+    if vals.ndim != 1:
+        msg = f"expected 1-D values, got shape {vals.shape}"
+        raise ValueError(msg)
+    n = vals.shape[0]
+    if n == 0:
+        msg = "cannot bootstrap an empty sample"
+        raise ValueError(msg)
+    _, members = _group_index(groups, n)
+    n_units = len(members)
+
+    rng = np.random.default_rng(seed)
+    means = np.empty(n_resamples, dtype=np.float64)
+    for r in range(n_resamples):
+        drawn = rng.integers(0, n_units, size=n_units)
+        idx = np.concatenate([members[g] for g in drawn])
+        means[r] = vals[idx].mean()
+
+    alpha = 1.0 - ci_level
+    lo, hi = np.quantile(means, [alpha / 2, 1.0 - alpha / 2])
+    return StatisticResult(
+        estimate=float(vals.mean()),
+        ci_low=float(lo),
+        ci_high=float(hi),
+        boot_mean=float(means.mean()),
+        boot_std=float(means.std()),
+        prob_positive=float((means > 0).mean()),
+        n_units=n_units,
+        n_samples=n,
+        ci_level=ci_level,
+    )
+
+
+def difference_in_differences(
+    values_a: ArrayLike,
+    values_b: ArrayLike,
+    *,
+    groups_a: ArrayLike | None = None,
+    groups_b: ArrayLike | None = None,
+    n_resamples: int = 10_000,
+    ci_level: float = 0.95,
+    seed: int = 42,
+) -> StatisticResult:
+    """Clustered bootstrap of ``mean(values_a) − mean(values_b)`` for two disjoint groups.
+
+    The E2 difference-in-differences statistic: ``values_a`` is the per-pericope
+    likelihood lift on Mark-Q overlap pericopes, ``values_b`` the lift on the
+    rest. A positive delta with a CI excluding 0 means the lift concentrates in
+    the overlap partition — the 2SH prediction. Because the two partitions are
+    resampled independently each iteration, the interval reflects the (small)
+    number of overlap units, which is the real power bottleneck.
+
+    Returns:
+        StatisticResult whose ``estimate`` is the difference of means and
+        ``n_units`` the total number of resampled clusters across both groups.
+    """
+    va = np.asarray(values_a, dtype=np.float64)
+    vb = np.asarray(values_b, dtype=np.float64)
+    if va.ndim != 1 or vb.ndim != 1:
+        msg = "expected 1-D value arrays"
+        raise ValueError(msg)
+    if va.shape[0] == 0 or vb.shape[0] == 0:
+        msg = "cannot bootstrap an empty group"
+        raise ValueError(msg)
+    _, members_a = _group_index(groups_a, va.shape[0])
+    _, members_b = _group_index(groups_b, vb.shape[0])
+    na, nb = len(members_a), len(members_b)
+
+    rng = np.random.default_rng(seed)
+    deltas = np.empty(n_resamples, dtype=np.float64)
+    for r in range(n_resamples):
+        ia = np.concatenate([members_a[g] for g in rng.integers(0, na, size=na)])
+        ib = np.concatenate([members_b[g] for g in rng.integers(0, nb, size=nb)])
+        deltas[r] = va[ia].mean() - vb[ib].mean()
+
+    alpha = 1.0 - ci_level
+    lo, hi = np.quantile(deltas, [alpha / 2, 1.0 - alpha / 2])
+    return StatisticResult(
+        estimate=float(va.mean() - vb.mean()),
+        ci_low=float(lo),
+        ci_high=float(hi),
+        boot_mean=float(deltas.mean()),
+        boot_std=float(deltas.std()),
+        prob_positive=float((deltas > 0).mean()),
+        n_units=na + nb,
+        n_samples=va.shape[0] + vb.shape[0],
         ci_level=ci_level,
     )
 

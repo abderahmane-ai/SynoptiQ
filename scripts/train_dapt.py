@@ -71,6 +71,13 @@ def _build_parser() -> argparse.ArgumentParser:
                         help="Resume from a checkpoint directory")
     parser.add_argument("--smoke-test", action="store_true",
                         help="Run 100 steps on CPU to verify the pipeline")
+    parser.add_argument("--exclude-books", nargs="*", default=None,
+                        metavar="BOOK",
+                        help="Canonical book names to hold out of DAPT text "
+                             "(e.g. Matthew Mark Luke)")
+    parser.add_argument("--no-synoptics", action="store_true",
+                        help="Build KoineFormer-NS: exclude Matthew/Mark/Luke and "
+                             "default the output dir to outputs/dapt_ns")
     return parser
 
 
@@ -87,6 +94,14 @@ def main() -> int:
         args.batch_size = 2
         args.lr = 5e-4  # higher LR for quick convergence
         args.device = "cpu"
+
+    # Decontamination: --no-synoptics is shorthand for excluding the three gospels
+    # and writing to a distinct output dir so the NS adapters never clobber KoineFormer.
+    exclude_books: tuple[str, ...] = tuple(args.exclude_books or ())
+    if args.no_synoptics:
+        exclude_books = ("Matthew", "Mark", "Luke")
+        if args.output_dir == Path("outputs/dapt"):
+            args.output_dir = Path("outputs/dapt_ns")
 
     device = args.device or detect_device()
     data_dir: Path = args.data_dir.resolve()
@@ -126,7 +141,10 @@ def main() -> int:
         grad_accum_steps=args.grad_accum,
         max_length=args.max_length,
         output_dir=output_dir,
+        exclude_books=exclude_books,
     )
+    if exclude_books:
+        _LOG.info("decontaminated DAPT (KoineFormer-NS)", extra={"excluded": exclude_books})
 
     # ── Train ───────────────────────────────────────────────────────────
     trainer = DAPTTrainer(model, data_dir, tokenizer, config, device=device)

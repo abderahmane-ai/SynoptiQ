@@ -7,7 +7,9 @@ import pytest
 
 from synoptiq.evaluation.bootstrap import (
     accuracy_ci,
+    difference_in_differences,
     paired_accuracy_delta,
+    statistic_ci,
 )
 
 
@@ -104,6 +106,63 @@ def test_grouped_paired_delta_groups_swapped_halves() -> None:
     )
     assert res.n_units == 10
     assert res.delta == pytest.approx(1.0)
+
+
+def test_statistic_ci_recovers_positive_mean() -> None:
+    rng = np.random.default_rng(10)
+    values = rng.normal(0.5, 0.1, size=60)  # clearly positive
+    res = statistic_ci(values, n_resamples=2000, seed=11)
+    assert res.estimate == pytest.approx(values.mean())
+    assert res.ci_low > 0.0
+    assert res.prob_positive > 0.99
+
+
+def test_statistic_ci_null_straddles_zero() -> None:
+    rng = np.random.default_rng(12)
+    values = rng.normal(0.0, 1.0, size=80)
+    res = statistic_ci(values, n_resamples=2000, seed=13)
+    assert res.ci_low < 0.0 < res.ci_high
+    assert 0.2 < res.prob_positive < 0.8
+
+
+def test_statistic_ci_grouped_is_wider() -> None:
+    # Each group internally consistent → fewer independent units → wider CI.
+    n_groups, per = 10, 6
+    rng = np.random.default_rng(14)
+    group_vals = rng.normal(0.3, 0.5, size=n_groups)
+    values, groups = [], []
+    for g in range(n_groups):
+        values.extend([group_vals[g]] * per)
+        groups.extend([g] * per)
+    values = np.array(values)
+    groups = np.array(groups)
+    grouped = statistic_ci(values, groups=groups, n_resamples=2000, seed=15)
+    flat = statistic_ci(values, n_resamples=2000, seed=15)
+    assert grouped.n_units == n_groups
+    assert (grouped.ci_high - grouped.ci_low) > (flat.ci_high - flat.ci_low)
+
+
+def test_did_positive_when_group_a_higher() -> None:
+    rng = np.random.default_rng(16)
+    a = rng.normal(0.5, 0.1, size=8)   # overlap partition, high lift
+    b = rng.normal(0.0, 0.1, size=50)  # rest, no lift
+    res = difference_in_differences(a, b, n_resamples=3000, seed=17)
+    assert res.estimate == pytest.approx(a.mean() - b.mean())
+    assert res.ci_low > 0.0
+    assert res.prob_positive > 0.95
+
+
+def test_did_null_straddles_zero() -> None:
+    rng = np.random.default_rng(18)
+    a = rng.normal(0.0, 0.2, size=6)
+    b = rng.normal(0.0, 0.2, size=55)
+    res = difference_in_differences(a, b, n_resamples=3000, seed=19)
+    assert res.ci_low < 0.0 < res.ci_high
+
+
+def test_statistic_ci_empty_raises() -> None:
+    with pytest.raises(ValueError, match="empty"):
+        statistic_ci(np.array([], dtype=float))
 
 
 def test_shape_mismatch_raises() -> None:

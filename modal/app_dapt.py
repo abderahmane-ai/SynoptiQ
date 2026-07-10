@@ -210,6 +210,83 @@ def start_training() -> None:
     print(f"{'='*50}")
 
 
+# ── Step 2-NS: Decontaminated DAPT (KoineFormer-NS) ─────────────────────────
+
+
+@app.function(  # type: ignore[misc]
+    gpu=GPU_TYPE,
+    image=_build_image(),
+    volumes={
+        "/data": modal.Volume.from_name(DATA_VOLUME, create_if_missing=True),
+        "/outputs": modal.Volume.from_name(OUTPUT_VOLUME, create_if_missing=True),
+    },
+    timeout=TIMEOUT_SECONDS,
+) if modal is not None else None
+def start_training_ns() -> None:
+    """DAPT with the synoptic gospels held out — produces KoineFormer-NS.
+
+    Identical recipe to ``start_training`` (same steps, LR, replay), but Matthew,
+    Mark and Luke are excluded from the DAPT text so the model cannot memorize the
+    source-criticism study's evaluation gospels. Checkpoints land in a separate
+    ``/outputs/dapt_ns`` dir so the contaminated KoineFormer is never overwritten.
+    See docs/SOURCE_CRITICISM_STUDY.md §5-T7 (threat T7) and milestone M1.
+    """
+    from synoptiq.models.koineformer import KoineFormer
+    from synoptiq.training.dapt import DAPTConfig, DAPTTrainer
+    from transformers import AutoTokenizer
+
+    data_dir = Path("/data/raw")
+    output_dir = Path("/outputs/dapt_ns")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    device = "cuda"
+    print(f"Loading KoineFormer on {GPU_TYPE} (no-synoptics run)...")
+    model = KoineFormer.from_pretrained(device=device)
+    tokenizer = AutoTokenizer.from_pretrained(model.model_id)
+    tokenizer.pad_token = tokenizer.eos_token
+
+    ckpt_dirs = sorted(
+        [d for d in output_dir.iterdir() if d.is_dir() and d.name.startswith("step-")],
+        key=lambda d: int(d.name.split("-")[1]) if d.name.split("-")[1].isdigit() else 0,
+    )
+    if ckpt_dirs:
+        print(f"Found checkpoint at {ckpt_dirs[-1].name} — will auto-resume")
+
+    config = DAPTConfig(
+        batch_size=8,
+        learning_rate=1e-4,
+        warmup_steps=500,
+        max_steps=20_000,
+        val_steps=500,
+        save_steps=2_000,
+        grad_accum_steps=1,
+        max_length=512,
+        use_amp=True,
+        output_dir=output_dir,
+        exclude_books=("Matthew", "Mark", "Luke"),
+    )
+
+    output_vol = modal.Volume.from_name(OUTPUT_VOLUME) if modal is not None else None
+
+    print(f"Starting decontaminated DAPT: {config.max_steps} steps, "
+          f"excluding {config.exclude_books}")
+    print("Data: /data/raw (Mt/Mk/Lk held out)  |  Checkpoints: /outputs/dapt_ns")
+    print(f"{'='*50}")
+
+    trainer = DAPTTrainer(model, data_dir, tokenizer, config, device=device)
+    history = trainer.run(resume=True, commit_volume=True, volume=output_vol)
+
+    print(f"\n{'='*50}")
+    print("DAPT-NS COMPLETE")
+    print(f"  Final loss: {history['loss'][-1]:.4f}  |  Best: {min(history['loss']):.4f}")
+    print("  Download (final adapters only, fresh target dir):")
+    print(f"    rm -rf models/koineformer_ns && modal volume get {OUTPUT_VOLUME} "
+          "dapt_ns/final models/koineformer_ns/final")
+    print("  Next: python scripts/audit_contamination.py --compare-adapters "
+          "models/koineformer/dapt/final models/koineformer_ns/final")
+    print(f"{'='*50}")
+
+
 # ── Step 3: Ablation (LoRA vs full fine-tune) ──────────────────────────────
 
 

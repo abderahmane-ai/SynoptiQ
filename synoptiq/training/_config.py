@@ -133,6 +133,60 @@ class TrainingConfig:
 
 
 @dataclass(frozen=True)
+class StudyConfig:
+    """Preregistration parameters for the source-criticism study (Q reconstruction
+    + 2SH-vs-Farrer source identification).
+
+    This dataclass IS the preregistration artifact. Its ``dataclasses.asdict``
+    JSON is hashed (see ``synoptiq.data.study_design.config_hash``) and the hash is
+    committed to ``docs/SOURCE_CRITICISM_STUDY.md`` §10 *before* the double tradition
+    is ever scored. ``scripts/run_channel_test.py`` refuses to run unless the live
+    config hash matches the frozen one — this is the mechanical guard against the
+    post-hoc analysis drift that undid the earlier direction work.
+
+    Nothing here selects a decision *threshold* by hand: E2/E1 claim thresholds
+    are DERIVED from the null-control noise floor (gate G3) and the empirical
+    power curve, both computed on known-answer data before unblinding.
+    """
+
+    # ── Cross-validation over the triple tradition ────────────────────────────
+    # Folds are over *full triples* (pericopes with Mt, Mk and Lk all present).
+    n_folds: int = 5
+    fold_seed: int = 20260707  # date the direction cleanup closed — never re-rolled
+
+    # ── Latent-source Monte-Carlo (E1 bottleneck branch) ──────────────────────
+    # p(Lk | Mt) under 2SH marginalises over reconstructed sources G_Mt(Mt).
+    # log-mean-exp over K importance samples; sensitivity swept over the tuple.
+    latent_samples: tuple[int, ...] = (1, 5, 10)
+
+    # ── Operator-transfer sensitivity (threat T6, Hägerland 2019) ─────────────
+    # Interpolate R_Lk (Luke-redacts-Mark operator) with a free-composition
+    # Lukan LM; verdict is only claimed if stable across this grid.
+    fidelity_grid: tuple[float, ...] = (0.0, 0.25, 0.5, 0.75, 1.0)
+
+    # ── Statistics ────────────────────────────────────────────────────────────
+    n_bootstrap: int = 10_000
+    ci_level: float = 0.95
+    bootstrap_seed: int = 42
+    # Power / kill-criterion K2: E1 (double tradition) is only run if the
+    # empirical detection rate at the DT sample size clears this bar.
+    power_target: float = 0.80
+    power_n_sims: int = 2000
+
+    # ── Kill criteria budget (K1) ─────────────────────────────────────────────
+    max_gate_iterations: int = 2  # architecture re-tries before publishing a null
+
+    # ── Text editions for the assimilation ablation (threat T8) ───────────────
+    editions: tuple[str, ...] = ("sblgnt", "wh", "robinson_pierpont")
+
+    # ── Output locations ──────────────────────────────────────────────────────
+    output_dir: Path = Path("outputs/study")
+    folds_path: Path = Path("outputs/study/folds.json")
+    gates_dir: Path = Path("outputs/study/gates")
+    unblind_sentinel: Path = Path("outputs/study/DT_UNBLINDED")
+
+
+@dataclass(frozen=True)
 class DAPTConfig:
     """Domain-adaptive pre-training configuration (Phase 2).
 
