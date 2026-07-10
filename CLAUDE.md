@@ -30,6 +30,71 @@ Rules:
 
 ## Session handoff (read me first)
 
+### 2026-07-10 — Koine-T5 delivered + bug-fixed; PAPER PIVOT to the honest paper
+
+**Branch renamed `cleanup/remove-direction-hypotheses` → `feat/phase5-koine-t5`** (not `main`,
+not pushed). **Two commits landed:** `f0115aa` (Phase-5 M0–M4 code + tests + preregistration +
+DAPT-decontamination) and `8cbc8a1` (Koine-T5 trainer + docs). 186 tests pass; repo is pristine
+(zero cache/`.DS_Store`/junk); all `.md` files correctly tracked (the two root `*_PLAN.md` are
+intentionally git-ignored — do NOT archive them).
+
+**Koine-T5** = the standalone multitask model (was root `train_greta_ultimate.py`, renamed +
+relocated to **`modal/app_koine_t5.py`**, sibling of `app_dapt.py` which trained KoineFormer #1).
+Model name `koine-t5`; entrypoints `train`/`generate`/`build_tokenizer`; outputs to the
+`koine-t5-outputs` volume. See the "Koine-T5" section below.
+
+**⚠️ UNCOMMITTED fixes in `modal/app_koine_t5.py` (this session, AFTER `8cbc8a1`) — commit them
+or they live only locally.** Found while debugging the first GPU runs (POS-EM was stuck at 0.000):
+- **LR-schedule unit bug (the cause):** `scheduler.step()` fires per *optimizer* update, so
+  `LambdaLR` got optimizer-steps while `WARMUP_STEPS`/`MAX_STEPS` were micro-steps → warmup ran
+  8× too long (4,800 micro-steps = 40% of training) and cosine never annealed. `lr_lambda` now
+  converts (`warmup_opt = WARMUP_STEPS // GRAD_ACCUM`, etc.). Verified numerically.
+- **T5 eval used left-padding** (a decoder-only requirement) → corrupted the encoder → garbage
+  eval. Now right-padded (T5 default).
+- **"6.4 epochs" was a unit error → really ~0.8 epochs** (~55% of the 15,041 POS pool). Comment
+  + startup print corrected.
+- **POS-EM eval false 0.000 (case-fold) — the bug that hid everything:** GreTa's tokenizer
+  LOWERCASES all text (`N-`→`n-`), so the model emits lowercase tags while gold is upper-case
+  MorphGNT → a naive `==` pins EM/token-acc to exactly 0.000 even though the model IS learning.
+  Fixed: `_batch_pos_predict` upper-cases preds (MorphGNT codes are case-unique → lossless).
+  See memory `greta-tokenizer-lowercases-pos-eval`.
+- Added an **eval diagnostic** (prints `gold:`/`pred:` — this is what caught the case-fold);
+  **bumped the run fingerprint to `rev: 3`** (rev 2 = LR + T5-padding fixes; rev 3 = case-fold
+  fix) so superseded checkpoints are auto-ignored and a rerun starts clean.
+- **Prose cleanup:** dropped `Bulletproof`/`maximalist`/`SOTA`/`Phase N:` slop; fixed the
+  synoptic-pool count (`~401` → **155**; 401 was the old *total*).
+- **Also uncommitted:** the resume path restores only adapter weights, not optimizer/scheduler
+  state — fine for a fresh run, suboptimal on crash-resume (flagged, not fixed).
+
+**First run outcome (2026-07-10, `MAX_STEPS=12000`, abandoned):** LR fix CONFIRMED (lr peaks at
+step 600; loss 5.4→1.3) and the diagnostic showed the model genuinely learning POS (degenerate
+`n- n- n-` → varied `rp d- rp v-`) — but POS-EM read 0.000 throughout, entirely the **case-fold**
+bug above. Superseded by the rev-3 rerun below. graphify graph was refreshed this session
+(code-only AST update; koine-t5 + Phase-5 now in it).
+
+**Rev-3 rerun DONE (2026-07-10, `MAX_STEPS=30000`): Koine-T5 is trained and healthy.** All three
+fixes confirmed in the wild (lr annealed to 0 exactly at 30000; POS-EM real, not 0.000; `best/`
+selection worked). **Best checkpoint = step 28000: pooled PROIEL-dev POS token-acc 0.9169 / EM
+0.686; NT tok 0.966 / EM 0.852; Classical tok 0.877 / EM 0.520** (n=250 each). NT token-acc 96.6%
+matches the KoineFormer linear probe's 96.62% — but via free seq2seq *generation* and on a
+different eval set (PROIEL dev vs SynoptiQ test), so cite as comparable, not identical. Curve was
+plateauing (26k 0.913 → 28k 0.917 → 30k 0.914): 30k steps ≈ converged, no rerun needed. The
+earlier "repetitive free-generation POS" worry is resolved (eval samples show varied, input-aligned
+tags). Adapters downloaded to `models/koine_t5/{best,final}/` (fetched file-by-file — the
+`modal volume get` directory quirk applies to this volume too); `best/metrics.json` has the
+numbers; run fingerprint `526985e86dbf`. Volume also holds `step-29000`/`step-30000`.
+
+**PAPER PIVOT (the next writing deliverable): the HONEST paper — see `docs/PAPER_PLAN.md`.**
+A collaborator's outline proposed conditional-NLL / perplexity-ratio **direction detection** as a
+"novel framework" — that is this project's CLOSED negative result (invalidated, not "unvalidated";
+`docs/DIRECTION_NEGATIVE_RESULT.md`). The honest paper = **negative result** (direction
+unrecoverable from text; argument + sign-flip demonstration) + **SynoptiQ corpus** + **Koine-T5** +
+the **preregistered E2 null** (minor agreements = text-critical noise). `docs/PAPER_PLAN.md` has the
+full section-by-section outline, evidence inventory, DONE-vs-NEEDED, and honest framing rules
+(no "theorem" overclaim; NLL ratios presented as *failed*; the null reported as a null).
+
+---
+
 **Direction + hypotheses code removed (2026-07-07); committed on branch
 `cleanup/remove-direction-hypotheses` (not yet merged to `main`); ruff F/E clean; 91 tests pass.**
 The whole Phase-3 direction scorer and Phase-6 Bayesian comparison were deleted after the
@@ -174,6 +239,7 @@ SynoptiQ/
 ├── data/ models/ outputs/  # All git-ignored (corpora, adapters, logs)
 ├── docs/DIRECTION_NEGATIVE_RESULT.md   # why copying-direction detection was closed
 ├── docs/SOURCE_CRITICISM_STUDY.md      # Phase 5 preregistration (Q reconstruction + source ID)
+├── docs/PAPER_PLAN.md                  # the honest paper plan (negative result + corpus + Koine-T5 + E2 null)
 ├── paper/project_overview.tex · {SYNOPTIQ_MASTER,IMPLEMENTATION}_PLAN.md (local planning, git-ignored)
 ```
 
@@ -197,6 +263,17 @@ trap); this cures the POS "task collapse" that afflicted the 401-example version
 Config-fingerprinted checkpoints prevent a stale run from resuming into a changed config. Standalone
 (no `synoptiq` imports). Run: `modal run modal/app_koine_t5.py::train` ·
 `python modal/app_koine_t5.py demo` · outputs to the `koine-t5-outputs` volume (`best/` + `final/`).
+
+**Status (2026-07-10): TRAINED + PUBLISHED** at
+[huggingface.co/ainouche-abderahmane/koine-t5](https://huggingface.co/ainouche-abderahmane/koine-t5)
+(CC BY-NC-SA 4.0; see the HuggingFace section for loading + task-prefix details).
+Rev-3 run (`MAX_STEPS=30000`) complete — best checkpoint
+(step 28000) at `models/koine_t5/best/`: PROIEL-dev POS token-acc **0.917 pooled / 0.966 NT /
+0.877 Classical** (EM 0.686 / 0.852 / 0.520). See the 2026-07-10 handoff for run details.
+The post-commit training-bug fixes (LR-schedule units, T5 eval right-padding, case-fold POS eval)
+are validated by this run but **still UNCOMMITTED** in `modal/app_koine_t5.py`. Koine-T5 is the
+honest paper's R2 (`docs/PAPER_PLAN.md` §5); next: `python modal/app_koine_t5.py demo
+models/koine_t5/best` for qualitative checks, and a HF model card if it ships with the paper.
 
 ## Current status
 
@@ -249,6 +326,7 @@ Config-fingerprinted checkpoints prevent a stale run from resuming into a change
   `train_redactors`, `train_fid`, `train_fid_mai` (E2 model), `run_mai` (E2 verdict)
 - `docs/DIRECTION_NEGATIVE_RESULT.md` — the closed direction investigation (do not re-attempt)
 - `docs/SOURCE_CRITICISM_STUDY.md` — Phase-5 preregistration (design, gates, kill criteria, freeze block)
+- `docs/PAPER_PLAN.md` — the honest paper plan (supersedes a collaborator's NLL-direction outline; §5 framing rules)
 
 ## Phase 2A results (Paper A)
 
@@ -298,6 +376,24 @@ base = AutoModelForSeq2SeqLM.from_pretrained("bowphs/GreTa")
 model = PeftModel.from_pretrained(base, "ainouche-abderahmane/koineformer").merge_and_unload()
 ```
 CC-BY-SA 4.0. 96.62% POS, 81.34% lemma, 14 MB adapter.
+
+### Model: ainouche-abderahmane/koine-t5 (published 2026-07-10)
+```python
+from peft import PeftModel
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+tokenizer = AutoTokenizer.from_pretrained("bowphs/GreTa")
+tokenizer.pad_token = "<pad>"; tokenizer.eos_token = "</s>"   # do NOT add [PAD]/resize
+tokenizer.add_special_tokens({"additional_special_tokens": [f"<extra_id_{i}>" for i in range(100)]})
+base = AutoModelForSeq2SeqLM.from_pretrained("bowphs/GreTa")
+model = PeftModel.from_pretrained(base, "ainouche-abderahmane/koine-t5")
+```
+**CC BY-NC-SA 4.0** (NC mirrors PROIEL's CC BY-NC-SA 3.0 — deliberate, decided 2026-07-10).
+Best checkpoint (step 28000), LoRA r=64, 27.1M params, 104 MB. Card examples are all
+locally verified real outputs. Task prefixes: `pos: ` / `lemma: ` / `synoptic mark_to_matt: ` /
+`synoptic mark_to_luke: ` / **denoise = NO prefix** (training corrupts raw text unprefixed;
+the old `denoise: ` prefix in `generate()` was a mismatch, fixed 2026-07-10). POS preds must
+be `.upper()`'d (GreTa lowercases). Note: HF dropped `text2text-generation` from official
+pipeline tags — the card uses `pipeline_tag: text-generation`.
 
 ### Dataset: ainouche-abderahmane/synoptiq-corpus
 ```python

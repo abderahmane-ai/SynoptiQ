@@ -10,9 +10,9 @@ single GreTa+LoRA model on FOUR balanced task pools simultaneously:
 
 The `pos`/`lemma`/`denoise` pools are fed by BOTH the Synoptic Gospel corpus AND the
 **UD_Ancient_Greek-PROIEL** treebank (New Testament Koine + Herodotus Classical, ~214K
-tokens). PROIEL is what cures the POS "task collapse": with only ~401 Gospel examples the
+tokens). PROIEL is what cures the POS "task collapse": with only a few hundred Gospel examples the
 pre-trained language prior dominated and `pos:` produced natural-language prose instead of
-tags. Every batch now samples every task pool (§ balanced sampling), so the ~401-example
+tags. Every batch now samples every task pool (§ balanced sampling), so the tiny (~155-example)
 synoptic pool can never be starved out (catastrophic forgetting), and POS gets tens of
 thousands of examples.
 
@@ -66,38 +66,45 @@ except ImportError:
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 DATA_VOLUME   = "synoptiq-data"          # reuse existing volume with the processed parquets
-OUTPUT_VOLUME = "koine-t5-outputs"    # separate volume — never overwrites old KoineFormer
+OUTPUT_VOLUME = "koine-t5-outputs"    # dedicated output volume for Koine-T5 adapters (best/ + final/)
 GPU_TYPE      = "A10G"
 TIMEOUT       = 86_400                   # 24 hours
 
 BASE_MODEL_ID = "bowphs/GreTa"           # T5-base fine-tuned on Ancient Greek
 
 # LoRA / model hyper-parameters
-LORA_R          = 32
-LORA_ALPHA      = 64
+LORA_R          = 64    # 2× the old rank — full expressivity for the 4-task shared adapter
+LORA_ALPHA      = 128   # kept at 2×r (standard LoRA scaling)
 LORA_DROPOUT    = 0.05
-MAX_SEQ_LEN     = 256   # 512 caused OOM on A10G; 256 gives same quality for Koine verse length
-BATCH_SIZE      = 4     # 1 example per task pool per micro-batch (see sample_balanced_batch)
-GRAD_ACCUM      = 8     # effective batch = 32 (8 per task per optimizer step)
+MAX_SEQ_LEN     = 256   # 512 OOM'd on A10G; 256 fits Koine verse length
+BATCH_SIZE      = 4     # micro-batch slots; filled ∝ TASK_WEIGHTS (see sample_balanced_batch)
+GRAD_ACCUM      = 8     # effective batch = 32
 LR              = 1e-4
 
-# ── Hyper-parameter recalibration for the ~214K-token PROIEL corpus ──────────────
-# The old MAX_STEPS=30_000 was calibrated for ~401 examples. The dominant new pools
-# (pos / lemma / denoise) each hold ~15K PROIEL sentences. With balanced sampling the
-# optimizer sees 8 examples PER TASK per step (effective batch 32 split across 4 pools),
-# so one epoch over the ~15K POS pool ≈ 15000/8 ≈ 1875 steps. We target ~6–7 epochs:
-#   12_000 steps × 8 pos-examples/step ÷ ~15K pool ≈ 6.4 epochs over POS/lemma/denoise.
-# That is ample for a low-capacity LoRA (r=32) to learn the abstract tag-output format and
-# unlearn the prose-collapse, without over-fitting. Warmup is a healthy ~5% of training.
-MAX_STEPS           = 12_000
-WARMUP_STEPS        = 600     # ~5% of MAX_STEPS
-SAVE_STEPS          = 1_000   # checkpoint cadence
-EVAL_STEPS          = 1_000   # POS-EM validation + best-checkpoint selection cadence
+# ── Step budget & task balance (calibrated for the ~214K-token PROIEL corpus) ────
+# Pools: pos/lemma/denoise ≈ 15K sentences each, synoptic ≈ 155. Sampling is WEIGHTED
+# (TASK_WEIGHTS below), not one-slot-per-task: pos and denoise each draw 3/8 of every micro-
+# batch, lemma and synoptic 1/8 each. With BATCH_SIZE=4 that is ≈1.5 pos + 1.5 denoise + 0.5
+# lemma + 0.5 synoptic per micro-step, so at MAX_STEPS the model sees roughly:
+#   pos     ≈ 1.5 × 30_000 / 15_041 ≈ 3.0 epochs   (the reported/validated task)
+#   denoise ≈ 1.5 × 30_000 / 15_084 ≈ 3.0 epochs   (the general-LM backbone)
+#   lemma   ≈ 0.5 × 30_000 / 15_041 ≈ 1.0 epoch    (easy; one pass suffices)
+#   synoptic≈ 0.5 × 30_000 / 155    ≈ 97×          (tiny pool, protected by upsampling)
+# 3 epochs is a proper POS budget (0.8 was below a majority-class baseline of 0.215). best/ is
+# selected on the eval curve, so over-shooting late steps is harmless — the peak is captured.
+# If POS token-acc is still climbing at the end, raise MAX_STEPS (bump `rev` to rerun clean).
+# All counts are MICRO-steps; lr_lambda converts to optimizer steps for the LR schedule.
+MAX_STEPS           = 30_000
+WARMUP_STEPS        = 1_500   # micro-steps; ~5% of MAX_STEPS (converted to opt-steps in lr_lambda)
+SAVE_STEPS          = 1_000   # checkpoint + resumable training-state cadence
+EVAL_STEPS          = 1_000   # POS validation + best-checkpoint selection cadence
 LOG_STEPS           = 100
+CKPT_KEEP           = 2       # retain only the N newest step-N checkpoints (older ones pruned)
 
 # POS/eval example shaping
 MAX_POS_WORDS       = 60      # cap PROIEL sentence length so pos/lemma input↔target stay aligned
-EVAL_MAX_PER_SUBSET = 250     # dev sentences per subset (NT / Classical) per eval — keeps eval fast
+EVAL_MAX_PER_SUBSET = 250     # dev sentences per subset (NT / Classical) per eval — 500 total
+EVAL_BATCH_SIZE     = 32      # sentences per generate() call; ~15x faster than batch=1 on A10G
 
 # Span-corruption hyper-parameters (T5 paper §3.1)
 NOISE_DENSITY         = 0.15
@@ -275,7 +282,7 @@ def _commit() -> None:
         modal.Volume.from_name(OUTPUT_VOLUME).commit()
 
 
-# ── Phase 1: Bulletproof Tokenizer Setup ──────────────────────────────────────
+# ── Tokenizer setup ──────────────────────────────────────
 
 def build_tokenizer():
     """Load the Koine-T5 tokenizer (bowphs/GreTa) and register the 100 T5 sentinel tokens.
@@ -310,7 +317,7 @@ def build_tokenizer():
 
 
 def load_model_with_lora(tokenizer, device: str = "cpu"):
-    """Load the Koine-T5 base (bowphs/GreTa) in bfloat16 with maximalist LoRA.
+    """Load the Koine-T5 base (bowphs/GreTa) in bfloat16 with LoRA on all attention + FFN projections.
 
     bfloat16 halves VRAM vs float32 (same exponent range so no overflow risk),
     which is the primary fix for A10G OOM at batch=4, seq_len=256.
@@ -334,7 +341,7 @@ def load_model_with_lora(tokenizer, device: str = "cpu"):
     # Update vocab_size so generate() uses the correct ceiling.
     base.config.vocab_size = len(tokenizer)  # 32103
 
-    # Maximalist LoRA on encoder + decoder (attention + FFN).
+    # LoRA on encoder + decoder (attention + FFN).
     # Includes both T5-v1.0 (wi/wo) and T5-v1.1 (wi_0/wi_1) FFN names.
     lora_config = LoraConfig(
         task_type=TaskType.SEQ_2_SEQ_LM,
@@ -359,7 +366,7 @@ def load_model_with_lora(tokenizer, device: str = "cpu"):
     return model
 
 
-# ── Phase 2: True T5 Span Corruption ──────────────────────────────────────────
+# ── T5 span corruption ──────────────────────────────────────────
 
 def _random_spans_noise_mask(length: int, noise_density: float, mean_span_len: float,
                               rng) -> list[bool]:
@@ -446,7 +453,7 @@ def apply_span_corruption(
     return corrupted, target
 
 
-# ── Phase 3a: PROIEL CoNLL-U loading ──────────────────────────────────────────
+# ── PROIEL CoNLL-U loading ──────────────────────────────────────────
 
 def iter_conllu_sentences(path: str | Path):
     """Yield (source, tokens) per sentence from a CoNLL-U file.
@@ -543,7 +550,7 @@ def build_proiel_eval(proiel_dir: str) -> list[dict]:
     return records
 
 
-# ── Phase 3b: Gospel corpus loading ───────────────────────────────────────────
+# ── Gospel corpus loading ───────────────────────────────────────────
 
 def load_synoptic_pairs(tokens_path: str, pericopes_path: str) -> tuple[list[dict], list[str]]:
     """Load parallel Synoptic pericopes from the processed corpus parquets.
@@ -552,7 +559,7 @@ def load_synoptic_pairs(tokens_path: str, pericopes_path: str) -> tuple[list[dic
       * examples  — instruction dicts (task, input_text, target_text) covering
                     pos / lemma / synoptic_mk_to_mt / synoptic_mk_to_lk
       * raw_texts — the raw Greek surface text of every book's pericope, for the
-                    denoise pool (Problem 4: denoise on RAW prose, never on POS/lemma strings)
+                    denoise pool (denoise trains on RAW Greek prose, never POS/lemma target strings)
     """
     import pandas as pd  # noqa: F401  (kept explicit for the Modal image)
 
@@ -629,7 +636,7 @@ def build_task_pools(tokens_path: str, pericopes_path: str,
     """Assemble the FOUR balanced task pools (denoise / pos / lemma / synoptic).
 
     Gospel corpus feeds all four; PROIEL feeds pos / lemma / denoise. The synoptic pool is
-    Gospel-only and tiny (~401) — it is protected at sample time by balanced upsampling.
+    Gospel-only and tiny (~155) — it is protected at sample time by balanced upsampling.
     """
     corpus_examples, corpus_raw = load_synoptic_pairs(tokens_path, pericopes_path)
 
@@ -656,31 +663,37 @@ def build_task_pools(tokens_path: str, pericopes_path: str,
     }
 
 
-# ── Phase 4: Balanced multi-task sampling ─────────────────────────────────────
+# ── Weighted multi-task sampling ─────────────────────────────────────
 
-# Fixed task order → deterministic round-robin over the batch slots.
-_TASK_ORDER = ("pos", "lemma", "synoptic", "denoise")
+# Task order + per-task sampling weights. pos and denoise are the two hard, high-value pools
+# (pos is the reported metric; denoise is the general-LM backbone) so they take the lion's share
+# of every micro-batch; lemma is easy and synoptic is tiny, so they get one share each. Weights
+# are relative — normalized against the non-empty pools at sample time.
+_TASK_ORDER  = ("pos", "lemma", "synoptic", "denoise")
+TASK_WEIGHTS = {"pos": 3.0, "lemma": 1.0, "synoptic": 1.0, "denoise": 3.0}
 
 
 def sample_balanced_batch(pools: dict[str, list[dict]], batch_size: int, rng_py) -> list[dict]:
-    """Draw a batch that contains EVERY non-empty task pool, regardless of pool sizes.
+    """Draw a weighted multi-task micro-batch (sampling WITH REPLACEMENT within each task).
 
-    Batch slots are assigned round-robin across the (non-empty) task pools and each slot is
-    filled by sampling WITH REPLACEMENT (`random.choice`). With-replacement is the correct
-    primitive here: a tiny pool (synoptic, ~401) must be able to fill its slot in every one of
-    hundreds of thousands of batches — `random.sample` (without replacement) draws distinct
-    items and cannot upsample a pool beyond its own size, so a minority task would be starved
-    and catastrophically forgotten. `random.choice` gives each item equal probability on every
-    draw (an unbiased estimate of the task's gradient) and never runs out.
+    Each of the `batch_size` slots independently picks a task ∝ TASK_WEIGHTS (restricted to the
+    non-empty pools), then fills it via `random.choice` on that pool. Two invariants matter:
+
+      * WITH-REPLACEMENT per task: a tiny pool (synoptic, ~155) must fill its slot across
+        hundreds of thousands of batches; `random.sample` cannot upsample beyond a pool's size
+        and would starve a minority task. `random.choice` gives every item equal probability on
+        every draw and never runs out.
+      * WEIGHTED, not one-slot-each: pos/denoise draw at 3/8 each, lemma/synoptic at 1/8 each.
+        Even the least-weighted task (synoptic, 1/8) appears ~4× per optimizer step (32 draws) —
+        far above the frequency at which a task is catastrophically forgotten — so up-weighting
+        pos triples its gradient at no cost to the minority tasks.
     """
     active = [t for t in _TASK_ORDER if pools.get(t)]
     if not active:
         return []
-    batch: list[dict] = []
-    for i in range(batch_size):
-        task = active[i % len(active)]
-        batch.append(rng_py.choice(pools[task]))
-    return batch
+    weights = [TASK_WEIGHTS[t] for t in active]
+    tasks   = rng_py.choices(active, weights=weights, k=batch_size)
+    return [rng_py.choice(pools[t]) for t in tasks]
 
 
 def _collate_batch(examples: list[dict], tokenizer, rng, max_len: int = MAX_SEQ_LEN):
@@ -753,34 +766,56 @@ def _collate_batch(examples: list[dict], tokenizer, rng, max_len: int = MAX_SEQ_
     }
 
 
-# ── Phase 4b: POS Exact-Match evaluation (greedy decoding) ────────────────────
+# ── POS Exact-Match evaluation (batched greedy decoding) ────────────
 
-def _greedy_pos_predict(model, tokenizer, greek_text: str, device: str) -> list[str]:
-    """Greedy-decode `pos: <text>` → list of predicted tag strings.
+def _batch_pos_predict(model, tokenizer, texts: list[str], device: str) -> list[list[str]]:
+    """Batched greedy-decode `pos: <text>` for a list of sentences.
 
-    Greedy (num_beams=1, do_sample=False) with NO repetition penalties: POS tag sequences
-    legitimately repeat (e.g. `RA N- RA N-`), and contrastive search / no_repeat_ngram would
-    corrupt them.
+    Right-padded (the tokenizer default): T5 is encoder-decoder — its encoder consumes
+    input_ids with an attention_mask, so left-padding (a decoder-only requirement) is
+    unnecessary and actively corrupts T5's relative-position encoding, producing garbage
+    generations. Do NOT left-pad here.
+    NO repetition penalties — POS tags legitimately repeat (e.g. `RA N- RA N-`).
+
+    Returns a list of predicted-tag lists, one per input sentence.
     """
     import torch
 
-    n_words = len(greek_text.split())
-    inputs = tokenizer("pos: " + greek_text, return_tensors="pt", truncation=True,
-                       max_length=MAX_SEQ_LEN).to(device)
+    # Determine a per-batch max_new_tokens from the longest sentence in this chunk
+    max_words = max(len(t.split()) for t in texts)
+    max_new = min(200, max_words * 4 + 10)
+
+    encoded = tokenizer(
+        ["pos: " + t for t in texts],
+        return_tensors="pt",
+        padding=True,
+        truncation=True,
+        max_length=MAX_SEQ_LEN,
+    ).to(device)
+
     with torch.no_grad():
         out = model.generate(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            max_new_tokens=min(200, n_words * 4 + 10),
+            input_ids=encoded["input_ids"],
+            attention_mask=encoded["attention_mask"],
+            max_new_tokens=max_new,
             num_beams=1,
             do_sample=False,
         )
-    return tokenizer.decode(out[0], skip_special_tokens=True).split()
+
+    # GreTa's SentencePiece tokenizer case-folds everything (Ἀρχὴ→ἀρχὴ, N-→n-), so the model
+    # is trained on — and emits — lowercase tags. Upper-case them back: MorphGNT codes are
+    # case-unique, so this is lossless and lets us score against the upper-case gold.
+    return [
+        [t.upper() for t in tokenizer.decode(seq, skip_special_tokens=True).split()]
+        for seq in out
+    ]
 
 
-def evaluate_pos_em(model, tokenizer, records: list[dict], device: str) -> dict[str, dict]:
+def evaluate_pos_em(model, tokenizer, records: list[dict], device: str,
+                   batch_size: int = EVAL_BATCH_SIZE) -> dict[str, dict]:
     """Compute token-level accuracy + sentence-level Exact Match on PROIEL dev.
 
+    Generates in mini-batches of `batch_size` for ~15x speedup over batch=1 on A10G.
     Returns {"nt": {...}, "classical": {...}, "overall": {...}} where each inner dict is
     {"tok": token_accuracy, "em": exact_match, "n": n_sentences}.
     """
@@ -789,18 +824,31 @@ def evaluate_pos_em(model, tokenizer, records: list[dict], device: str) -> dict[
 
     # [tok_correct, tok_total, em_count, n_sentences] per subset
     agg = {"nt": [0, 0, 0, 0], "classical": [0, 0, 0, 0]}
-    for r in records:
-        pred = _greedy_pos_predict(model, tokenizer, r["text"], device)
-        gold = r["gold"]
-        tok_correct = sum(1 for g, p in zip(gold, pred) if g == p)
-        a = agg[r["subset"]]
-        a[0] += tok_correct
-        a[1] += len(gold)
-        a[2] += int(pred == gold)
-        a[3] += 1
+    samples: list[tuple[str, list[str], list[str]]] = []
+
+    for start in range(0, len(records), batch_size):
+        chunk = records[start: start + batch_size]
+        texts = [r["text"] for r in chunk]
+        preds = _batch_pos_predict(model, tokenizer, texts, device)
+        for r, pred in zip(chunk, preds):
+            gold = r["gold"]
+            tok_correct = sum(1 for g, p in zip(gold, pred) if g == p)
+            a = agg[r["subset"]]
+            a[0] += tok_correct
+            a[1] += len(gold)
+            a[2] += int(pred == gold)
+            a[3] += 1
+            if len(samples) < 3:
+                samples.append((r["subset"], gold, pred))
 
     if was_training:
         model.train()
+
+    # Diagnostic: show what the model actually emits so a 0.0 EM is never ambiguous —
+    # Greek prose (task not learned), wrong tag format, and <empty> generation look different.
+    for sub, gold, pred in samples:
+        print(f"    sample[{sub}] gold: {' '.join(gold[:10])}")
+        print(f"    sample[{sub}] pred: {' '.join(pred[:10]) if pred else '<empty>'}")
 
     def pack(a: list[int]) -> dict:
         return {"tok": a[0] / max(1, a[1]), "em": a[2] / max(1, a[3]), "n": a[3]}
@@ -823,6 +871,29 @@ def _select_eval_subset(records: list[dict], per_subset: int, seed: int = 1234) 
 
 
 # ── Training loop ──────────────────────────────────────────────────────────────
+
+def _prune_checkpoints(output_dir: Path, keep: int, fingerprint: str) -> None:
+    """Keep only the `keep` most-recent step-N checkpoints OF THIS RUN (matching fingerprint).
+
+    Scoped to the current fingerprint so a fresh run started in a volume that still holds a
+    previous config's (possibly higher-numbered) step dirs never deletes its own checkpoint to
+    keep a stale one. Foreign checkpoints are left untouched (they are surfaced + ignored at
+    resume time), and best/ / final/ are never step-N dirs so they are always safe.
+    """
+    import shutil
+    if keep <= 0:
+        return
+    mine = []
+    for d in output_dir.iterdir():
+        if not (d.is_dir() and d.name.startswith("step-") and d.name.split("-")[1].isdigit()):
+            continue
+        fp = d / "run_fp.txt"
+        if fp.exists() and fp.read_text().strip() == fingerprint:
+            mine.append(d)
+    mine.sort(key=lambda d: int(d.name.split("-")[1]))
+    for d in mine[:-keep]:
+        shutil.rmtree(d, ignore_errors=True)
+
 
 def _training_loop(
     model,
@@ -855,11 +926,19 @@ def _training_loop(
         lr=LR, weight_decay=0.01,
     )
 
-    # Linear warmup + cosine decay to zero
-    def lr_lambda(step: int) -> float:
-        if step < WARMUP_STEPS:
-            return step / max(1, WARMUP_STEPS)
-        progress = (step - WARMUP_STEPS) / max(1, MAX_STEPS - WARMUP_STEPS)
+    # Linear warmup + cosine decay to zero.
+    # CRITICAL: scheduler.step() fires once per OPTIMIZER update (every GRAD_ACCUM micro-steps),
+    # so LambdaLR feeds this the optimizer-step count, not the micro-step count the loop uses.
+    # WARMUP_STEPS / MAX_STEPS are micro-steps, so convert to optimizer steps here — otherwise
+    # warmup runs GRAD_ACCUM× too long and the cosine (denominator ~MAX_STEPS while the counter
+    # only reaches MAX_STEPS/GRAD_ACCUM) never anneals.
+    warmup_opt = max(1, WARMUP_STEPS // GRAD_ACCUM)
+    total_opt  = max(warmup_opt + 1, MAX_STEPS // GRAD_ACCUM)
+
+    def lr_lambda(opt_step: int) -> float:
+        if opt_step < warmup_opt:
+            return opt_step / warmup_opt
+        progress = min(1.0, (opt_step - warmup_opt) / (total_opt - warmup_opt))
         return max(0.0, 0.5 * (1.0 + math.cos(math.pi * progress)))
 
     scheduler = LambdaLR(optimizer, lr_lambda)
@@ -867,9 +946,9 @@ def _training_loop(
     # same memory benefit with no overflow risk (float16 autocast previously caused NaN losses).
     USE_BF16 = True
 
-    # Deterministic eval subset (stable across evals → comparable EM for model selection)
+    # Deterministic eval subset (stable across evals → comparable token-acc for model selection)
     eval_subset = _select_eval_subset(eval_records, EVAL_MAX_PER_SUBSET) if eval_records else []
-    best_em = -1.0
+    best_score = -1.0   # selection metric = POS token-accuracy (full-sentence EM is ~0, useless)
 
     # Run fingerprint: a short hash of the config that defines "the same run". Auto-resume ONLY
     # from checkpoints stamped with this exact fingerprint, so a stale/foreign checkpoint (e.g.
@@ -878,6 +957,12 @@ def _training_loop(
     fingerprint = hashlib.sha1(json.dumps({
         "max_steps": MAX_STEPS, "lr": LR, "batch": BATCH_SIZE, "accum": GRAD_ACCUM,
         "warmup": WARMUP_STEPS, "lora_r": LORA_R, "lora_alpha": LORA_ALPHA, "seq": MAX_SEQ_LEN,
+        "weights": {t: TASK_WEIGHTS[t] for t in _TASK_ORDER},
+        # Bump `rev` to force a clean fresh run — ignore superseded checkpoints instead of
+        # resuming them. rev 2 = LR-schedule unit fix + T5 right-padding eval. rev 3 = POS-EM
+        # case-fold fix. rev 4 = token-acc best-selection + weighted sampling (pos/denoise 3×) +
+        # LoRA r=64 + 30k steps + resumable optimizer/scheduler state (LR no longer re-warms).
+        "rev": 4,
         "pools": {t: len(pools.get(t, [])) for t in _TASK_ORDER},
     }, sort_keys=True).encode()).hexdigest()[:12]
 
@@ -908,15 +993,25 @@ def _training_loop(
                 from safetensors.torch import load_file
                 set_peft_model_state_dict(model, load_file(str(adapter_file)))
                 step = latest_step
-                print(f"Resuming compatible checkpoint: {latest.name}  (fp={fingerprint})")
-                if (best_dir / "metrics.json").exists():
+                # Restore optimizer + scheduler + best-score + RNG so the LR schedule continues
+                # smoothly instead of re-warming from zero (the pre-rev-4 resume bug).
+                state_file = latest / "training_state.pt"
+                if state_file.exists():
+                    state = torch.load(str(state_file), map_location=device, weights_only=False)
+                    optimizer.load_state_dict(state["optimizer"])
+                    scheduler.load_state_dict(state["scheduler"])
+                    step       = int(state.get("step", latest_step))
+                    best_score = float(state.get("best_score", -1.0))
                     try:
-                        best_em = json.loads(
-                            (best_dir / "metrics.json").read_text()
-                        )["overall"]["em"]
-                        print(f"  Prior best EM (resumed): {best_em:.4f}")
+                        torch.set_rng_state(state["torch_rng"].cpu())
+                        rng.bit_generator.state = state["numpy_rng"]
+                        py_rng.setstate(state["python_rng"])
                     except Exception:
-                        best_em = -1.0
+                        pass  # RNG restore is best-effort; weights + optimizer are what matter
+                    print(f"Resuming {latest.name} (fp={fingerprint}): step={step}, "
+                          f"best tok-acc={best_score:.4f}, lr={scheduler.get_last_lr()[0]:.2e}")
+                else:
+                    print(f"Resuming {latest.name} weights only (no training_state; LR re-warms)")
 
     # Surface (but do not touch) checkpoints we are deliberately ignoring
     if step == 0:
@@ -928,14 +1023,15 @@ def _training_loop(
             print(f"Fresh start (fp={fingerprint}); ignoring {len(foreign)} checkpoint(s) from a "
                   f"different run config: {shown}")
 
-    # Report pool sizes + the effective-epoch math (documents Problem 6)
+    # Report pool sizes + per-task epoch coverage under the weighted sampler.
+    active_tasks = [t for t in _TASK_ORDER if pools.get(t)]
+    w_total = sum(TASK_WEIGHTS[t] for t in active_tasks) or 1.0
     print(f"Starting training from step {step} → {MAX_STEPS}")
     print("  Task pools: " + " | ".join(f"{t}={len(pools.get(t, [])):,}" for t in _TASK_ORDER))
-    per_task_per_step = GRAD_ACCUM * max(1, BATCH_SIZE // len([t for t in _TASK_ORDER if pools.get(t)]))
-    largest = max((len(pools.get(t, [])) for t in ("pos", "lemma", "denoise")), default=1)
-    if largest:
-        print(f"  ≈{MAX_STEPS * per_task_per_step / largest:.1f} effective epochs over the largest pool "
-              f"({largest:,} examples; ~{per_task_per_step} examples/task/step)")
+    for t in active_tasks:
+        seen = MAX_STEPS * BATCH_SIZE * TASK_WEIGHTS[t] / w_total
+        pool_n = max(1, len(pools[t]))
+        print(f"    {t:9s} ~{seen / pool_n:5.2f} epochs  ({seen:,.0f} examples over {pool_n:,})")
     print(f"  GPU: {device}  |  bfloat16: {USE_BF16}  |  eval sentences/round: {len(eval_subset)}")
     print("=" * 70)
 
@@ -992,20 +1088,21 @@ def _training_loop(
             print(f"  step {step:>6}/{MAX_STEPS}  loss={avg_loss:.4f}"
                   f"  lr={scheduler.get_last_lr()[0]:.2e}")
 
-        # POS-EM validation + best-checkpoint selection
+        # POS validation + best-checkpoint selection (on TOKEN ACCURACY — full-sentence EM is
+        # ~0 by construction and cannot discriminate checkpoints; tok is the signal that moves).
         if eval_subset and step % EVAL_STEPS == 0:
             m = evaluate_pos_em(model, tokenizer, eval_subset, device)
-            print(f"  [eval step {step}] POS EM  overall={m['overall']['em']:.3f} "
-                  f"(tok={m['overall']['tok']:.3f})  |  NT em={m['nt']['em']:.3f} "
-                  f"tok={m['nt']['tok']:.3f} (n={m['nt']['n']})  |  "
-                  f"Classical em={m['classical']['em']:.3f} tok={m['classical']['tok']:.3f} "
+            print(f"  [eval step {step}] POS tok={m['overall']['tok']:.3f} "
+                  f"(EM={m['overall']['em']:.3f})  |  NT tok={m['nt']['tok']:.3f} "
+                  f"em={m['nt']['em']:.3f} (n={m['nt']['n']})  |  "
+                  f"Classical tok={m['classical']['tok']:.3f} em={m['classical']['em']:.3f} "
                   f"(n={m['classical']['n']})")
-            if m["overall"]["em"] > best_em:
-                best_em = m["overall"]["em"]
+            if m["overall"]["tok"] > best_score:
+                best_score = m["overall"]["tok"]
                 model.save_pretrained(str(best_dir))
                 (best_dir / "metrics.json").write_text(json.dumps({"step": step, **m}, indent=2))
                 _stamp(best_dir)
-                print(f"  [best] new best EM={best_em:.4f} → saved {best_dir}")
+                print(f"  [best] new best POS tok-acc={best_score:.4f} → saved {best_dir}")
                 if volume is not None:
                     _commit()
 
@@ -1013,7 +1110,17 @@ def _training_loop(
             ckpt = output_dir / f"step-{step}"
             model.save_pretrained(str(ckpt))
             _stamp(ckpt)
-            print(f"  [checkpoint] saved → {ckpt}")
+            torch.save({
+                "optimizer": optimizer.state_dict(),
+                "scheduler": scheduler.state_dict(),
+                "step": step,
+                "best_score": best_score,
+                "torch_rng": torch.get_rng_state(),
+                "numpy_rng": rng.bit_generator.state,
+                "python_rng": py_rng.getstate(),
+            }, str(ckpt / "training_state.pt"))
+            _prune_checkpoints(output_dir, CKPT_KEEP, fingerprint)
+            print(f"  [checkpoint] saved → {ckpt}  (kept last {CKPT_KEEP})")
             if volume is not None:
                 _commit()
 
@@ -1022,13 +1129,13 @@ def _training_loop(
     model.save_pretrained(str(final_dir))
     _stamp(final_dir)
     print(f"\nTraining complete. Final adapters: {final_dir}")
-    if best_em >= 0:
-        print(f"Best POS-EM adapter (EM={best_em:.4f}): {best_dir}")
+    if best_score >= 0:
+        print(f"Best adapter (POS token-acc={best_score:.4f}): {best_dir}")
     if volume is not None:
         _commit()
 
 
-# ── Phase 5: Bulletproof Inference ────────────────────────────────────────────
+# ── Inference ────────────────────────────────────────────
 
 def generate(
     model,
@@ -1042,10 +1149,11 @@ def generate(
     Decoding strategy is task-conditional:
       * pos / lemma        → GREEDY (their outputs legitimately repeat tokens; penalties would
                              corrupt the tag/lemma sequence).
-      * denoise / synoptic → Contrastive Search (SOTA anti-degeneration for free-form Greek).
+      * denoise / synoptic → Contrastive Search (anti-degeneration for free-form Greek).
 
     Tasks:
-      - denoise:           prefix `denoise: <text with masks>`
+      - denoise:           NO prefix (training corrupts raw text with no task prefix —
+                           pass `<text with <extra_id_N> masks>` directly)
       - pos:               prefix `pos: <greek text>`
       - lemma:             prefix `lemma: <greek text>`
       - synoptic_mk_to_mt: prefix `synoptic mark_to_matt: <mark text>`
@@ -1054,7 +1162,9 @@ def generate(
     import torch
 
     task_prefixes = {
-        "denoise":           "denoise: ",
+        # denoise trains on raw corrupted ids with NO prefix (see _collate_batch);
+        # prefixing at inference mismatches training and degrades the fills.
+        "denoise":           "",
         "pos":               "pos: ",
         "lemma":             "lemma: ",
         "synoptic_mk_to_mt": "synoptic mark_to_matt: ",
@@ -1078,6 +1188,7 @@ def generate(
             no_repeat_ngram_size=GEN_NO_REPEAT_NGRAM,
             encoder_no_repeat_ngram_size=GEN_NO_REPEAT_NGRAM,
             early_stopping=True,
+            trust_remote_code=True,
         )
 
     model.eval()
@@ -1185,8 +1296,8 @@ def train() -> None:
     print(f"  Tokenizer vocab size: {len(tokenizer)}")
     print(f"  Sentinel <extra_id_0> -> id {tokenizer.convert_tokens_to_ids('<extra_id_0>')}")
 
-    # Phase 2: model (bfloat16 + maximalist LoRA)
-    print("\nPhase 2: Loading Koine-T5 (bfloat16, LoRA r=32, encoder+decoder)...")
+    # Model: bfloat16 + LoRA
+    print(f"\nPhase 2: Loading Koine-T5 (bfloat16, LoRA r={LORA_R}, encoder+decoder)...")
     model = load_model_with_lora(tokenizer, device=device)
 
     # Phase 3: resolve PROIEL (graceful fallback if unavailable)
@@ -1209,7 +1320,7 @@ def train() -> None:
     output_vol = modal.Volume.from_name(OUTPUT_VOLUME) if modal is not None else None
     _training_loop(model, tokenizer, pools, eval_records, output_dir, device, volume=output_vol)
 
-    print("\nDone! Download adapters:")
+    print("\nDone. Download adapters:")
     print(f"  modal volume get {OUTPUT_VOLUME} koine_t5/best  models/koine_t5/best")
     print(f"  modal volume get {OUTPUT_VOLUME} koine_t5/final models/koine_t5/final")
     print("\nLocal demo:")
