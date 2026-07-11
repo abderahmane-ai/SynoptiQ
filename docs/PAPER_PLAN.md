@@ -1,6 +1,7 @@
 # Paper plan — "Who Copied Whom? Why the Texts Can't Tell Us — and What They Can"
 
-**Status: PLAN (not drafted). This is the *honest* paper. It supersedes an earlier outline
+**Status: DRAFTED 2026-07-10 → `paper_limit/main.tex` (+ `references.bib`), full 8-section
+manuscript, Overleaf-only. Near-term target: a Yale submission. This is the *honest* paper. It supersedes an earlier outline
 (from a non-specialist collaborator) that proposed conditional-NLL / perplexity-ratio
 *direction detection* as a novel framework — that method is this project's CLOSED NEGATIVE
 RESULT (`docs/DIRECTION_NEGATIVE_RESULT.md`): invalidated, not "unvalidated." Do not resurrect
@@ -164,16 +165,21 @@ Classical copyist traditions.
 
 ## 4. Status — DONE vs NEEDED
 
-- **§2 argument + §3 empirical:** evidence DONE (investigation closed). NEEDS: write-up;
-  recover experimental detail from git (`git log`, the removed `synoptiq/direction/` tree).
-- **§4 SynoptiQ:** DONE (already documented in Paper A — reuse/cite).
+- **§2 argument + §3 empirical:** evidence DONE (investigation closed); **DRAFTED** in
+  `paper_limit/main.tex` §2 (Theorem 1 + full identifiability proof) and §3 (6-approach failure
+  table + sign-flip demo). Still NEEDS: recover experimental detail from git (`git log`, the
+  removed `synoptiq/direction/` tree) if a camera-ready wants a fuller appendix.
+- **§4 SynoptiQ:** DONE; **DRAFTED** (`paper_limit/main.tex` §4, census table + alignment).
 - **§5 Koine-T5:** **DONE** — 30k-step run finished (96.6% NT / 91.7% pooled POS token acc),
-  best checkpoint published to HuggingFace (CC BY-NC-SA 4.0). Nothing pending.
+  best checkpoint published to HuggingFace (CC BY-NC-SA 4.0); **DRAFTED** (`paper_limit/main.tex`
+  §5, verified hyperparameters + results + qualitative box). Nothing pending.
 - **§6 E2 null:** the Lk-target pooled CV is DONE. NEEDS (to report as "null *and robust*"):
   the symmetric **Mt-target** E2 model + the **edition-swap** ablation (both are small GPU
   runs, <$25 total per `SOURCE_CRITICISM_STUDY.md` M4).
-- **Overall:** the paper is writable *now* as (C1 negative + R1 corpus + C2 null); Koine-T5
-  (R2) numbers and the robustness runs strengthen it but are not blockers for a first draft.
+- **Overall:** the paper is **drafted** at `paper_limit/main.tex` (all 8 sections in prose,
+  C1 negative + R1 corpus + R2 Koine-T5 + C2 null; 4 tables). Remaining to strengthen, not
+  blockers: the Mt-target + edition-swap robustness runs (→ "null *and* robust"), and any
+  camera-ready figures/appendix.
 
 ---
 

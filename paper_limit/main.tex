@@ -1,0 +1,561 @@
+% Who Copied Whom? Why the Texts Cannot Tell Us — and What They Can
+% An information-theoretic limit, and a hypothesis-neutral framework,
+% for computational Synoptic source criticism.
+% Compile on Overleaf with XeLaTeX: xelatex main.tex && bibtex main && xelatex main.tex && xelatex main.tex
+\documentclass[11pt,letterpaper]{article}
+
+% ── Core packages ───────────────────────────────────────────────────
+% (XeLaTeX handles UTF-8 natively via fontspec; no inputenc.)
+\usepackage{fontspec}
+\usepackage{microtype}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage[table]{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{csquotes}
+\usepackage[authoryear,round]{natbib}
+\usepackage[letterpaper, top=0.9in, bottom=1.0in, left=1.0in, right=1.0in]{geometry}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins,breakable}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{ragged2e}
+\usepackage{float}
+\usepackage[font={small,color=stone},labelfont={bf,color=marine},labelsep=quad]{caption}
+
+\setlist{nosep, leftmargin=*}
+\frenchspacing
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.55em}
+
+% ── Typography ───────────────────────────────────────────────────────
+\setmainfont{TeX Gyre Pagella}[Ligatures=TeX]
+\newfontfamily\headfont{Poppins}
+\newfontfamily\greekfont{FreeSerif}
+\newcommand{\gk}[1]{{\greekfont\itshape #1}}
+\setmonofont{Latin Modern Mono}[Scale=0.92]
+
+% ── Palette ──────────────────────────────────────────────────────────
+\definecolor{marine}{HTML}{123C48}
+\definecolor{marinelight}{HTML}{2E6272}
+\definecolor{terracotta}{HTML}{B75B36}
+\definecolor{papyrus}{HTML}{F7F2E7}
+\definecolor{stone}{HTML}{6E6A5F}
+\definecolor{rulegrey}{HTML}{D9D2C0}
+\definecolor{inkblack}{HTML}{201D1A}
+\color{inkblack}
+\arrayrulecolor{marine!65!black}
+
+\newcolumntype{P}[1]{>{\centering\arraybackslash}p{#1}}
+\newcolumntype{L}[1]{>{\RaggedRight\arraybackslash}p{#1}}
+
+\renewcommand\labelitemi{\textcolor{terracotta}{\textbullet}}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=marine,
+  citecolor=marine,
+  urlcolor=terracotta,
+  pdftitle={Who Copied Whom? Why the Texts Cannot Tell Us — and What They Can},
+  pdfauthor={Abderahmane Ainouche}
+}
+
+% ── Section styling ─────────────────────────────────────────────────
+\titleformat{\section}
+  {\headfont\Large\bfseries\color{marine}}
+  {\color{marine}\thesection}{0.65em}{}
+  [{\vspace{2pt}\color{rulegrey}\titlerule[0.9pt]}]
+\titlespacing*{\section}{0pt}{1.7em}{0.9em}
+\titleformat{\subsection}
+  {\headfont\large\bfseries\color{marinelight}}
+  {\thesubsection}{0.6em}{}
+\titlespacing*{\subsection}{0pt}{1.3em}{0.5em}
+
+% ── Header / footer ─────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\footnotesize\headfont\color{stone} Who Copied Whom?}
+\fancyhead[R]{\footnotesize\headfont\color{stone} The Limit of Direction in Synoptic Source Criticism}
+\fancyfoot[C]{\footnotesize\headfont\color{stone}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{{\color{rulegrey}\hrule height\headrulewidth}}
+\fancypagestyle{firstpage}{%
+  \fancyhf{}\fancyfoot[C]{\footnotesize\headfont\color{stone}\thepage}
+  \renewcommand{\headrulewidth}{0pt}}
+
+% ── Helpers ──────────────────────────────────────────────────────────
+\newcommand{\statcard}[2]{%
+  \cellcolor{papyrus}{\begin{minipage}[c][2.05cm][c]{\linewidth}\centering
+    {\headfont\bfseries\fontsize{16}{18}\selectfont\color{marine}#1}\\[3pt]
+    {\footnotesize\headfont\color{stone}#2}
+  \end{minipage}}%
+}
+\newcommand{\tblhead}{\rowcolor{marine!12}}
+\newcommand{\nll}{\mathrm{NLL}}
+
+% ── Theorem box ──────────────────────────────────────────────────────
+\newtcolorbox{propbox}{%
+  enhanced, breakable, colback=papyrus, colframe=papyrus,
+  boxrule=0pt, arc=0pt, outer arc=0pt,
+  borderline west={2.6pt}{0pt}{terracotta},
+  left=16pt, right=16pt, top=11pt, bottom=11pt}
+
+\begin{document}
+
+% ── Title block ──────────────────────────────────────────────────────
+\thispagestyle{firstpage}
+\begin{flushleft}
+{\headfont\footnotesize\bfseries\color{terracotta}\MakeUppercase{Computational Philology \textbullet\ Source Criticism}}\\[7pt]
+{\headfont\bfseries\fontsize{22}{27}\selectfont\color{marine}%
+Who Copied Whom? Why the Texts Cannot Tell Us --- and What They Can}\\[9pt]
+{\headfont\large\color{marinelight} An information-theoretic limit, and a hypothesis-neutral framework, for computational Synoptic source criticism}\\[11pt]
+{\headfont\large\color{stone} Abderahmane Ainouche}
+\end{flushleft}
+\vspace{6pt}
+{\color{rulegrey}\rule{\linewidth}{0.9pt}}
+\vspace{1.3em}
+
+% ── Abstract ─────────────────────────────────────────────────────────
+\begin{tcolorbox}[enhanced, breakable, colback=papyrus, colframe=papyrus,
+  boxrule=0pt, arc=0pt, outer arc=0pt,
+  borderline west={2.6pt}{0pt}{marine}, left=16pt, right=16pt, top=11pt, bottom=11pt]
+{\headfont\bfseries\color{marine} Abstract}\par\vspace{5pt}
+\noindent For two centuries the Synoptic Problem (the literary relationship among the Gospels of Matthew, Mark, and Luke) has turned on one question: who copied whom. Computation has entered the debate many times and has each time answered a different question, showing that the three texts are related without settling the order of dependence. We argue that the gap is permanent. The direction of copying is not identifiable from parallel text alone. We prove that no procedure recovers it from a pair of texts without a prior on how each author edits, and we show that the single asymmetry a pair of texts does expose, the gradient from the complex to the simple, is independent of history, because scribes both abbreviate and expand. Six direction detectors we built come to nothing: on external pairs of known direction their in-domain signal reverses or dissolves, the length- and likelihood-based features inverting outright when we pass from a source that copied \emph{longer} (Jude into 2~Peter) to one that copied \emph{shorter} (Samuel--Kings into Chronicles). What survives is comparison, not attribution. Taking the triple tradition (the material every hypothesis agrees Matthew and Luke drew from Mark) as supervision that assumes nothing in dispute, we train generative models of the contested double tradition and compare them under a protocol fixed in advance. The result, reported as the preregistration requires, is a calibrated null: the minor-agreement signal a naive test reads as evidence for Luke's use of Matthew does not clear the floor its own controls define. We release both instruments, the \textbf{SynoptiQ} corpus (49{,}061 aligned, morphologically tagged tokens over 170 pericopes) and \textbf{Koine-T5}, a multitask Ancient-Greek model (96.6\% part-of-speech accuracy on New-Testament Greek), so that both the argument and the null can be checked and carried further.
+\end{tcolorbox}
+
+\vspace{1.0em}
+\begin{center}
+\renewcommand{\arraystretch}{1}\setlength{\tabcolsep}{4pt}
+\begin{tabular}{P{0.18\linewidth}P{0.18\linewidth}P{0.18\linewidth}P{0.18\linewidth}P{0.18\linewidth}}
+\statcard{96.6\%}{Koine-T5 POS (NT)} &
+\statcard{49{,}061}{Aligned tokens} &
+\statcard{170}{Aland pericopes} &
+\statcard{6}{Detectors falsified} &
+\statcard{Null}{Preregistered source test}
+\end{tabular}
+\end{center}
+\vspace{0.5em}
+
+% =====================================================================
+\section{Introduction}
+\label{sec:intro}
+
+Read Matthew, Mark, and Luke in parallel columns and the eye is caught less by their differences than by their agreements: the same episodes in the same order, often in the same Greek, down to shared parenthetical asides. This is the datum that names them the \emph{Synoptic} Gospels, and it is old enough, and consequential enough, that the question of its origin has its own name. The \emph{Synoptic Problem} asks how the three came to share what they share. For most of its history the problem has been posed as a problem of \emph{direction}: given that these texts depend on one another, which was the source and which the copy?
+
+On one point the field has reached something close to consensus. Mark, the shortest Gospel, appears to be the earliest, and Matthew and Luke each seem to have used it. The disagreement lies elsewhere, in the roughly two hundred verses---mostly sayings---that Matthew and Luke share but Mark lacks, the material known as the \emph{double tradition}. Table~\ref{tab:hyp} lays out the live options. The \emph{Two-Source Hypothesis} explains the double tradition by a second, lost source, conventionally Q, drawn on independently by Matthew and Luke \citep{streeter1924,kloppenborg2000}. The \emph{Farrer hypothesis} does without Q and has Luke read Matthew directly \citep{farrer1955,goodacre2002}; \emph{Matthaean Posteriority} reverses that last link. The distinguishing question among them is not \emph{whether} the Gospels are related but \emph{through what channel} the double tradition passed---and that is a question about direction and independence.
+
+\begin{table}[H]
+\centering\small
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{L{2.6cm}L{2.9cm}L{3.2cm}L{3.9cm}}
+\toprule
+\tblhead\textbf{Hypothesis} & \textbf{Triple tradition} & \textbf{Double tradition} & \textbf{Prediction tested here} \\
+\midrule
+Two-Source (2SH) & Mk$\to$Mt,\ Mk$\to$Lk & Mt\,$\leftarrow$\,Q\,$\to$\,Lk & Lk independent of Mt given Mk (minor agreements are noise) \\
+\addlinespace[2pt]
+Farrer & Mk$\to$Mt,\ Mk$\to$Lk & Mt$\to$Lk & Mt informs Lk beyond Mk, \emph{uniformly} \\
+\addlinespace[2pt]
+Matthaean Post.\ (MPH) & Mk$\to$Mt,\ Mk$\to$Lk & Lk$\to$Mt & the mirror image (Mt-target) \\
+\addlinespace[2pt]
+Three-Source (3SH) & Mk$\to$Mt,\ Mk$\to$Lk & Q, and Lk also used Mt & uniform lift with extra in Q-overlap \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{The live hypothesis space.} All members accept Markan priority and so agree on the triple tradition; they differ over the double tradition. The conflation hypotheses (Griesbach, Augustinian) are set aside on the agreement topology of Section~\ref{sec:topology}. The final column is the measurable consequence Section~\ref{sec:reframe} tests---a claim about dependence structure, never a claim about a direction that any single pair of texts could reveal.}
+\label{tab:hyp}
+\end{table}
+
+Computation has been brought to this question for over half a century, from Honor\'e's tabulations of verbal agreement \citep{honore1968} to hidden-Markov models over agreement sequences \citep{abakuks2015} and noisy-channel accounts of Luke's reuse of Mark \citep{lee2007}. This work has been genuinely informative, and uniformly about one thing: \emph{relatedness}. It establishes, in reproducible numbers, that the Synoptics are connected and that Mark sits at the centre of the connection. What it has not established, because it cannot, is direction. Knowing that two texts share a passage, and even that one is stylistically central, does not tell us which scribe worked with the other's text open before him.
+
+This paper makes that impossibility precise and then works around it. We prove that the direction of copying cannot be read from parallel text without an external assumption about how authors edit, and we show empirically that the assumption most computational methods smuggle in, a preference for the simpler text as the earlier, measures the wrong thing, because copying moves in both directions along the axis of simplicity. Having established the limit, we show what the texts still permit. The triple tradition is a body of supervision that \emph{every} hypothesis reads the same way; trained on it alone, generative models of the double tradition can be compared without anyone's thumb on the scale. We built that comparison, preregistered it, and report its outcome as the preregistration demands.
+
+\paragraph{Contributions.} We label empirical claims \textbf{C} and released resources \textbf{R}.
+\begin{itemize}
+\item \textbf{C1, a limit.} An identifiability theorem (Section~\ref{sec:limit}): direction of literary copying is unrecoverable from parallel text without a prior over each author's editing operator. And its empirical companion (Section~\ref{sec:empirical}): six approaches we built to read direction off the texts, five of which reduce on inspection to a detector of Markan style or of text length---each reversing sign across known-direction pairs of opposite length polarity---while the sixth recovers only the agreement topology, which prunes the hypothesis space without yielding a direction.
+\item \textbf{C2, a reframe.} A hypothesis-neutral method (Section~\ref{sec:reframe}) that compares generative models of the double tradition trained only on triple-tradition supervision, evaluated under a preregistered protocol whose decision thresholds are derived rather than chosen. Its confirmatory result is a calibrated null.
+\item \textbf{R1, the SynoptiQ corpus} (Section~\ref{sec:corpus}): a token-aligned, morphologically annotated edition of the Synoptic Gospels; 49{,}061 tokens, 170 pericopes, 235 alignments; CC~BY-SA~4.0.
+\item \textbf{R2, Koine-T5} (Section~\ref{sec:model}): a multitask Koine/Ancient-Greek sequence-to-sequence model reaching 96.6\% New-Testament (85.2\% sentence exact-match) and 91.7\% pooled part-of-speech token accuracy; CC~BY-NC-SA~4.0.
+\end{itemize}
+
+% =====================================================================
+\section{Related work}
+\label{sec:related}
+
+\subsection{Counting agreements: computation and the Synoptic Problem}
+
+Quantitative treatments of the Synoptic Problem are older than the computer. \citet{honore1968} counted shared words across the three Gospels and reasoned about dependence from the proportions; the tradition he began runs through decades of agreement statistics and, more recently, to explicitly probabilistic models. \citet{abakuks2015} fits hidden-Markov models to the sequence of verbal agreements verse by verse and reads the best-fitting transition structure as evidence about compositional order, with several of his models placing Luke last. \citet{lee2007} treats Luke's use of Mark as a noisy channel and estimates an edit model from the aligned text. These are the nearest peers to the present work, and the contrast is exact: each of them either assumes an order and estimates its parameters, or infers an order under a model whose asymmetry is supplied by the modeller. Our Section~\ref{sec:limit} explains why that supplied asymmetry is not optional, and Section~\ref{sec:reframe} is a hypothesis-comparison that declines to supply it, replacing the assumed order with supervision the hypotheses share.
+
+\subsection{The direction of derivation, elsewhere}
+
+The problem of reading direction off parallel text is not unique to the Gospels; it is studied at scale in the analysis of \emph{translationese}. Classifiers separate translated text from originally authored text with high accuracy \citep{baroni2006,koppel2011}, and the task of naming the source language, the direction of translation, has been posed directly \citep{rabinovich2015,sominsky2019}. The consistent finding there is the one we reproduce in miniature: the signal is strong within a domain and fragile across domains, with accuracies that fall from the eighties or higher toward chance once the classifier meets text unlike its training data. That an independent field, working on modern corpora orders of magnitude larger than the Synoptics, keeps hitting the same wall is the strongest external evidence we can offer that the wall is real and not an artefact of our data.
+
+\subsection{Cause, effect, and identifiability}
+
+The abstract shape of the problem (inferring an ordering between two objects from their joint appearance alone) is the problem of causal direction, and the literature on it is candid about what makes it solvable. Distinguishing cause from effect from observational data requires an assumption that breaks the symmetry, whether an independence-of-mechanism postulate or a complexity prior such as the algorithmic Markov condition \citep{janzing2010,peters2017,mooij2016}. Kolmogorov complexity supplies the sharpest version of the prior that computational source criticism reaches for, namely to prefer the derivation that is the simpler program \citep{li2008}; as we show, that prior tracks compressibility rather than history. Our Theorem~1 is the source-critical instance of this general fact, stated for strings and editing operators.
+
+\subsection{Models for ancient and low-resource Greek}
+
+Neural modelling of historical languages has matured quickly: contextual models now exist for Latin \citep{bamman2020} and for ancient and medieval Greek \citep{singh2021}, and the GreTa/PhilTa family adapts the T5 encoder--decoder to classical philology \citep{riemenschneider2023,raffel2020}. Because annotated Koine data are scarce, we adapt rather than pretrain, using parameter-efficient adapters \citep{houlsby2019}---specifically LoRA \citep{hu2021lora}---over a frozen GreTa; Section~\ref{sec:model} details the multitask training that yields Koine-T5. The methodological turn we press for (preregistration, controls, and the honest reporting of a null) is standard in the empirical sciences and increasingly urged in computational linguistics; here it is what separates a defensible comparison from the false positive a free analysis would have produced.
+
+% =====================================================================
+\section{The limit: direction is not recoverable from parallel text}
+\label{sec:limit}
+
+\subsection{Symmetric measures are blind by construction}
+
+The measures most often reached for---lexical overlap, cosine similarity, Jaccard coefficients, optimal-alignment scores---are functions of the unordered pair. Writing $\mathrm{Sim}$ for any of them, $\mathrm{Sim}(A,B)=\mathrm{Sim}(B,A)$, identically. A symmetric function returns the same value for $A\!\to\!B$ and $B\!\to\!A$ and so cannot separate them. This is not a limitation to be engineered around; it is what the measures are. Any approach to direction through similarity geometry is settled before a number is computed.
+
+\subsection{The asymmetric escape, and why it does not escape}
+
+The apparent way out is a measure that is \emph{not} symmetric---typically a conditional codelength or a conditional negative log-likelihood, $\nll(B\mid A)$ against $\nll(A\mid B)$, with the smaller conditional marking the derivative. Such quantities are genuinely asymmetric, and on in-domain data they appear to work. What they measure, though, is settled not by experiment but by an identifiability argument, which we give in full because it is the hinge of the paper.
+
+\textbf{Formal setting.} Let $\Sigma$ be a finite alphabet and $\Sigma^\ast$ the finite strings over it. An \emph{instance} is a pair $(s,e)$ of a \emph{source} string $s\in\Sigma^\ast$ and an \emph{editing operator} $e$ from the class $\mathcal{E}$ of \emph{all} (possibly stochastic) maps $\Sigma^\ast\!\to\!\Sigma^\ast$; it produces the \emph{derivative} $e(s)$ and is \emph{admissible} when $e(s)\neq s$, so that two distinct strings result. An inference procedure observes only the \emph{unordered} pair $\{s,e(s)\}$: both strings in full, presented as a set (equivalently, in a fixed content-based order such as lexicographic), with the source and derivative roles withheld. The procedure may use the two strings' \emph{contents} without restriction and, as they are distinct, can always tell them apart; it is denied only the single bit recording which of the two is the source. Writing $A,B$ for the two observed strings, a \emph{direction rule} $D$ returns a verdict in $\{A\!\to\!B,\ B\!\to\!A\}$, the verdict $A\!\to\!B$ asserting that $A$ is the source. We allow $D$ to be randomized, with internal randomness independent of the instance, and score it by its \emph{accuracy} on an instance: the probability, over that randomness, that the verdict names the true source.
+
+\begin{propbox}
+{\headfont\bfseries\color{marine} Theorem 1 (Unidentifiability of copying direction).}\par\vspace{4pt}
+\noindent No direction rule has accuracy exceeding $\tfrac12$ on every admissible instance. More strongly, for any two distinct strings $A,B\in\Sigma^\ast$ the uniform mixture of the two instances constructed in the proof gives \emph{every} rule---deterministic or randomized---accuracy exactly $\tfrac12$.
+\end{propbox}
+
+\begin{proof}
+Fix distinct $A,B\in\Sigma^\ast$ and exhibit two admissible instances.
+
+\emph{Instance~1:} source $A$, operator $e_1$ with $e_1(A)=B$ and $e_1(x)=x$ for all $x\neq A$. Then $e_1(A)=B\neq A$, so the instance is admissible and its observation is the pair $\{A,B\}$, with true source $A$.
+
+\emph{Instance~2:} source $B$, operator $e_2$ with $e_2(B)=A$ and $e_2(x)=x$ for all $x\neq B$. Then $e_2(B)=A\neq B$, so the instance is admissible and its observation is again $\{A,B\}$, with true source $B$.
+
+Each of $e_1,e_2$ is a total map $\Sigma^\ast\!\to\!\Sigma^\ast$ and so lies in $\mathcal{E}$, and each realises the standing assumption that one string was produced from the other. The two instances induce the \emph{same} observation---the set $\{A,B\}$---with probability one. Because $D$ is a function of the observation alone and its coins are independent of the instance, the law of $D$'s verdict is identical across the two instances; write $p$ for the (single, instance-independent) probability that $D$ returns $A\!\to\!B$, i.e.\ names $A$ as the source. On Instance~1 the source is $A$, so $D$'s accuracy is $p$; on Instance~2 the source is $B$, so $D$'s accuracy is $1-p$.
+
+Since $p+(1-p)=1$, the two accuracies cannot both exceed $\tfrac12$: at least one of the two instances---each an admissible instance of the problem---is one on which $D$ does not beat chance, which is the first claim. For the second, put mass $\tfrac12$ on each instance; the accuracy of $D$ under this mixture is
+\[
+  \tfrac12\,p \;+\; \tfrac12\,(1-p) \;=\; \tfrac12 ,
+\]
+the same value for every $D$. \emph{(This is the two-point, or Le~Cam, method \citep{tsybakov2009}: two data-generating processes that induce the identical law on the observation are statistically indistinguishable, so no rule can separate them.)}
+\end{proof}
+
+The value $\tfrac12$ is the exact minimax accuracy, not merely a ceiling: the fair-coin rule---name either observed string as the source with probability $\tfrac12$---has accuracy exactly $\tfrac12$ on every instance, while by the first claim no rule does better in the worst case. The construction is deliberately minimal, and the minimality is the content: the only fact about $\mathcal{E}$ it uses is that any two distinct strings can be related in either direction by some admissible operator. In the language of the generating map, the fibre over the observation $\{A,B\}$ contains both source-assignments, and no rule reading only that observation can separate what the observation has already merged. The symmetry is complete; an asymmetric score cannot break it unless the score already encodes a restriction on $\mathcal{E}$---which is to say, a prior over how authors edit.
+
+\begin{quote}
+\textbf{Corollary 1.} Above-chance direction accuracy is possible only under a restriction of the operator class $\mathcal{E}$---equivalently, a prior that makes some edits more probable than their inverses. Every asymmetric objective $J$ with $J(A,B)\neq J(B,A)$ imposes such a prior; absent one, the direction is unidentifiable.
+\end{quote}
+
+\subsection{What the theorem is, and is not}
+
+We are precise about scope, because overstatement is the failure we are documenting in others. Theorem~1 concerns identifiability---a property of the inference problem---not the empirical Synoptic Gospels or any particular corpus. It does not say direction is unknowable in principle. It says direction is unknowable \emph{from the pair alone}, so that any working method must import an assumption from outside the pair, and it thereby moves the real question elsewhere. The question is no longer whether some asymmetric statistic predicts direction in-domain---trivially, one can be fit---but whether the asymmetry a given statistic encodes actually tracks history. That question is empirical, and Section~\ref{sec:empirical} answers it, negatively, for the statistic the field most often reaches for.
+
+\subsection{Why the computable asymmetry is direction-blind}
+
+The priors that are computable from the pair itself all reduce to one thing. The only asymmetry a corpus-free method can extract is the \emph{information gradient}: the axis running from the longer, less predictable, less compressible text toward the shorter, more predictable, more compressible one. Conditional-likelihood and codelength criteria are, at bottom, estimators of position along this axis. The trouble is that historical copying is not monotone in it. A scribe abbreviates and smooths; the same scribe, or the next, harmonises and glosses and adds circumstantial detail. Simplification and elaboration are both ordinary editorial acts, and they push in opposite directions along the gradient, so the gradient is statistically independent of the historical arrow. A gradient detector, faced with a real pair, will confidently answer ``complex became simple'' whether or not that is what happened. It is tempting to object that surely containment settles it---if $B$ reproduces all of $A$ and adds more, $A$ must be the source. But containment is exactly as reversible as the rest: expansion by a later author and abridgement by a later author leave the identical trace, and only a prior that rules one of them less likely can choose between them. To break the symmetry in a way that tracks history, one would need a prior over each author's own editorial habits, learnable only from a large, independent sample of that author's prose. For the evangelists no such sample exists; Mark is about eleven thousand words, and the material peculiar to each Gospel is smaller still. The binding constraint is data, not ingenuity.
+
+% =====================================================================
+\section{The limit, empirically}
+\label{sec:empirical}
+
+An impossibility argument is worth stating only if the methods it forecloses are ones a careful researcher would in fact try, and only if, on trial, they fail in the manner the argument predicts. We built the machinery. Six families of direction detector were implemented and run on the Synoptic data and, more tellingly, on external pairs of \emph{known} direction. Table~\ref{tab:attempts} collects them; each is described below.
+
+\begin{table}[H]
+\centering\small
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{L{4.0cm}L{3.2cm}L{5.0cm}}
+\toprule
+\tblhead\textbf{Detector} & \textbf{Result} & \textbf{What it actually measured} \\
+\midrule
+Similarity geometry (10 features, logistic regression) & $\approx$ chance (0.33--0.36) & nothing directional \\
+\addlinespace[2pt]
+Conditional-NLL / MDL codelength asymmetry & synoptic partial-$r$ 0.41--0.53; external $\approx\!0$ & Markan style + length; reverses with length polarity \\
+\addlinespace[2pt]
+Learned MDL head on a synthetic redaction corpus & 0.99 synthetic; 0.36 synoptic (chance) & a generator artefact plus a length prior \\
+\addlinespace[2pt]
+Connective canon (\gk{καί}$\to$\gk{δέ} smoothing) & 0.78 synoptic & a Markan-\emph{style} detector; backwards on external pairs \\
+\addlinespace[2pt]
+Editorial-fatigue drift model & external 0.645 [0.53, 0.76]; gospels $\approx$ chance & narrative drift; genre-bound, no gospel transfer \\
+\addlinespace[2pt]
+Agreement topology (centrality / hub) & excludes Griesbach, Augustinian & \emph{topology}, not direction \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{Six detectors, and what each turned out to measure.} Every method that beats chance in-domain is reading Markan style, text length, or a generator artefact, and each collapses on external pairs of known direction. Only the last row leaves a survivor, and it is a statement about structure, not about the direction of any single pair (Section~\ref{sec:topology}).}
+\label{tab:attempts}
+\end{table}
+
+\emph{Similarity geometry.} A logistic regression over ten symmetric similarity features scores at chance (0.33--0.36 on a three-way pericope task). This is Section~\ref{sec:limit}'s first observation made concrete: symmetric inputs carry no directional information, and no classifier conjures it from them.
+
+\emph{Conditional likelihood and codelength.} The asymmetric escape, fit as a model, attains a partial correlation of $0.41$--$0.53$ with the assumed direction \emph{within} the Synoptics and essentially zero on external pairs. Two controls locate the signal. It is unchanged whether the encoder is zero-shot GreTa or the DAPT-adapted KoineFormer,\footnote{KoineFormer is GreTa domain-adapted to Koine Greek with LoRA adapters (96.62\% part-of-speech accuracy on the SynoptiQ test set); it is described in a companion manuscript and released at \url{https://huggingface.co/ainouche-abderahmane/koineformer}.} so it is intrinsic to Mark's simpler, more predictable Greek and not something the model learned about copying; and the within-corpus effect survives a length control only where a synoptic author is present, collapsing to zero on Jude~$\to$~2~Peter. The codelength measures Markan style and sentence length, neither of which is direction in general.
+
+\emph{Learned codelength on synthetic data.} A codelength head trained on a synthetic redaction corpus, built to be same-author and length-decorrelated so the model can use neither authorship nor length, reaches $0.98$--$0.99$ directed accuracy on held-out synthetic authors and then betrays itself on real text: $0.17$ on Jude~$\to$~2~Peter (backwards, since that copy expands), a perfect $1.00$ on the abridging Chronicles, and chance ($0.36$) on the Synoptics. It learned the generator's smoothing toward frequent vocabulary, a signature real copyists do not apply, and on real pairs it reverts to ``shorter is the copy.'' We flag the trap rather than repeat it, which is one reason the study of Section~\ref{sec:reframe} uses no synthetic training data anywhere.
+
+\emph{The connective canon.} A textual-critic's rule of thumb, that Mark's paratactic \gk{καί} is smoothed to \gk{δέ} by his copyists, reaches $0.78$ (CI $[0.71, 0.85]$) within the Synoptics and points the wrong way on both external known-direction pairs ($0.14$ and $0.23$, each below chance). The in-domain signal even survives matching the two texts' global \gk{καί}-density, which reads as vindication until the external reversal exposes it: it is a detector of Markan style in the costume of a directional law, and Mark is the \gk{καί}-richer text.
+
+\emph{Editorial fatigue.} A model of the drift by which a copyist, tiring, lapses back toward his source \citep{goodacre1998} shows a real, above-chance effect on external narrative pairs (0.645, CI [0.53, 0.76]) and nothing on the Gospels. It is genuine but genre-bound, and it does not transfer to the texts we care about.
+
+\subsection{The sign-flip: the decisive experiment}
+
+The most telling result is the simplest to state. Take two pairs whose copying direction is not in dispute, chosen to have \emph{opposite length polarity}. Among the New Testament epistles, 2~Peter demonstrably takes up and expands the letter of Jude: here the copy is the \emph{longer} text. In the Hebrew scriptures' Greek, the Chronicler reworks and abridges Samuel--Kings: here the copy is the \emph{shorter} text. Run the conditional-likelihood and length-based features across both. Every feature that identifies the correct direction on Jude~$\to$~2~Peter identifies the \emph{wrong} direction on Samuel--Kings~$\to$~Chronicles, and conversely. The features do not track which text is the source. They track which text is longer or less compressible, and when we flip the length polarity their verdict flips with it. Table~\ref{tab:signflip} makes the reversal quantitative: a genuine directional feature would score above one-half on \emph{both} polarities, and no length or lexical feature does. This is the independence Corollary~1 predicts, shown on real texts of settled history.
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{L{5.0cm}ccl}
+\toprule
+\tblhead\textbf{Feature} & \textbf{Copy shorter} & \textbf{Copy longer} & \textbf{Verdict} \\
+\tblhead & \footnotesize (Chronicles) & \footnotesize (2 Peter) & \\
+\midrule
+Length ratio \emph{(control)} & 1.00 & 0.00 & confound \\
+Type--token ratio & 0.25 & 0.81 & confound \\
+Hapax rate & 0.28 & 0.69 & confound \\
+Coverage asymmetry & 0.00 & 0.96 & confound \\
+Connective canon (\gk{καί}$\to$\gk{δέ}) & 0.14 & 0.23 & backwards \\
+Markedness (harder reading) & 0.53 & 0.58 & weak \\
+Editorial fatigue (intro-lateness) & 0.61 & 0.65 & weak \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{The sign-flip, quantified.} Directed accuracy of each feature on two known-direction pairs of opposite length polarity: Samuel--Kings~$\to$~Chronicles is an abridgement (the copy is shorter), Jude~$\to$~2~Peter an expansion (the copy is longer). A genuine directional feature would exceed $0.5$ in \emph{both} columns. Every length and lexical feature instead scores high in one and low in the other, tracking length rather than direction; the connective canon points backwards in both; only markedness and editorial fatigue are weakly correct in both, and both are underpowered, with confidence intervals touching chance on the $\sim$60 available pairs. The table is Corollary~1 on real texts of settled direction.}
+\label{tab:signflip}
+\end{table}
+
+\subsection{Out-of-domain collapse}
+
+The second pattern is quantitative and familiar. In the translation-direction literature, classifiers that reach 83--100\% in-domain fall to about 60\%---near chance for a binary decision---when moved to another genre or language pair \citep{rabinovich2015,sominsky2019}: strong in-domain separation, sharp cross-domain decay, and the eventual recognition that the in-domain signal was a distributional fingerprint rather than a causal one. Our detectors behave the same way, dropping from their in-domain figures to chance on the external pairs---which is what the theorem predicts and what an independent literature confirms.
+
+\subsection{What survives: topology, not direction}
+\label{sec:topology}
+
+One result does survive, and it is worth stating carefully because it is so easily mistaken for a directional one. The \emph{structure} of agreement is informative. Mark occupies the hub of the agreement graph, and Mark's rate of singular readings---material with no parallel in either of the others, near $0.22$---is far too high for the conflation hypotheses, under which Mark would be a digest of the other two and should contain almost nothing of its own. This excludes the Griesbach and Augustinian families and supports Markan priority. But it is obtained from symmetric agreement counts and speaks to \emph{centrality}, not to the direction of any given verse. ``The hub is the source'' is a further assumption, defensible on other grounds, that the topology itself does not supply. We keep the topological result and claim nothing beyond it; it is the reason Table~\ref{tab:hyp}'s live space already excludes conflation.
+
+% =====================================================================
+\section{The SynoptiQ corpus}
+\label{sec:corpus}
+
+The reframe of Section~\ref{sec:reframe} needs the three Gospels not merely available but aligned: comparable at the token and organised into the pericopes at which redaction operates. We built and release such a corpus, summarised in Table~\ref{tab:corpus}.
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{L{2.8cm} r c l L{3.4cm}}
+\toprule
+\tblhead\textbf{Tradition} & \textbf{Pericopes} & \textbf{Usable} & \textbf{Tokens (Mt/Mk/Lk)} & \textbf{Note} \\
+\midrule
+Triple (Mt+Mk+Lk) & 88 & 65 & 8{,}980 / 8{,}484 / 7{,}870 & full triples; 23 lack a book \\
+Double (Mt+Lk) & 17 & 17 & 4{,}041 / --- / 2{,}913 & the contested material \\
+Matthaean-unique & 18 & --- & 2{,}377 / --- / --- & \\
+Lukan-unique & 45 & --- & --- / --- / 7{,}155 & \\
+Markan-unique & 2 & --- & --- / 140 / --- & \\
+\midrule
+\rowcolor{papyrus}\textbf{Corpus} & \textbf{170} & & \textbf{49{,}061 total} & 2{,}739 lemmas; 235 alignments \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{The SynoptiQ corpus and its census.} Tokens are counted over the \emph{usable} units, so the per-tradition rows do not sum to the 49{,}061-token corpus total, which counts every token in all 170 pericopes---including the 23 partial triples that are dropped from the usable triple count. Two facts shape the study. The effective triple-tradition sample is 65 full triples, not 88: twenty-three nominal triples lose a book's tokens under alignment and cannot supervise a three-way operator. And among the seventeen double-tradition pericopes, the four in the \emph{wisdom} stratum have no triple-tradition analogue, so no operator can be trained for them; they are flagged unidentifiable a priori and excluded from any per-genre claim. Textual basis SBLGNT \citep{holmes2010}; annotation MorphGNT \citep{tauber2017}; Aland pericopes \citep{aland1996}; CC~BY-SA~4.0.}
+\label{tab:corpus}
+\end{table}
+
+\subsection{Construction, alignment, and census}
+
+The corpus merges the SBLGNT base text \citep{holmes2010} with the MorphGNT analysis \citep{tauber2017} on an exact (book, chapter, verse, position) key, falling back to a normalised surface form, with complete coverage over the synoptic tokens. Each token carries its surface form, its 13-class MorphGNT part-of-speech tag, its lemma, and its Aland pericope identifier \citep{aland1996}, so that queries can run at the word or the narrative unit.
+
+For pericopes attested in more than one Gospel we align tokens with a Needleman--Wunsch procedure whose substitution score is defined on the \emph{(normalised lemma, part-of-speech)} key rather than the surface string: matching keys score a match, everything else a gap. Aligning on the morphological key is deliberate, since the interesting edits---a synonym substituted, a tense changed, a connective inserted---are exactly the cases where surface forms diverge while grammatical function is preserved. The procedure yields 235 pairwise alignments over 8{,}855 aligned token pairs. Splits are drawn at the whole pericope, never the verse, so that no pericope crosses the train/evaluation boundary; the clustered inference of Section~\ref{sec:reframe} depends on it.
+
+The census in Table~\ref{tab:corpus} is not decoration; its two corrections drive the design. That the usable triple tradition is 65 rather than 88 sets where discrimination is feasible, and that the double tradition is only 17 independent units---one stratum of them unidentifiable---sets where power runs out. A fuller description of the corpus, together with the KoineFormer encoder trained on it, appears in companion work; here it is the substrate.
+
+% =====================================================================
+\section{Koine-T5}
+\label{sec:model}
+
+The reframe also needs a generative model competent in Koine Greek---one that can be conditioned on one evangelist's text and asked for another's, and whose conditional likelihoods mean something. Existing Ancient-Greek models are trained mostly on Classical Greek, whose vocabulary and syntax differ from the Koine register of the New Testament \citep{gururangan2020}. We therefore train \textbf{Koine-T5}, a multitask sequence-to-sequence model, and release it as a resource in its own right.
+
+\subsection{Design}
+
+Koine-T5 adapts GreTa \citep{riemenschneider2023}, a T5-base \citep{raffel2020} encoder--decoder pretrained on Classical and Medieval Greek, with low-rank adapters \citep{hu2021lora}. One shared adapter (rank $r=64$, $\alpha=128$, dropout $0.05$; 27.1M trainable parameters, $9.88\%$ of the 274.6M total; a 104~MB checkpoint) sits on every attention projection---query, key, value, and output, across encoder self-attention, decoder self-attention, and cross-attention---and on the feed-forward projections. Because GreTa uses the T5~v1.1 gated feed-forward block, the adapted input projections are the gate pair \texttt{wi\_0}/\texttt{wi\_1} and the output \texttt{wo}; the legacy v1.0 name \texttt{wi} appears in the target list for portability but matches no module here and is inert.
+
+Four tasks share these weights, sampled anew into every micro-batch so none is starved: \emph{denoising} (online T5 span corruption on raw Greek), \emph{part-of-speech tagging}, \emph{lemmatisation}, and \emph{synoptic style transfer} (Mark~$\to$~Matthew and Mark~$\to$~Luke). The first three draw on the Gospel corpus together with the \mbox{UD\_Ancient\_Greek-PROIEL} treebank \citep{haug2008}---about 214K tokens of New-Testament Koine and Herodotus's Classical Ionic---and the fourth on a curated pool of 155 synoptic pairs. Three choices carry the model's quality. The treebank's fine-grained \textsc{xpos} column is mapped onto the 13-code MorphGNT tagset (the article \texttt{S-}~$\mapsto$~\texttt{RA}, and so on; Appendix~\ref{app:xpos}) rather than its \textsc{upos}/\textsc{feats} columns, whose \texttt{PronType=Dem} analysis of the article had previously collapsed the tagging task. Sampling is weighted rather than one-slot-per-task: tagging and denoising take three shares of each batch and lemmatisation and style transfer one each, which over a run gives roughly three passes of tagging and denoising, one of lemmatisation, and---by upsampling with replacement---about ninety-seven passes over the tiny synoptic pool, enough to keep it from being forgotten without letting it dominate. And the span-corruption sentinels reuse GreTa's spare embedding slots rather than resizing the embedding matrix, which would desynchronise the tokenizer from the decoder's start-of-sequence convention and, in an early run, collapsed generation to empty strings.
+
+\subsection{Training and evaluation}
+
+Optimisation uses AdamW at a peak learning rate of $10^{-4}$, warmed up over 1{,}500 micro-steps and annealed by cosine decay to zero across a 30{,}000-micro-step budget; because the scheduler advances once per optimiser update, these counts are converted from micro-steps to optimiser steps inside the schedule, a units conversion whose omission silently stretches warmup across a large fraction of training. The effective batch is 32 (micro-batch 4, eight accumulation steps) at a maximum length of 256 tokens on one A10G GPU; denoising corrupts 15\% of positions with a geometric mean span of 3.0. Checkpoints are selected on part-of-speech token accuracy over the treebank development set, and the best---step 28{,}000, at a lowest micro-step loss of $0.5321$---is the released model.
+
+We evaluate tagging as free sequence-to-sequence generation, not as a probe over frozen features, on a deterministic 500-sentence sample of the PROIEL development split, reported separately for its New-Testament and Classical halves (Table~\ref{tab:koinet5}). One reproduction detail matters: GreTa's tokenizer lower-cases its input, so the model emits lower-case tags against upper-case gold; the codes are case-unique, so upper-casing the predictions is lossless and necessary, and omitting it pins exact-match to a spurious zero.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\toprule
+\tblhead\textbf{Subset} & \textbf{POS token acc.} & \textbf{Sentence exact-match} & \textbf{$n$} \\
+\midrule
+New-Testament Koine & 96.6\% & 85.2\% & 250 \\
+Classical (Herodotus) & 87.7\% & 52.0\% & 250 \\
+\rowcolor{terracotta!12}\textbf{Pooled} & \textbf{91.7\%} & \textbf{68.6\%} & \textbf{500} \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{Koine-T5 part-of-speech accuracy on the PROIEL development set}, by generation. The New-Testament figure of 96.6\% matches the KoineFormer linear probe's 96.62\% reported in companion work; the two are comparable rather than identical, since Koine-T5 is measured by free generation on a different set and a harder decoding regime. The lower Classical accuracy reflects Herodotus's richer morphology and looser fit to the MorphGNT scheme.}
+\label{tab:koinet5}
+\end{table}
+
+Qualitatively, tagging and lemmatisation are reliable, and synoptic generation is fluent but not faithful---a distinction we report plainly, because it recurs in Section~\ref{sec:reframe}.
+
+\begin{tcolorbox}[enhanced, breakable, colback=papyrus, colframe=papyrus,
+  boxrule=0pt, arc=0pt, outer arc=0pt,
+  borderline west={2.6pt}{0pt}{marinelight}, left=15pt, right=15pt, top=9pt, bottom=9pt]
+{\headfont\bfseries\color{marine}\small Qualitative behaviour}\par\vspace{4pt}\small
+\textbf{Tagging} (Luke 1:46). \gk{μεγαλύνει ἡ ψυχή μου τὸν κύριον} $\rightarrow$ \texttt{V- RA N- RP RA N-}. Correct throughout (``My soul magnifies the Lord'').\par\vspace{3pt}
+\textbf{Lemmatisation} (Matthew 6:9). \gk{Πάτερ ἡμῶν ὁ ἐν τοῖς οὐρανοῖς} $\rightarrow$ \gk{πατήρ ἡμεῖς ὁ ἐν ὁ οὐρανός}. Correct throughout (``Our Father, who is in the heavens'').\par\vspace{3pt}
+\textbf{Style transfer} (Mark 1:10, Mark~$\to$~Matthew). \gk{καὶ εὐθὺς ἀνέβη ἐκ τοῦ ὕδατος} $\rightarrow$ \gk{καὶ καταβὰς ὁ ἰησοῦς ἀπὸ τοῦ ὕδατός φησιν πρὸς αὐτόν \dots} Fluent, grammatical Koine, but a confabulated expansion rather than a faithful redaction of the input: with 155 supervised pairs the model has learned the texture of Matthaean prose without controlled content transfer. Section~\ref{sec:reframe} finds the same ceiling on reconstruction.
+\end{tcolorbox}
+
+Koine-T5 is released under CC~BY-NC-SA~4.0---the non-commercial clause mirrors the PROIEL treebank's own licence---at \url{https://huggingface.co/ainouche-abderahmane/koine-t5}.
+
+% =====================================================================
+\section{What the texts can tell us: comparison without direction}
+\label{sec:reframe}
+
+Section~\ref{sec:limit} forbids reading direction off a pair of texts. It does not forbid comparing hypotheses, and the two are not the same thing. This section turns that distinction into a method, states the test we preregistered, and reports what it found.
+
+\subsection{The reframe}
+
+The move that sidesteps the limit is to notice that the triple tradition is hypothesis-neutral, direction-labelled supervision. Every live hypothesis agrees that Matthew and Luke each used Mark, so the mappings Mark~$\to$~Matthew and Mark~$\to$~Luke are not in dispute and may be fit without taking a position on the contested double tradition. This is precisely the ``prior over each author's editing operator'' that Section~\ref{sec:limit} showed direction inference requires---obtained, for once, without assuming anything the hypotheses contest. Having learned from neutral data how each evangelist reworks a Markan source, we can ask a comparative question about the double tradition: does a generative model in which Luke's text passes through a \emph{bottleneck} at a latent common source (the 2SH) fit better or worse than one in which Luke has \emph{direct} access to Matthew (Farrer)? This weighs two accounts of the same observed text. It never asks which of two texts came first.
+
+The hypotheses of Table~\ref{tab:hyp} make opposite predictions not about an unmeasurable direction bit but about measurable dependence. Under the 2SH, within the triple tradition Luke is independent of Matthew given Mark, except where Mark and Q overlap; under Farrer, Matthew informs Luke beyond Mark everywhere. That contrast is the object of the primary test.
+
+\subsection{The scoring primitive and the operators}
+
+Every quantity in the study is a teacher-forced conditional negative log-likelihood, $\nll(\text{target}\mid\text{context})$, read off the model's own next-token distribution, and every verdict is a \emph{paired difference} of two such quantities on the \emph{same} target string. Because the target is held fixed and only the context changes, length and target style---the confounds that sink direction detection (threat T1 below)---cancel between the two branches by construction.
+
+Five operators, all trained only on triple-tradition pericopes under cross-validation with the double tradition never touched, do the work: the redaction operators $R_{\mathrm{Lk}}$ (Mark~$\to$~Luke) and $R_{\mathrm{Mt}}$ (Mark~$\to$~Matthew); the single-witness reconstructors $G_{\mathrm{Mt}}$ (Matthew~$\to$~Mark) and $G_{\mathrm{Lk}}$ (Luke~$\to$~Mark); and a Fusion-in-Decoder model $F$ \citep{izacard2021} that encodes two witnesses separately and reconstructs their source. A binding \emph{capacity-fairness} rule governs every comparison: competing hypotheses share one scoring network per target author and differ only in what is placed in the encoder context, never in architecture, parameters, or training data. The models are trained with source-dropout---random subsets of the available witnesses in the encoder---so that one- and two-witness conditionals come from the same weights and no hypothesis is handed extra capacity.
+
+Before any verdict, the operators must show they have learned pericope-specific content rather than generic Greek. They do. On held-out triple-tradition folds, each operator conditioned on the \emph{correct} source beats the same operator conditioned on a \emph{mismatched} source of the same author and genre by roughly one nat per token, and beats free generation by an order of magnitude (Table~\ref{tab:operators}). The one-nat gap between the real and the mismatched source is the validity signal the whole study rests on: it says the operators use the content of the source in front of them, not merely its language.
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{lcccc}
+\toprule
+\tblhead\textbf{Operator} & \textbf{Trained on} & \textbf{Correct source} & \textbf{Mismatched source} & \textbf{No source} \\
+\midrule
+$R_{\mathrm{Lk}}$ (Mk$\to$Lk) & Mk$_p\to$Lk$_p$ & \textbf{1.995} & 3.094 & 11.6 \\
+$R_{\mathrm{Mt}}$ (Mk$\to$Mt) & Mk$_p\to$Mt$_p$ & \textbf{1.978} & 2.818 & 37.6 \\
+$G_{\mathrm{Mt}}$ (Mt$\to$Mk) & Mt$_p\to$Mk$_p$ & \textbf{2.182} & 3.055 & 38.4 \\
+$G_{\mathrm{Lk}}$ (Lk$\to$Mk) & Lk$_p\to$Mk$_p$ & \textbf{2.032} & 2.996 & 38.3 \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{Operator validation} (held-out NLL, nats per token; fold~0). Each operator prefers the correct source to a genre-matched mismatched one by about a nat, and to free generation by far more. The operators encode source-specific content, which is what licenses the likelihood comparisons that follow.}
+\label{tab:operators}
+\end{table}
+
+\subsection{The primary test: minor-agreement information (E2)}
+
+The double tradition is small, seventeen independent units, and a power analysis over the corpus's real per-pericope token weights confirms what that implies: detectability is set by the number of independent pericopes and the between-pericope heterogeneity of the effect, not by the amount of Greek per pericope, which is already ample (median 96 Luke tokens in the triple tradition, 165 in the double). The minimum detectable effect for a direct double-tradition channel test at $N=17$ is large; the whole-triple-tradition test at $N=65$ is where discrimination is feasible. We therefore make the primary, confirmatory test the triple-tradition \emph{minor-agreement} test, and treat the double-tradition channel test as secondary, to be run only if the power analysis clears it.
+
+Where Matthew and Luke agree against Mark in a triple-tradition passage, a \emph{minor agreement} of the kind catalogued by \citet{neirynck1974}, Farrer predicts that Matthew should help explain Luke beyond what Mark already explains, and the 2SH predicts that such agreements are independent noise. We measure the help as a paired excess lift. For each held-out pericope,
+\[
+\Delta_p \;=\; \nll(\text{Lk}_p\mid \text{Mk}_p)\;-\;\nll(\text{Lk}_p\mid \text{Mk}_p,\text{Mt}_p)
+\]
+is the reduction in Luke's negative log-likelihood from adding the true Matthew, and $\tilde{\Delta}_p$ is the same reduction from adding a \emph{control}: a genre-matched Matthew passage from a \emph{different} pericope, or a length-matched Septuagint chunk. The verdict statistic is the paired excess lift $\Delta_p-\tilde{\Delta}_p$, cluster-bootstrapped over pericopes; it isolates the help specific to the \emph{correct} Matthew from the help any fluent Greek context provides. Two guards accompany it. A difference-in-differences contrast partitions the triple tradition into the Mark--Q overlap pericopes (a standard list, mapped to Aland identifiers and frozen before unblinding) and the rest: the 2SH expects excess lift only in the overlap, Farrer expects it everywhere. And a null floor (gate G3) is set by the excess lift between \emph{two} mismatched Matthews, the level at which conditioning on any extra fluent Greek is already worth something; a real effect must clear it. The difference-in-differences is the most bias-resistant statistic in the design (genre, style, contamination, and model pathologies fall on both partitions alike) and, the power analysis warns, also the least powerful, needing about three times the per-token effect of the whole-corpus test.
+
+\subsection{Preregistration}
+
+The design was written to be a preregistration, and its discipline is what makes the null believable. All modelling choices (architecture, hyperparameters, prompts, fold structure) were fixed on triple-tradition training folds and calibration gates, never on the double tradition. Decision thresholds are derived, not chosen: the claim threshold is the G3 noise floor, and the power threshold is the detection-rate curve, both written into a configuration whose hash was committed before any contested quantity was computed (the freeze block, with the structural hashes, is Appendix~\ref{app:prereg}). The double-tradition channel test, should it run, is single-shot: it may execute once, behind a runtime guard that refuses to start unless a passing gates report exists and the config hash matches, writing a sentinel on completion so that any re-run is visible in the record. Statistics use a paired cluster bootstrap over pericopes with bias-corrected-and-accelerated intervals \citep{efron1987,efron1993} and ten thousand resamples; per-token likelihoods are never pooled across pericopes without clustering. Kill criteria were fixed in advance: if the calibration gates fail after two pre-declared iterations the phase stops and reports a negative-methods result, and if the double-tradition test is underpowered by its own MDE curve it is never run. No verdict depends on a decision made after the answer is seen.
+
+\subsection{Result: a calibrated null}
+
+The minor-agreement test returns a null once calibrated, on both of its independent axes. At fold~0 the raw excess lift is $+0.182$ nats (CI $[0.108, 0.258]$), which a naive test (does the interval exclude zero?) would report as a strong effect. It does not clear the fold's G3 floor of $0.242$: the true Matthew's advantage over Mark is \emph{smaller} than the advantage two mismatched Matthews generate by chance. The pooled five-fold cross-validation, over all 65 held-out pericopes with the five overlap pericopes gathered into one difference-in-differences, tells the same story with the whole corpus. The pooled excess lift is $+0.169$ nats (CI $[0.127, 0.213]$, $P(\!>\!0)=1.00$) and again does not clear the pooled floor of $0.194$. The overlap-versus-rest difference-in-differences is $+0.096$ nats (CI $[-0.049, +0.296]$) and spans zero: the lift, such as it is, does not concentrate where the 2SH-versus-Farrer contrast requires it to. The preregistered floor and the localisation guard, both fixed in advance, retract what an unguarded test would have published as support for Luke's use of Matthew. Read through the outcome matrix we committed beforehand, this is the strict-independence-beyond-Mark row: the double-tradition minor agreements behave as text-critical and stylistic noise, a publishable null rather than a verdict for any hypothesis.
+
+That the null is a real null, and not a dead model, is established by the operator validation above and by a contamination audit. Because the encoder GreTa was pretrained on text that includes the New Testament, we retrained a decontaminated variant, KoineFormer-NS, excluding the twelve gospel files, and audited memorisation directly. The gap between held-out and seen perplexity is $0.016$, far under the $0.25$ flag; verse-completion exact-match is $0\%$; gospel and control perplexities are $2.08/1.66$ for the original and $2.12/1.66$ decontaminated. Low-rank adapters, with about a percent and a half of the model's capacity, cannot store the evaluation text verbatim, and the paired-difference design cancels what little they might. The likelihood comparisons are not reading memorised strings.
+
+\subsection{Reconstruction: a bounded negative}
+
+We also tried the harder, generative form of the task---reconstructing Mark's text by fusing Matthew and Luke in the decoder \citep{izacard2021}, as a proof of concept for eventually reconstructing Q. On the triple tradition, where Mark is the ground truth, the fusion model reaches a bag-of-tokens F1 of $0.311$ (CI $[0.24, 0.38]$), below the $0.562$ of simply emitting the nearer witness, and it overfits: training loss falls from $2.17$ to $1.28$ while held-out F1 barely moves from $0.279$ to $0.311$. The witnesses are already about 56\% overlapping with Mark, and abstractive fusion has nothing to add over copying at this scale. We report this as a bounded limitation, not a headline, and we draw no inference about Q's existence or content from it; scoring and generation are separate paths, and the null of the previous section stands independently of this one.
+
+\subsection{Threats to validity}
+
+The design maps each way the earlier direction work went wrong to a specific counter. Length and style masquerading as signal (T1) is met by the paired-difference construction, which holds the target fixed. An author-style detector masquerading as direction (T4) is met, by design, by running every test symmetrically in both target directions, so that a pure style artefact produces symmetric lift read as no directional claim; the Lukan-target verdict is complete here, and the symmetric Matthaean-target run is still pending (Section~\ref{sec:limitations}). Genre-transfer failure (T3) is met by training and evaluating within the corpus and by flagging the unidentifiable wisdom stratum. Contamination (T7) is met by KoineFormer-NS and the audit above; textual assimilation, whereby later scribes harmonised Luke toward Matthew and manufactured minor agreements (T8), a well-attested mode of scribal transmission \citep{metzger2005}, is to be met by an edition-swap ablation---minor agreements that vanish across critical editions are transmission, not composition---which, like the Matthaean-target run, is not yet executed. The assumption that Luke treats Matthew as he treats Mark (T6) is treated as a sensitivity parameter to be swept, not fixed by fiat. Sparsity (T9) is met by the preregistered power analysis, and post-hoc drift (T10) by the preregistration itself. The one residual we cannot fully close is the plug-in bias of the reconstructor in the secondary channel test, which is why that test is secondary and gated; it is stated as a limitation wherever it bears.
+
+% =====================================================================
+\section{Discussion}
+\label{sec:discussion}
+
+The negative result is a redirection, not a counsel of despair. Computational source criticism should stop trying to read the arrow of copying off parallel text, because the arrow is not there to be read, not for want of a sharper statistic but because the only asymmetry the texts expose is the information gradient, and that gradient is blind to history. The productive programme is the one the second half of this paper runs: find the supervision that all competing hypotheses accept, fit generative models under it, compare the hypotheses by paired likelihood on shared targets, and commit in advance to a null floor and a localisation guard so that the comparison can return a null and be believed when it does. The discipline that makes the method trustworthy is the same discipline that turned our own headline into a null instead of a false positive.
+
+The finding also sits naturally beside the translation-direction literature \citep{rabinovich2015,sominsky2019}, where the same arc recurs on far larger corpora: strong in-domain separation, cross-domain collapse, and the eventual recognition that the in-domain signal is a fingerprint, not a cause. And it is the source-critical instance of a fact the causal-inference literature states in general \citep{janzing2010,peters2017}: direction between two jointly observed objects is recoverable only under an assumption that breaks their symmetry. The contribution here is to make that assumption visible in the one place, textual scholarship, where it has most often been left implicit, and to build a method that does not need it.
+
+We are explicit about what we do not claim. We make no per-pericope direction verdict. We take no position on the existence of Q, which the reconstruction of Section~\ref{sec:reframe} was never designed to settle. And we make no theological claim of any kind; the object of study is a pattern of literary dependence among three Greek texts, and the results bear on that and nothing beyond it.
+
+% =====================================================================
+\section{Limitations}
+\label{sec:limitations}
+
+Three limits bound the positive contribution. First, power: the double tradition is seventeen pericopes, one stratum of which cannot be modelled from neutral supervision at all, and the difference-in-differences contrast rests on five overlap pericopes. The null we report is a null \emph{at this power}, and a decisive separation of the 2SH from Farrer may be beyond what the surviving text can support---a possibility our power analysis quantifies rather than hides. Second, operator fidelity: a comparison of likelihoods is only as good as the models producing them, and although we validate the operators (the one-nat correct-versus-mismatched gap), a subtler failure of fidelity could bias a comparison we would not catch. Third, reconstruction: Track A is a bounded negative, and we have been careful to build no argument about Q upon it. None of these touches the limit result of Sections~\ref{sec:limit}--\ref{sec:empirical}, which is independent of the reframe and of the models.
+
+Two designed controls remain to be run, and both are small. The symmetric Matthaean-target minor-agreement test would separate Farrer from Matthaean Posteriority and supply the T4 symmetry check, and the edition-swap ablation (T8) would confirm that the null is not an artefact of one critical text; together they would turn the present null from robust-by-design into robust-in-fact. The double-tradition channel test (E1) was judged underpowered by the preregistered analysis at $N=17$ and, as the protocol requires, was not run---itself a preregistered confirmation of the sparsity that has long left the 2SH-versus-Farrer question undecided.
+
+% =====================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+We have argued and then shown that the direction of literary copying cannot be recovered from parallel text alone. The argument is an identifiability theorem; the demonstration is a set of detectors that each collapse to a direction-blind information gradient and reverse sign when the length polarity of a known-direction pair is reversed. This closes, in particular, the conditional-perplexity approach that recurs in proposals to solve the Synoptic Problem by computation. We have then shown what the texts still support---a hypothesis comparison built only on supervision every hypothesis accepts---and reported its preregistered outcome honestly as a calibrated null. Along the way we release two instruments, the SynoptiQ corpus and Koine-T5, so that the argument and the null can be checked and pushed. A limit, two resources, and a method that respects the limit is, we think, a more durable contribution to the computational study of the Synoptic Problem than a verdict on who copied whom---because that verdict, read from the texts, is exactly what the texts cannot give.
+
+% ── Statements ───────────────────────────────────────────────────────
+\vspace{0.5em}
+{\headfont\bfseries\color{marine}\small Reproducibility.}\par
+\small The corpus, model, preregistered study design, decision gates, and analysis code are released with the project. The five-fold structure is seeded and its hash is recorded (Appendix~\ref{app:prereg}); \texttt{prepare\_study.py freeze} regenerates the census, folds, and hashes idempotently. All GPU work runs on a single A10G.
+
+\par\vspace{4pt}
+{\headfont\bfseries\color{marine}\small Ethics and positionality.}\par
+\small The study concerns literary dependence among three Greek texts. It makes no theological claim and no claim about the historical truth of their contents, and its methods are designed to return, and to report, a null. Koine-T5 inherits the biases of its pretraining and training corpora and is released for scholarly use.
+
+\par\vspace{4pt}
+{\headfont\bfseries\color{marine}\small Data, model, and code availability.}\par
+\small SynoptiQ (CC~BY-SA~4.0): \url{https://huggingface.co/datasets/ainouche-abderahmane/synoptiq-corpus}. Koine-T5 (CC~BY-NC-SA~4.0): \url{https://huggingface.co/ainouche-abderahmane/koine-t5}. The companion KoineFormer encoder: \url{https://huggingface.co/ainouche-abderahmane/koineformer}.
+
+% ── Appendices ───────────────────────────────────────────────────────
+\appendix
+
+\section{The XPOS-to-MorphGNT mapping}
+\label{app:xpos}
+
+Koine-T5's tagging supervision reconciles two annotation schemes. The PROIEL treebank marks part of speech in a fine-grained \textsc{xpos} column; the Gospel corpus uses the 13-class MorphGNT tagset. We map the former onto the latter, taking care to read \textsc{xpos} rather than the \textsc{upos}/\textsc{feats} analysis, whose treatment of the Greek article as a demonstrative (\texttt{PronType=Dem}) had collapsed the tagging task in an earlier version. Table~\ref{tab:xpos} gives representative rows.
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{L{3.2cm}L{2.2cm}L{6.0cm}}
+\toprule
+\tblhead\textbf{PROIEL \textsc{xpos}} & \textbf{MorphGNT} & \textbf{Category} \\
+\midrule
+\texttt{S-} (article) & \texttt{RA} & definite article \\
+\texttt{Ne} / \texttt{Nb} & \texttt{N-} & noun (proper / common) \\
+\texttt{V-} & \texttt{V-} & verb \\
+\texttt{Pp} / \texttt{Pd} / \texttt{Pr} & \texttt{RP} / \texttt{RD} / \texttt{RR} & pronoun (personal / demonstrative / relative) \\
+\texttt{A-} & \texttt{A-} & adjective \\
+\texttt{Df} & \texttt{D-} & adverb \\
+\texttt{R-} & \texttt{P-} & preposition \\
+\texttt{C-} / \texttt{G-} / \texttt{Dq} & \texttt{C-} & conjunction (coordinating / subordinating / correlative) \\
+\texttt{(unseen)} & \texttt{X-} & particle / other (fallback bucket) \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{Representative \textsc{xpos}~$\to$~MorphGNT correspondences.} The article mapping (\texttt{S-}~$\to$~\texttt{RA}) is the one that most matters: the treebank's alternative feature-based analysis tags the article as a demonstrative pronoun, which, if used as supervision, teaches the model the wrong class for the single most frequent token in the corpus.}
+\label{tab:xpos}
+\end{table}
+
+\section{Power analysis and the preregistration freeze}
+\label{app:prereg}
+
+\textbf{Power.} A simulation over the corpus's real per-pericope target-token weights sweeps the per-token signal-to-noise ratio and reports each test's minimum detectable effect at 80\% power, as a function of the between-pericope effect heterogeneity $\tau$. Three findings shaped the design. Power is set by pericope count and heterogeneity, not by tokens per pericope, so more Greek per pericope would not help---only more independent pericopes would. The difference-in-differences contrast, on five overlap pericopes, needs about three times the per-token effect of the whole-triple-tradition test; it is the most bias-resistant statistic and the least powerful, and is reported with that MDE attached rather than as a bare null. And the percentile bootstrap is mildly anti-conservative at $N=17$ (false-positive rate near $0.07$--$0.08$ against a nominal $0.05$), so the double-tradition claims use bias-corrected-and-accelerated intervals and the G3-derived floor rather than the raw interval.
+
+\textbf{Freeze.} The structural hashes below were committed before any contested quantity was computed; the two data-dependent thresholds are filled once the calibration gates run, since they cannot exist before the models do. Regenerate and verify with \texttt{prepare\_study.py freeze}: the hashes must reproduce exactly, or the folds, config, or overlap list have drifted from the preregistration.
+
+\begin{tcolorbox}[enhanced, breakable, colback=papyrus, colframe=papyrus,
+  boxrule=0pt, arc=0pt, outer arc=0pt,
+  borderline west={2.0pt}{0pt}{stone}, left=13pt, right=13pt, top=8pt, bottom=8pt]
+{\footnotesize\ttfamily
+config\_hash (StudyConfig, 5-fold seed 20260707):\\
+\hspace*{1em}9a9b0d345dc45d129a1c950e7869fde962152c383421b012e78a3878d0ad1227\\[2pt]
+folds\_hash (folds.json):\\
+\hspace*{1em}c6133c2f4e8820989a64c24f9fb39f2901d608ab921e1f7183470acf3c49747b\\[2pt]
+overlap\_core\_hash (Mark--Q core = 009,012,037,045,057):\\
+\hspace*{1em}b380601ef5f9cd9044e1bbe15930d976fe2c6de229adc96342deb2947c78c1ae\\[2pt]
+E2 claim threshold: derived from the G3 noise floor \quad E1 go/no-go: detection rate @ $N{=}17$, 0.80
+}
+\end{tcolorbox}
+
+% ── References ──────────────────────────────────────────────────────
+\bibliographystyle{apalike}
+\bibliography{references}
+
+\end{document}
