@@ -179,5 +179,43 @@ def mai_cv(epochs: int = 8) -> None:
     print("Download: modal volume get synoptiq-outputs study/mai/ outputs/study/mai/")
 
 
+@app.function(  # type: ignore[misc]
+    gpu=GPU_TYPE, image=_build_image(), volumes=_VOLUMES, timeout=TIMEOUT_SECONDS,
+) if modal is not None else None
+def mai_cv_mt(epochs: int = 8) -> None:
+    """Symmetric Mt-target E2 cross-validation (T4 symmetry check; Farrer vs MPH).
+
+    Mirror of ``mai_cv`` with the axes swapped: witnesses (Mark, Luke) -> target Matthew,
+    verdict scores NLL(Mt | Mk, Lk) vs a mismatched-Luke control. Writes to separate dirs
+    (fid_mai_mt / mai_mt) so it never overwrites the Lk-target results.
+    """
+    import sys
+
+    sys.path.insert(0, "/app")
+    from scripts.pool_mai import main as pool_main
+    from scripts.run_mai_test import main as mai_main
+    from scripts.train_fid import main as train_main
+
+    for fold in range(5):
+        print(f"\n===== MT-TARGET FOLD {fold} =====")
+        train_main([
+            "--tokens", _COMMON["tokens"], "--pericopes", _COMMON["pericopes"],
+            "--init-adapters", _COMMON["ns_adapters"], "--fold", str(fold),
+            "--epochs", str(epochs), "--device", "cuda", "--out", "/outputs/study/fid_mai_mt",
+            "--witnesses", "Mark", "Luke", "--target", "Matthew",
+        ])
+        mai_main([
+            "--tokens", _COMMON["tokens"], "--pericopes", _COMMON["pericopes"],
+            "--fid-adapters", f"/outputs/study/fid_mai_mt/fold{fold}", "--fold", str(fold),
+            "--target", "Matthew", "--base", "Mark", "--added", "Luke",
+            "--device", "cuda", "--out", "/outputs/study/mai_mt",
+        ])
+        _commit()
+    pool_main(["--glob", "/outputs/study/mai_mt/mai_fold*.json",
+               "--out", "/outputs/study/mai_mt/mai_pooled.json"])
+    _commit()
+    print("Download: modal volume get synoptiq-outputs study/mai_mt/ outputs/study/mai_mt/")
+
+
 if __name__ == "__main__":
     _ = Path  # keep Path import used for local linting parity
