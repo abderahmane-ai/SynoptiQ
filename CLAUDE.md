@@ -43,9 +43,13 @@ git-ignored). Four deliverables; two published, one code-complete, one drafted.
 
 **Code-complete (Phase 5 source-criticism study — `docs/SOURCE_CRITICISM_STUDY.md`, preregistered)**
 - Operators **strong PASS** (~1-nat real-vs-mismatched-source gap; validity signal for all verdicts).
-- **E2 minor-agreement verdict = NULL-after-calibration** (Lk-target, pooled 5-fold, N=65): lift
-  **+0.169** [0.127, 0.213] but < G3 floor **0.194**; DiD +0.096 [−0.049, +0.296] spans 0 → strict
-  independence beyond Mark (minor agreements = text-critical noise; a publishable null).
+- **E2 minor-agreement verdict = SYMMETRIC NULL-after-calibration** (pooled 5-fold, N=65, both axes).
+  Lk-target (Farrer axis): lift **+0.169** [0.127, 0.213] < G3 floor **0.194**; DiD +0.096 [−0.049, +0.296]
+  spans 0. Mt-target (MPH axis, `mai_cv_mt` — **DONE**, results on `synoptiq-outputs:study/mai_mt/`):
+  lift **+0.135** [0.097, 0.176] < floor **0.173**; DiD +0.091 [−0.063, +0.293] spans 0. Both axes below
+  floor → strict independence beyond Mark; **T4 symmetry check passes** (a style artefact would clear
+  both floors, a real one-way dependence one of them; neither happens) → the null is **robust-in-fact**,
+  not just robust-by-design. Does NOT separate Farrer/MPH (both underpowered-null). Paper table `tab:symmetry`.
 - Track A reconstruction = **bounded negative** (FiD Mt+Lk→Mark F1 0.31 < nearest-witness 0.56).
 - Contamination negligible (memorization gap 0.016 ≪ 0.25; 0% verse-completion exact-match).
 
@@ -57,14 +61,42 @@ Koine-T5 · **C2** the E2 null. Every number traced to source; **all 33 referenc
 Appendix XPOS table checked against the code. Title: *Who Copied Whom? Why the Texts Cannot Tell
 Us — and What They Can*. Framing rules in `docs/PAPER_PLAN.md`; memory `honest-paper-not-nll-direction`.
 
-**Next (small GPU runs, then finish the paper)**
-- **Mt-target E2** — `modal run modal/app_fid.py::mai_cv_mt` (added this session): symmetric run that
-  distinguishes Farrer vs MPH and gives the T4 symmetry check → turns the null "robust".
-- **Edition-swap ablation** (T8) — same goal (Westcott–Hort / Robinson–Pierpont).
+**Next (finish the paper)**
+- **Mt-target E2 — DONE** (`mai_cv_mt`, symmetric null, `tab:symmetry`); results already on the volume,
+  downloaded to `outputs/study/mai_mt/`. No re-run needed.
+- **Edition-swap ablation** (T8) — Westcott–Hort / Robinson–Pierpont; the one designed robustness check left.
 - M3 gates G1/G2/G4; M5 E1 is likely **not run** (underpowered at N=17 — itself a prereg outcome).
-- Paper: author affiliation, an optional figure, then compile on Overleaf.
+- Paper: affiliation + contact done (ENSIA); Mt-target landed; remaining is an optional figure, then Overleaf compile.
 
 **Changelog (newest first)**
+- 2026-07-11 — **Koine-T5-Hexapla (the MAX edition) — code-complete + CPU-validated.** New
+  generation-focused model line (`modal/app_koine_hexapla.py`) that lifts free-generation quality
+  while holding POS/lemma/synoptic at/above Koine-T5 via a **regression gate**. Adds: a self-contained
+  **Text-Fabric reader** recovering the **623,693-word LXX** (the documented "0 chunks" bug — on-disk LXX
+  is the eliranwong TF edition, not the biblicalhumanities plaintext `_parse_lxx` expects) in
+  `synoptiq/data/koine_corpus.py`; `scripts/prepare_koine_maxi_corpus.py` → a **16.8M-word**
+  decontaminated corpus (`data/processed/koine_maxi/`, git-ignored); a **continuation (prefix-LM)** task;
+  LoRA **r=128**, **512-tok** context; two-stage curriculum + 70/30 Koine/Classical sampling;
+  `evaluate_all` (pos/lemma/perplexity/token-F1/**morphological self-consistency**) with gated
+  best-selection. 8 new tests (**194 pass**). Prereg `docs/GENERATION_PLAN.md`. Awaiting the GPU run.
+  Housekeeping: **`paper/` + `paper_limit/` now git-ignored (local-only, removed from GitHub remote)**;
+  **`AGENTS.md` deleted**; `README.md` rewritten.
+- 2026-07-11 — **Mt-target E2 landed** (symmetric null): `mai_cv_mt` was already complete on
+  `synoptiq-outputs:study/mai_mt/` (all 5 folds + pooled); no GPU spend. Pooled Mt-target lift
+  **+0.135** [0.097, 0.176] < floor **0.173**, DiD +0.091 [−0.063, +0.293] spans 0 — mirrors the
+  Lk-target null. **T4 symmetry check passes** → null is robust-in-fact. Written into `paper_limit/main.tex`
+  §7.5 (new `tab:symmetry` + prose), T4 threat, Limitations, abstract, C2 bullet all updated from
+  "pending" to the result. Only edition-swap (T8) robustness check remains.
+- 2026-07-11 — honest paper **hardened after a full self-audit** (`paper_limit/main.tex`, prose-only,
+  no fabricated numbers): E2 null reframed as *indistinguishable from the 95th-pct G3 noise band*
+  (CI straddles floor) + "null ≠ positive 2SH support"; Koine-T5 clarified as a **sibling resource,
+  not the reframe's engine**; its POS numbers labelled dev-set-for-selection; theorem-triviality
+  defused (theorem = easy half; binding claim = no *estimable* prior); C1↔C2 seam made explicit;
+  null-by-construction / no-positive-control limitation added; sign-flip softened to "illustration"
+  (n=2, Chronicles translation layer noted); topology "0.22 singular readings" → token-non-alignment;
+  falsified-detector code flagged as documented-not-released; MPH cite added (Huggins 1992); author
+  contact line added. Open (need GPU/user): Mt-target `mai_cv_mt`, edition-swap, held-out Koine-T5
+  test split, optional figure.
 - 2026-07-11 — honest paper drafted, audited, refs web-verified (`paper_limit/`); Mt-target E2
   entrypoint `mai_cv_mt` added to `modal/app_fid.py`.
 - `56432db` (2026-07-10) — Koine-T5 trained + published; training-bug fixes (LR-schedule units,
@@ -128,9 +160,9 @@ SynoptiQ/
 │   ├── run_mai_test.py     # Phase 5 M4: E2 excess-lift verdict + DiD + G3 floor
 │   ├── pool_mai.py         # Phase 5 M4: pool per-fold rows → CV verdict
 │   └── _cli_utils.py       # Shared CLI helpers (canonical detect_device())
-├── modal/                  # Modal GPU: app_dapt.py (DAPT), app_fid.py (Phase 5), app_koine_t5.py
-├── paper/                  # Paper A: KoineFormer (XeLaTeX) — main.tex + references.bib
-├── paper_limit/            # The honest paper (XeLaTeX) — main.tex + references.bib (Overleaf-only)
+├── modal/                  # Modal GPU: app_dapt.py, app_fid.py (Phase 5), app_koine_t5.py, app_koine_hexapla.py
+├── paper/                  # Paper A: KoineFormer (XeLaTeX) — LOCAL-ONLY (git-ignored, not on GitHub)
+├── paper_limit/            # The honest paper (XeLaTeX) — LOCAL-ONLY (git-ignored, not on GitHub)
 ├── tests/                  # pytest suite (mirrors synoptiq/ structure) — 186 pass
 ├── data/ models/ outputs/  # All git-ignored (corpora, adapters, logs)
 ├── docs/DIRECTION_NEGATIVE_RESULT.md   # why copying-direction detection was closed
@@ -171,6 +203,47 @@ T5 eval right-padding, case-fold POS eval) are committed in `56432db`. Koine-T5 
 R2 (`paper_limit/main.tex` §6). Uncommitted flag: the resume path restores only adapter weights, not
 optimizer/scheduler state — fine for a fresh run, suboptimal on crash-resume.
 
+## Koine-T5-Hexapla — the generation MAX edition (`modal/app_koine_hexapla.py`)
+
+A third model line, evolving Koine-T5 to fix the **discourse-level** failures in
+`docs/gospel_of_the_savior.md` (speaker/pericope bleed, mode-collapse — all semantic, not
+grammatical) **without sacrificing** POS/lemma/synoptic. Named after Origen's *Hexapla* (the
+six-column parallel-scripture alignment — SynoptiQ's ancient precedent). Standalone, like
+`app_koine_t5.py`. Full preregistration in `docs/GENERATION_PLAN.md`.
+
+The pipeline: `scripts/prepare_koine_maxi_corpus.py` (built on `synoptiq/data/koine_corpus.py`)
+ingests every raw source on disk — the Rahlfs LXX via a **self-contained Text-Fabric reader**
+(623,693 words; the section features are dense per-word-slot so verse grouping is a `zip`), plus
+first1k/apostolic/sblgnt via the proven `_extract_text_from_dir` — chunks into passage windows,
+decontaminates against the Gospel test+val splits, and emits a **16.8M-word** artifact +
+held-out eval splits to `data/processed/koine_maxi/` (git-ignored; upload with `--upload` →
+`synoptiq-data:/koine_maxi`).
+
+**Koine-T5 vs Koine-T5-Hexapla**
+
+| | Koine-T5 (published) | Koine-T5-Hexapla (MAX) |
+|---|---|---|
+| Goal | multitask analysis + basic gen | powerful generation, **zero analysis regression** |
+| Base | GreTa T5-base (220M) | GreTa T5-base (220M) |
+| Adapter | LoRA r=64 α=128 (27.1M) | LoRA **r=128 α=256** (54.3M, 18%) |
+| Context | 256 tok | **512 tok** |
+| Tasks | denoise · pos · lemma · synoptic (4) | + **continuation/prefix-LM** (5) |
+| Gen diet | Gospel + PROIEL (~263K tok) | **+16.8M words** (LXX 622K · first1k 16M · apostolic 335K · sblgnt-minus-synoptics 204K) |
+| Gen objective | span-infill only | span-infill + **autoregressive continuation** |
+| Curriculum | single-stage balanced | **two-stage** (backbone → rebalanced multitask), STAGE_A_FRAC=0.4 |
+| Register control | none | **70/30 Koine/Classical** sampling (REGISTER_WEIGHTS) |
+| Eval | POS tok-acc + EM | + lemma · perplexity · continuation token-F1 · **morphological self-consistency** |
+| Selection | best POS tok-acc | **regression-gated**: gates (POS-NT≥0.966, POS-Cl≥0.877, lemma≥gate) → maximize gen score |
+| Eff. batch / steps | 4×8=32 / 30K | 2×16=32 / 40K |
+| Volume | koine-t5-outputs | koine-hexapla-outputs |
+| Status | ✓ trained + published | ◐ code-complete, CPU-validated, awaiting GPU |
+
+The **no-sacrifice** guarantee is mechanical: `evaluate_all`'s best-selection key is `(1, f1+morph)`
+once all gates pass, else `(0, pos_tok)` — any gate-passer outranks any non-passer, and among passers
+the generation score decides. `GATE_LEMMA=0.80` is a placeholder until the measured Koine-T5 lemma
+dev-acc is filled in. Run: `modal run modal/app_koine_hexapla.py::train` ·
+`python modal/app_koine_hexapla.py demo models/koine_hexapla/best`.
+
 ## Current status
 
 | Component | Status | Key result |
@@ -179,10 +252,11 @@ optimizer/scheduler state — fine for a fresh run, suboptimal on crash-resume.
 | Phase 2A  | ✓ KoineFormer DAPT | 96.62% POS, 81.34% lemma, 14 MB adapter (Paper A) |
 | Phase 2B  | ○ Multi-task encoder | Code ready, not yet trained |
 | Phase 3/6 | ✗ Removed | Direction detection + Bayesian scoring — **closed negative** (`docs/DIRECTION_NEGATIVE_RESULT.md`) |
-| Phase 5   | ◐ Code-complete | Operators strong PASS; **E2 = null-after-calibration** (lift +0.169 < floor 0.194; DiD spans 0); Track A bounded negative. Remaining: Mt-target E2, edition-swap, gates (`docs/SOURCE_CRITICISM_STUDY.md`) |
+| Phase 5   | ◐ Code-complete | Operators strong PASS; **E2 = symmetric null-after-calibration** (Lk-target +0.169 < floor 0.194; Mt-target +0.135 < floor 0.173; both DiD span 0; T4 symmetry passes → robust-in-fact); Track A bounded negative. Remaining: edition-swap, gates (`docs/SOURCE_CRITICISM_STUDY.md`) |
 | Phase 7   | ○ Interpretability | Not started |
 | Koine-T5  | ✓ Published | 96.6 NT / 91.7 pooled POS; HF, CC BY-NC-SA 4.0 |
-| Paper A   | ✓ Draft | `paper/main.tex` — complete, verified numbers |
+| Koine-T5-Hexapla | ◐ Code-complete | Generation MAX edition: +16.8M-word diet, continuation task, LoRA r=128, 512 ctx, regression-gated eval; CPU-validated, awaiting GPU run (`docs/GENERATION_PLAN.md`) |
+| Paper A   | ✓ Draft | `paper/main.tex` — complete, verified numbers (local-only) |
 | Honest paper | ◐ Drafted | `paper_limit/main.tex` — negative result + corpus + Koine-T5 + E2 null; Overleaf-only; refs web-verified |
 
 ## Key files to know
@@ -257,7 +331,7 @@ modal run modal/app_dapt.py::start_training_ns             # KoineFormer-NS (gos
 
 # Phase-5 study (app_fid.py)
 modal run modal/app_fid.py::mai_cv                         # Lk-target E2 5-fold CV verdict (DONE)
-modal run modal/app_fid.py::mai_cv_mt                      # Mt-target E2 CV (Farrer vs MPH — TODO)
+modal run modal/app_fid.py::mai_cv_mt                      # Mt-target E2 CV (symmetric null — DONE)
 
 # Koine-T5 (app_koine_t5.py)
 modal run modal/app_koine_t5.py::train                     # train Koine-T5 (auto-resumes)
