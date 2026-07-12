@@ -68,11 +68,13 @@ EVAL_STEPS = 1_000
 LOG_STEPS = 100
 CKPT_KEEP = 2
 
-# Two-stage curriculum: first STAGE_A_FRAC of steps build the generative backbone
-# (denoise + continuation dominate); then rebalance to protect the analysis tasks.
-STAGE_A_FRAC = 0.4
-STAGE_A_WEIGHTS = {"denoise": 4.0, "continuation": 4.0, "pos": 1.0, "lemma": 0.5, "synoptic": 0.5}
-STAGE_B_WEIGHTS = {"denoise": 2.0, "continuation": 2.0, "pos": 3.0, "lemma": 1.0, "synoptic": 1.5}
+# Single-stage weighting that reproduces Koine-T5's PROVEN balance (POS 37.5% = generation 37.5%,
+# which reaches 0.966 POS), with the generation share split across the two complementary generative
+# objectives (span-infill denoise + prefix-LM continuation). POS is the single largest task, so it
+# never loses the tag-vs-prose tug-of-war. The earlier two-stage curriculum (POS at 10% during a
+# generation-heavy Stage A) collapsed POS into a prose-output basin it could not climb out of at a
+# decayed LR — POS plateaued ~0.38 vs 0.966. See docs/GENERATION_PLAN.md.
+TASK_WEIGHTS = {"pos": 3.0, "lemma": 1.0, "synoptic": 1.0, "denoise": 1.5, "continuation": 1.5}
 _TASK_ORDER = ("pos", "lemma", "synoptic", "denoise", "continuation")
 
 # Koine style must not be swamped by First1KGreek's 16M Classical words — sample the
@@ -80,11 +82,14 @@ _TASK_ORDER = ("pos", "lemma", "synoptic", "denoise", "continuation")
 REGISTER_WEIGHTS = {"koine": 0.7, "classical": 0.3}
 _KOINE_SOURCES = {"lxx", "apostolic", "sblgnt"}
 
-# Regression gates: a checkpoint may only become "best" if it holds these (published
-# Koine-T5 dev numbers). Lemma gate is conservative; raise to the measured baseline once known.
+# Regression gates: a checkpoint may only become "best" if it holds these. POS gates are the
+# published Koine-T5 dev numbers; measuring Koine-T5 under THIS eval harness confirms it clears
+# them (NT 0.978, Cl 0.909 on a PROIEL-dev probe), so they are valid conservative floors. GATE_LEMMA
+# is Koine-T5's measured lemma dev-acc (0.7685 under this harness) minus a small noise margin — an
+# earlier 0.80 placeholder sat ABOVE Koine-T5 itself and would have been unmeetable.
 GATE_POS_NT = 0.966
 GATE_POS_CL = 0.877
-GATE_LEMMA = 0.80
+GATE_LEMMA = 0.76
 
 # Eval sizing (kept small so evaluate_all stays cheap at every checkpoint).
 MAX_POS_WORDS = 60
@@ -221,6 +226,23 @@ _VOLUMES = {
 def _commit() -> None:
     if modal is not None:
         modal.Volume.from_name(OUTPUT_VOLUME).commit()
+
+
+def _quiet_logging() -> None:
+    """Silence the repetitive transformers / HF-hub log spam (the max_new_tokens-vs-max_length
+    advisory printed once per generate() call, the tied-weights notice, the contrastive-search
+    deprecation, the HF_TOKEN hint, …) so a detached training log shows only our own lines +
+    the per-eval metrics and gold/pred samples. Call once before the model loads."""
+    import logging
+    import warnings
+
+    from transformers.utils import logging as hf_logging
+
+    hf_logging.set_verbosity_error()
+    for name in ("transformers", "huggingface_hub", "datasets", "peft"):
+        logging.getLogger(name).setLevel(logging.ERROR)
+    warnings.filterwarnings("ignore", category=UserWarning)
+    warnings.filterwarnings("ignore", category=FutureWarning)
 
 
 # ── Tokenizer + model (identical to Koine-T5 except LoRA rank) ────────────────
@@ -530,11 +552,6 @@ def _pool_nonempty(pool) -> bool:
     return bool(pool)
 
 
-def weights_for_step(step: int) -> dict[str, float]:
-    """Stage-A weights for the first STAGE_A_FRAC of training, then Stage-B."""
-    return STAGE_A_WEIGHTS if step < STAGE_A_FRAC * MAX_STEPS else STAGE_B_WEIGHTS
-
-
 def _draw_example(task: str, pools: dict, rng_py):
     """Draw one example from a task pool, register-first for the generative pools."""
     pool = pools[task]
@@ -546,12 +563,11 @@ def _draw_example(task: str, pools: dict, rng_py):
     return rng_py.choice(pool)
 
 
-def sample_balanced_batch(pools, batch_size, step, rng_py) -> list[dict]:
-    weights = weights_for_step(step)
-    active = [t for t in _TASK_ORDER if _pool_nonempty(pools.get(t)) and weights.get(t, 0) > 0]
+def sample_balanced_batch(pools, batch_size, rng_py) -> list[dict]:
+    active = [t for t in _TASK_ORDER if _pool_nonempty(pools.get(t)) and TASK_WEIGHTS.get(t, 0) > 0]
     if not active:
         return []
-    tasks = rng_py.choices(active, weights=[weights[t] for t in active], k=batch_size)
+    tasks = rng_py.choices(active, weights=[TASK_WEIGHTS[t] for t in active], k=batch_size)
     return [_draw_example(t, pools, rng_py) for t in tasks]
 
 
@@ -626,11 +642,17 @@ def _batch_tag_predict(model, tokenizer, texts, device, prefix, *, upper: bool):
     return preds
 
 
-def evaluate_tagging(model, tokenizer, records, device, prefix, *, upper, batch_size=EVAL_BATCH_SIZE):
-    """Token-accuracy + EM on PROIEL-dev records, split NT / Classical. Shared by pos & lemma."""
+def evaluate_tagging(model, tokenizer, records, device, prefix, *, upper,
+                     print_samples: bool = False, batch_size=EVAL_BATCH_SIZE):
+    """Token-accuracy + EM on PROIEL-dev records, split NT / Classical. Shared by pos & lemma.
+
+    When ``print_samples`` is set, prints one gold-vs-pred example per subset — the quickest way to
+    see WHY an accuracy is low (misaligned length, prose instead of tags, empty generation, …).
+    """
     was_training = model.training
     model.eval()
     agg = {"nt": [0, 0, 0, 0], "classical": [0, 0, 0, 0]}
+    samples: dict[str, tuple[list[str], list[str]]] = {}
     for start in range(0, len(records), batch_size):
         chunk = records[start:start + batch_size]
         preds = _batch_tag_predict(model, tokenizer, [r["text"] for r in chunk], device,
@@ -642,8 +664,18 @@ def evaluate_tagging(model, tokenizer, records, device, prefix, *, upper, batch_
             a[1] += len(gold)
             a[2] += int(pred == gold)
             a[3] += 1
+            if print_samples and r["subset"] not in samples:
+                samples[r["subset"]] = (gold, pred)
     if was_training:
         model.train()
+
+    if print_samples:
+        label = prefix.strip().rstrip(":") or "tag"
+        for sub in ("nt", "classical"):
+            if sub in samples:
+                gold, pred = samples[sub]
+                print(f"    {label}[{sub}] gold: {' '.join(gold[:14])}")
+                print(f"    {label}[{sub}] pred: {' '.join(pred[:14]) if pred else '<empty>'}")
 
     def pack(a):
         return {"tok": a[0] / max(1, a[1]), "em": a[2] / max(1, a[3]), "n": a[3]}
@@ -772,7 +804,8 @@ def evaluate_all(model, tokenizer, pos_eval, lemma_eval, cont_eval, device):
     (token-F1 + self-consistency) decides — i.e. "maximize generation SUBJECT TO no analysis
     regression". Before the gates are met, POS token-acc still tracks early progress.
     """
-    pos_m = evaluate_tagging(model, tokenizer, pos_eval, device, "pos: ", upper=True)
+    pos_m = evaluate_tagging(model, tokenizer, pos_eval, device, "pos: ", upper=True,
+                             print_samples=True)
     lemma_m = evaluate_tagging(model, tokenizer, lemma_eval, device, "lemma: ", upper=False)
     gen_m = evaluate_generation(model, tokenizer, cont_eval, device)
     gated = passes_gates(pos_m, lemma_m)
@@ -837,9 +870,8 @@ def _training_loop(model, tokenizer, pools, pos_eval, lemma_eval, cont_eval,
     fingerprint = hashlib.sha1(json.dumps({
         "max_steps": MAX_STEPS, "lr": LR, "batch": BATCH_SIZE, "accum": GRAD_ACCUM,
         "warmup": WARMUP_STEPS, "lora_r": LORA_R, "lora_alpha": LORA_ALPHA, "seq": MAX_SEQ_LEN,
-        "stage_a_frac": STAGE_A_FRAC, "stage_a": STAGE_A_WEIGHTS, "stage_b": STAGE_B_WEIGHTS,
-        "register": REGISTER_WEIGHTS,
-        "rev": 1,  # Hexapla rev 1: continuation task + 512 ctx + r128 + gated eval
+        "weights": TASK_WEIGHTS, "register": REGISTER_WEIGHTS,
+        "rev": 2,  # rev 2: single-stage POS-favorable weights (rev 1 two-stage collapsed POS ~0.38)
         "pools": {t: (sum(len(v) for v in pools[t].values()) if isinstance(pools[t], dict)
                       else len(pools.get(t, []))) for t in _TASK_ORDER},
     }, sort_keys=True).encode()).hexdigest()[:12]
@@ -890,7 +922,7 @@ def _training_loop(model, tokenizer, pools, pos_eval, lemma_eval, cont_eval,
         p = pools.get(t)
         n = sum(len(v) for v in p.values()) if isinstance(p, dict) else len(p or [])
         print(f"    pool {t:12s} {n:,}")
-    print(f"  GPU: {device}  |  Stage-A until step {int(STAGE_A_FRAC * MAX_STEPS):,}  |  "
+    print(f"  GPU: {device}  |  weights={TASK_WEIGHTS}  |  "
           f"pos-eval {len(pos_subset)}  cont-eval {len(cont_eval)}")
     print("=" * 70)
 
@@ -899,7 +931,7 @@ def _training_loop(model, tokenizer, pools, pos_eval, lemma_eval, cont_eval,
     optimizer.zero_grad()
 
     while step < MAX_STEPS:
-        batch_examples = sample_balanced_batch(pools, BATCH_SIZE, step, py_rng)
+        batch_examples = sample_balanced_batch(pools, BATCH_SIZE, py_rng)
         batch = _collate_batch(batch_examples, tokenizer, rng)
         if batch is None:
             continue
@@ -934,8 +966,7 @@ def _training_loop(model, tokenizer, pools, pos_eval, lemma_eval, cont_eval,
         step += 1
 
         if step % LOG_STEPS == 0:
-            stage = "A" if step < STAGE_A_FRAC * MAX_STEPS else "B"
-            print(f"  step {step:>6}/{MAX_STEPS} [{stage}] loss={accum_loss / max(1, valid_steps):.4f}"
+            print(f"  step {step:>6}/{MAX_STEPS} loss={accum_loss / max(1, valid_steps):.4f}"
                   f"  lr={scheduler.get_last_lr()[0]:.2e}")
             accum_loss, valid_steps = 0.0, 0
 
@@ -1016,6 +1047,7 @@ def generate(model, tokenizer, input_text: str, task: str = "denoise", device: s
     if modal is not None else None
 def train() -> None:
     """Full Koine-T5-Hexapla training run on Modal GPU."""
+    _quiet_logging()
     device = "cuda"
     output_dir = Path("/outputs/koine_hexapla")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1054,6 +1086,7 @@ def _run_demo(adapter_path: str | None = None) -> None:
     from peft import PeftModel
     from transformers import AutoModelForSeq2SeqLM
 
+    _quiet_logging()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Koine-T5-Hexapla demo on {device}\n")
     tokenizer = build_tokenizer()

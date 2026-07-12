@@ -1,5 +1,26 @@
 # Generation Plan — Koine-T5-Hexapla (the MAX edition)
 
+> **OUTCOME (2026-07-12): SHELVED — negative result.** The strategy prereg'd below was run twice on
+> GPU and abandoned; neither rev beat the published Koine-T5.
+> - **rev 1** (two-stage curriculum, generation-heavy Stage A, POS at 10% weight): POS **collapsed**
+>   into a prose-output basin (~**0.38** tok-acc vs 0.966) and could not recover at Stage B's decayed
+>   LR. Diagnosis: POS is the lone abstract-tag task; starving it early let a word-output prior take
+>   over. Fixed in code (single-stage POS-favorable `TASK_WEIGHTS`; see "Task weighting" below).
+> - **rev 2** (single-stage POS-favorable weights, lemma gate 0.80→0.76, eval instrumentation): the
+>   collapse was cured, but the run **learned too slowly** to justify 512-ctx/r=128's ~3–4× compute
+>   over Koine-T5, and was stopped mid-run.
+>
+> **Conclusion.** r=128 + 512-ctx + a 16.8M-word diet + a continuation task on the **GreTa-220M
+> backbone** does not produce a generation model that beats Koine-T5 — the ceiling is the *backbone*,
+> not the training diet, so more data/adapter cannot cross it. **Koine-T5 stays the published
+> generation model.** Any revival should change the backbone (a larger/instruction-tuned base), not
+> re-run this strategy.
+>
+> **Salvage (independent of the shelving):** the dependency-free **LXX Text-Fabric reader** in
+> `synoptiq/data/koine_corpus.py` recovers **623,693** LXX words (fixing the long-documented "0 chunks"
+> bug) and is reusable for any future Koine corpus work (DAPT expansion, a Koine-T5 v2). Code kept
+> (tested, not deleted). Everything below is the (shelved) design, preserved as the record.
+
 **Preregistration.** Goal: make the model markedly more coherent, faithful, and expressive in
 free generation **while holding POS / lemma / synoptic competence at or above the published
 Koine-T5 levels** — a no-regression constraint enforced by a gate, not hoped for. Named after
@@ -61,18 +82,23 @@ Classical (16M → 86K). Sampling is therefore **register-first at 70/30 Koine/C
 fluency *replay*, not the target register. Koine generative signal is ~4× the old diet (1.16M vs
 263K tok) and remains the bottleneck (see Limitations).
 
-## Two-stage curriculum
+## Task weighting (single-stage)
 
-One run, weights switch at `STAGE_A_FRAC = 0.4` of `MAX_STEPS`:
+`TASK_WEIGHTS = {pos: 3, lemma: 1, synoptic: 1, denoise: 1.5, continuation: 1.5}` — constant for the
+whole run. This reproduces **Koine-T5's proven balance** (POS ≈ 37.5% = generation 37.5%, the
+configuration that reaches 0.966 POS), with the generation share split across the two complementary
+generative objectives. POS is the single largest task, so it never loses the tag-vs-prose tug-of-war.
 
-| Stage | steps | denoise | continuation | pos | lemma | synoptic | intent |
-|-------|-------|---------|--------------|-----|-------|----------|--------|
-| A | 0 – 40% | 4 | 4 | 1 | 0.5 | 0.5 | build generative backbone (analysis *rehearsed*, not dropped) |
-| B | 40 – 100% | 2 | 2 | 3 | 1 | 1.5 | rebalance for all-task competence |
+> **Superseded — a two-stage curriculum was tried first and failed.** rev 1 ran a generation-heavy
+> Stage A (`denoise 4, continuation 4, pos 1` for the first 40% of steps) then rebalanced. POS
+> **collapsed into a prose-output basin** (it emitted words, not tag codes) and Stage B could not
+> climb it back out at the decayed LR: POS-nt plateaued at **~0.38 vs 0.966** while lemma/generation
+> trained normally. Diagnosis: POS is the lone abstract-tag task; starving it early (10% weight)
+> against 80% generation let a word-output prior take over. Lesson baked into the eval: `evaluate_all`
+> now prints a gold-vs-pred POS example every eval, so this failure mode is visible immediately.
 
-Even the least-weighted task appears several times per optimizer step (32 draws), well above the
-frequency at which a task is catastrophically forgotten — rehearsal is the anti-forgetting
-mechanism.
+The single-stage weights keep every task present in every batch (32 draws/optimizer step, far above
+the catastrophic-forgetting frequency), with POS dominant from step 0 rather than recovered late.
 
 ## Regression-gated evaluation (`evaluate_all`, every 1000 steps)
 

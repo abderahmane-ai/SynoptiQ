@@ -69,6 +69,19 @@ Us — and What They Can*. Framing rules in `docs/PAPER_PLAN.md`; memory `honest
 - Paper: affiliation + contact done (ENSIA); Mt-target landed; remaining is an optional figure, then Overleaf compile.
 
 **Changelog (newest first)**
+- 2026-07-12 — **Koine-T5-Hexapla SHELVED — the generation-MAX strategy is a negative result.**
+  Two GPU revs, both fail to beat the published Koine-T5. **rev 1** (two-stage curriculum, a
+  generation-heavy Stage A with POS at 10% weight) collapsed POS into a prose-output basin (~**0.38**
+  vs 0.966) that Stage B could not climb back out of at the decayed LR. **rev 2** (uncommitted:
+  single-stage POS-favorable `TASK_WEIGHTS`, lemma gate 0.80→**0.76** = Koine-T5's measured dev-acc,
+  gold/pred POS eval samples, log-quieting) fixed the collapse but **learned too slowly** to justify
+  the ~3–4× compute of 512-ctx/r=128 — stopped mid-run. Conclusion: r=128 + 512-ctx + 16.8M-word diet
+  + continuation task on the **GreTa-220M backbone** does not yield a better generation model — the
+  ceiling is the backbone, not the diet. Koine-T5 stays the published generation story. **Salvage:**
+  the dependency-free LXX Text-Fabric reader in `synoptiq/data/koine_corpus.py` (recovers **623,693**
+  LXX words, fixes the "0 chunks" bug) is reusable for any future Koine work. Code kept (tested, 194
+  pass), not deleted; `docs/GENERATION_PLAN.md` marked shelved. Door left open for a
+  **different-backbone** attempt — not this strategy.
 - 2026-07-11 — **Koine-T5-Hexapla (the MAX edition) — code-complete + CPU-validated.** New
   generation-focused model line (`modal/app_koine_hexapla.py`) that lifts free-generation quality
   while holding POS/lemma/synoptic at/above Koine-T5 via a **regression gate**. Adds: a self-contained
@@ -205,6 +218,14 @@ optimizer/scheduler state — fine for a fresh run, suboptimal on crash-resume.
 
 ## Koine-T5-Hexapla — the generation MAX edition (`modal/app_koine_hexapla.py`)
 
+> **SHELVED (2026-07-12) — negative result.** Two GPU revs both failed to beat Koine-T5: rev 1
+> (two-stage curriculum) collapsed POS to ~0.38; rev 2 (single-stage, uncommitted) fixed that but
+> learned too slowly for the ~3–4× compute. The generation-MAX *strategy* does not lift a GreTa-220M
+> backbone past Koine-T5 — the ceiling is the backbone, not the diet. **Koine-T5 remains the published
+> generation model.** Code kept (not deleted); the LXX Text-Fabric reader in
+> `synoptiq/data/koine_corpus.py` (623,693 words) is the reusable salvage. The section below documents
+> the (shelved) design; any revival should change the backbone, not re-run this strategy.
+
 A third model line, evolving Koine-T5 to fix the **discourse-level** failures in
 `docs/gospel_of_the_savior.md` (speaker/pericope bleed, mode-collapse — all semantic, not
 grammatical) **without sacrificing** POS/lemma/synoptic. Named after Origen's *Hexapla* (the
@@ -230,18 +251,19 @@ held-out eval splits to `data/processed/koine_maxi/` (git-ignored; upload with `
 | Tasks | denoise · pos · lemma · synoptic (4) | + **continuation/prefix-LM** (5) |
 | Gen diet | Gospel + PROIEL (~263K tok) | **+16.8M words** (LXX 622K · first1k 16M · apostolic 335K · sblgnt-minus-synoptics 204K) |
 | Gen objective | span-infill only | span-infill + **autoregressive continuation** |
-| Curriculum | single-stage balanced | **two-stage** (backbone → rebalanced multitask), STAGE_A_FRAC=0.4 |
+| Curriculum | single-stage balanced | **two-stage** (rev 1 — collapsed POS to 0.38) → **single-stage** POS-favorable (rev 2) |
 | Register control | none | **70/30 Koine/Classical** sampling (REGISTER_WEIGHTS) |
 | Eval | POS tok-acc + EM | + lemma · perplexity · continuation token-F1 · **morphological self-consistency** |
 | Selection | best POS tok-acc | **regression-gated**: gates (POS-NT≥0.966, POS-Cl≥0.877, lemma≥gate) → maximize gen score |
 | Eff. batch / steps | 4×8=32 / 30K | 2×16=32 / 40K |
 | Volume | koine-t5-outputs | koine-hexapla-outputs |
-| Status | ✓ trained + published | ◐ code-complete, CPU-validated, awaiting GPU |
+| Status | ✓ trained + published | ✗ **SHELVED** — 2 revs, both < Koine-T5 (see banner) |
 
 The **no-sacrifice** guarantee is mechanical: `evaluate_all`'s best-selection key is `(1, f1+morph)`
 once all gates pass, else `(0, pos_tok)` — any gate-passer outranks any non-passer, and among passers
-the generation score decides. `GATE_LEMMA=0.80` is a placeholder until the measured Koine-T5 lemma
-dev-acc is filled in. Run: `modal run modal/app_koine_hexapla.py::train` ·
+the generation score decides. (`GATE_LEMMA` was corrected 0.80→**0.76** in rev 2 = Koine-T5's measured
+lemma dev-acc under this harness; the 0.80 placeholder sat *above* Koine-T5 itself and was unmeetable.)
+Run: `modal run modal/app_koine_hexapla.py::train` ·
 `python modal/app_koine_hexapla.py demo models/koine_hexapla/best`.
 
 ## Current status
@@ -255,7 +277,7 @@ dev-acc is filled in. Run: `modal run modal/app_koine_hexapla.py::train` ·
 | Phase 5   | ◐ Code-complete | Operators strong PASS; **E2 = symmetric null-after-calibration** (Lk-target +0.169 < floor 0.194; Mt-target +0.135 < floor 0.173; both DiD span 0; T4 symmetry passes → robust-in-fact); Track A bounded negative. Remaining: edition-swap, gates (`docs/SOURCE_CRITICISM_STUDY.md`) |
 | Phase 7   | ○ Interpretability | Not started |
 | Koine-T5  | ✓ Published | 96.6 NT / 91.7 pooled POS; HF, CC BY-NC-SA 4.0 |
-| Koine-T5-Hexapla | ◐ Code-complete | Generation MAX edition: +16.8M-word diet, continuation task, LoRA r=128, 512 ctx, regression-gated eval; CPU-validated, awaiting GPU run (`docs/GENERATION_PLAN.md`) |
+| Koine-T5-Hexapla | ✗ Shelved | Generation-MAX strategy = **negative result**: 2 GPU revs, both < Koine-T5 (rev 1 POS-collapse 0.38; rev 2 too-slow). Ceiling is the GreTa-220M backbone, not the diet. Code kept; LXX TF reader salvageable (`docs/GENERATION_PLAN.md`) |
 | Paper A   | ✓ Draft | `paper/main.tex` — complete, verified numbers (local-only) |
 | Honest paper | ◐ Drafted | `paper_limit/main.tex` — negative result + corpus + Koine-T5 + E2 null; Overleaf-only; refs web-verified |
 

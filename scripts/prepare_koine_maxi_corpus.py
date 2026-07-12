@@ -222,12 +222,13 @@ def upload(args: argparse.Namespace) -> None:
         print(f"No corpus at {out_dir} — build it first.")
         sys.exit(1)
     print(f"Uploading {out_dir} → {DATA_VOLUME}:{REMOTE_DIR} (--force) ...")
+    # Run without capturing output so Modal's native progress bar streams directly to the terminal
     result = subprocess.run(
         ["modal", "volume", "put", "--force", DATA_VOLUME, str(out_dir), REMOTE_DIR],
-        capture_output=True, text=True, check=False,
+        check=False,
     )
     if result.returncode != 0:
-        print(f"Upload failed:\n{result.stderr}")
+        print("Upload failed. Verify Modal is logged in and the volume is not locked.")
         sys.exit(1)
     print(f"Uploaded to {DATA_VOLUME}:{REMOTE_DIR}")
 
