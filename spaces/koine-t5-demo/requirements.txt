@@ -3,3 +3,4 @@ transformers>=4.51.0
 peft>=0.15.0
 sentencepiece>=0.2.0
 safetensors>=0.4.0
+gradio>=6.0.0

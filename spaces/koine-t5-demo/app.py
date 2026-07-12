@@ -105,7 +105,7 @@ Synoptic transfer is **experimental** (155 training pairs) — expect evocative 
 translation. Output is lowercase (GreTa case-folds); POS codes are upper-cased for you.
 """
 
-with gr.Blocks(title="Koine-T5 Demo", theme=gr.themes.Soft()) as demo:
+with gr.Blocks(title="Koine-T5 Demo") as demo:
     gr.Markdown(DESCRIPTION)
     with gr.Row():
         with gr.Column(scale=1):
@@ -118,7 +118,7 @@ with gr.Blocks(title="Koine-T5 Demo", theme=gr.themes.Soft()) as demo:
             )
             btn = gr.Button("Run", variant="primary")
         with gr.Column(scale=1):
-            output = gr.Textbox(lines=6, label="Output", show_copy_button=True)
+            output = gr.Textbox(lines=6, label="Output", buttons=["copy"])
     gr.Examples(
         examples=EXAMPLES, inputs=[task, text], outputs=output, fn=run, cache_examples=False
     )
@@ -126,4 +126,4 @@ with gr.Blocks(title="Koine-T5 Demo", theme=gr.themes.Soft()) as demo:
     text.submit(run, inputs=[task, text], outputs=output)
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(theme=gr.themes.Soft())
