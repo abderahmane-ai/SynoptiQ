@@ -1,0 +1,29 @@
+{
+  "title": "SynoptiQ: Neural Source Criticism for the Synoptic Problem",
+  "description": "A neural source-criticism framework for the Synoptic Problem: a token-aligned Koine Greek corpus of Matthew, Mark, and Luke; two published Ancient-Greek models (KoineFormer and Koine-T5); a preregistered source-criticism study; and an honest account of what the texts can and cannot reveal, including the negative result that the direction of literary copying is not identifiable from the texts alone.",
+  "upload_type": "software",
+  "license": "MIT",
+  "access_right": "open",
+  "creators": [
+    {
+      "name": "Ainouche, Abderahmane",
+      "affiliation": "École nationale supérieure d'intelligence artificielle (ENSIA)"
+    }
+  ],
+  "keywords": [
+    "ancient greek",
+    "koine greek",
+    "synoptic problem",
+    "digital humanities",
+    "biblical studies",
+    "natural language processing",
+    "domain adaptation",
+    "low-resource languages"
+  ],
+  "related_identifiers": [
+    {"identifier": "https://github.com/abderahmane-ai/SynoptiQ", "relation": "isSupplementTo", "scheme": "url"},
+    {"identifier": "https://huggingface.co/ainouche-abderahmane/koine-t5", "relation": "isSupplementedBy", "scheme": "url"},
+    {"identifier": "https://huggingface.co/ainouche-abderahmane/koineformer", "relation": "isSupplementedBy", "scheme": "url"},
+    {"identifier": "https://huggingface.co/datasets/ainouche-abderahmane/synoptiq-corpus", "relation": "isSupplementedBy", "scheme": "url"}
+  ]
+}

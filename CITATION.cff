@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+message: "If you use SynoptiQ (code, corpus, or models), please cite it as below."
+title: "SynoptiQ: Neural Source Criticism for the Synoptic Problem"
+abstract: >-
+  A neural source-criticism framework for the Synoptic Problem. It provides a
+  token-aligned Koine Greek corpus of Matthew, Mark, and Luke; two published
+  Ancient-Greek models (KoineFormer, a DAPT'd GreTa encoder; and Koine-T5, a
+  multitask seq2seq model); a preregistered source-criticism study; and an
+  honest account of what the texts can and cannot reveal — including the
+  negative result that the direction of literary copying is not identifiable
+  from the texts alone.
+type: software
+authors:
+  - family-names: Ainouche
+    given-names: Abderahmane
+    email: abderahmane.ainouche.ai@gmail.com
+    affiliation: "École nationale supérieure d'intelligence artificielle (ENSIA)"
+    # orcid: "https://orcid.org/0000-0000-0000-0000"  # add your ORCID if you have one
+version: 0.1.0
+date-released: "2026-07-12"
+license: MIT
+repository-code: "https://github.com/abderahmane-ai/SynoptiQ"
+url: "https://github.com/abderahmane-ai/SynoptiQ"
+keywords:
+  - ancient greek
+  - koine greek
+  - synoptic problem
+  - digital humanities
+  - biblical studies
+  - natural language processing
+  - domain adaptation
+  - low-resource languages
+# After Zenodo mints a DOI (see release/README.md), uncomment and fill:
+# identifiers:
+#   - type: doi
+#     value: "10.5281/zenodo.XXXXXXX"
+#     description: "Zenodo archive of the SynoptiQ release"
