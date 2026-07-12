@@ -145,7 +145,7 @@ class FoldPlan:
 
     ``assignment`` maps pericope_id → fold index in ``[0, n_folds)``. The plan is
     genre-stratified: each genre's units are distributed round-robin across folds
-    after a seeded shuffle, so no fold is starved of a genre. Overlap pericopes
+    after a seeded shuffle, so no fold lacks a genre. Overlap pericopes
     are additionally balanced so the E2 DiD test has overlap units in every fold.
     """
 
@@ -316,7 +316,7 @@ def config_hash(config_asdict: dict[str, object]) -> str:
 
 
 def fold_hash(plan: FoldPlan) -> str:
-    """Hash a fold plan so a re-derived plan can be proven identical to the frozen one."""
+    """Hash a fold plan so a re-derived plan can be verified identical to the frozen one."""
     return sha256({"n_folds": plan.n_folds, "seed": plan.seed, "assignment": plan.assignment})
 
 

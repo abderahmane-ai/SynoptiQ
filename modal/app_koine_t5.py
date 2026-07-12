@@ -1,22 +1,22 @@
 """Koine-T5: a general-purpose multitask Ancient Greek seq2seq model.
 
 Standalone Modal training script — no imports from the synoptiq package. It trains a
-single GreTa+LoRA model on FOUR balanced task pools simultaneously:
+single GreTa+LoRA model on four balanced task pools simultaneously:
 
-  1. denoise  — True T5 span corruption (applied online, on RAW Greek prose)
+  1. denoise  — T5 span corruption (applied online, on raw Greek prose)
   2. pos      — part-of-speech tagging  (MorphGNT tagset, seq2seq text-to-text)
   3. lemma    — lemmatization           (seq2seq text-to-text)
   4. synoptic — Mark→Matthew and Mark→Luke style transfer (the small, curated pool)
 
-The `pos`/`lemma`/`denoise` pools are fed by BOTH the Synoptic Gospel corpus AND the
+The `pos`/`lemma`/`denoise` pools are fed by both the Synoptic Gospel corpus and the
 **UD_Ancient_Greek-PROIEL** treebank (New Testament Koine + Herodotus Classical, ~214K
-tokens). PROIEL is what cures the POS "task collapse": with only a few hundred Gospel examples the
+tokens). PROIEL resolves the POS "task collapse": with only a few hundred Gospel examples the
 pre-trained language prior dominated and `pos:` produced natural-language prose instead of
-tags. Every batch now samples every task pool (§ balanced sampling), so the tiny (~155-example)
-synoptic pool can never be starved out (catastrophic forgetting), and POS gets tens of
+tags. Every batch samples every task pool (§ balanced sampling), so the tiny (~155-example)
+synoptic pool is not lost to catastrophic forgetting, and POS gets tens of
 thousands of examples.
 
-Validation uses the PROIEL **dev** set with GREEDY decoding and reports token-level
+Validation uses the PROIEL **dev** set with greedy decoding and reports token-level
 accuracy + sentence-level Exact Match (EM), split into the Koine-NT and Classical subsets.
 The best-EM adapter is saved separately to `best/` for independent deployment.
 
@@ -26,7 +26,7 @@ PROIEL background (verified against the real CoNLL-U, 20180408 release):
     UD-Perseus has NO New Testament and is Classical poetry only.
   * License CC BY-NC-SA 3.0 (NonCommercial; fine for research training).
   * POS mapping uses the **XPOS** column, NOT UPOS/FEATS. The article ὁ/ἡ/τό is UPOS=DET with
-    FEATS `PronType=Dem` (a trap that would mislabel it a demonstrative); its XPOS is `S-`,
+    FEATS `PronType=Dem` (which would mislabel it as a demonstrative); its XPOS is `S-`,
     which maps cleanly to MorphGNT `RA`. See PROIEL_XPOS_TO_MORPHGNT below.
 
 Usage:
@@ -42,7 +42,7 @@ Usage:
     # Monitor live logs:
     modal app logs koine-t5
 
-    # Download the BEST adapter (model-selected on POS EM) and the final adapter:
+    # Download the best adapter (model-selected on POS EM) and the final adapter:
     modal volume get koine-t5-outputs koine_t5/best  models/koine_t5/best
     modal volume get koine-t5-outputs koine_t5/final models/koine_t5/final
 
@@ -73,7 +73,7 @@ TIMEOUT       = 86_400                   # 24 hours
 BASE_MODEL_ID = "bowphs/GreTa"           # T5-base fine-tuned on Ancient Greek
 
 # LoRA / model hyper-parameters
-LORA_R          = 64    # 2× the old rank — full expressivity for the 4-task shared adapter
+LORA_R          = 64    # LoRA rank for the shared 4-task adapter
 LORA_ALPHA      = 128   # kept at 2×r (standard LoRA scaling)
 LORA_DROPOUT    = 0.05
 MAX_SEQ_LEN     = 256   # 512 OOM'd on A10G; 256 fits Koine verse length
@@ -118,7 +118,7 @@ GEN_REP_PENALTY    = 1.25
 GEN_NO_REPEAT_NGRAM = 3
 
 # ── PROIEL treebank configuration ────────────────────────────────────────────────
-# Paths are configurable for BOTH the remote Modal volume and a local checkout, with a
+# Paths are configurable for both the remote Modal volume and a local checkout, with a
 # best-effort auto-download fallback. Precedence: $PROIEL_DIR → remote volume → local dir
 # → download. If nothing resolves, training gracefully falls back to Synoptic-only.
 PROIEL_SPLITS     = ("train", "dev", "test")
@@ -182,7 +182,7 @@ def resolve_proiel_dir(allow_download: bool = True) -> str | None:
 # ── PROIEL XPOS → MorphGNT POS mapping ───────────────────────────────────────────
 # The rest of the pipeline (and the Gospel corpus `pos` field) uses the 13-code MorphGNT
 # tagset. PROIEL's XPOS column carries an equally granular tagset that maps onto it almost
-# 1:1 — decisively better than UPOS (which collapses RA/RD/RI/RP/RR into DET/PRON) or FEATS
+# 1:1 — unlike UPOS (which collapses RA/RD/RI/RP/RR into DET/PRON) or FEATS
 # (whose PronType=Dem is set even on the plain article). Every mapping below was validated
 # against how the Gospel corpus itself tags the underlying lemma.
 PROIEL_XPOS_TO_MORPHGNT: dict[str, str] = {
@@ -290,14 +290,14 @@ def build_tokenizer():
     bowphs/GreTa already ships with 32103 embedding slots in the model weights
     but only 32003 tokens in the tokenizer vocabulary. By adding exactly 100
     sentinel tokens (<extra_id_0> … <extra_id_99>), we map them to the existing
-    pre-trained ghost slots (indices 32003–32102) WITHOUT resizing the model
-    embeddings and WITHOUT introducing any random-weight noise.
+    pre-trained ghost slots (indices 32003–32102) without resizing the model
+    embeddings and without introducing any random-weight noise.
     """
     from transformers import AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_ID)
 
-    # Bind existing pad/eos — do NOT add a new [PAD] token (breaks decoder start id)
+    # Bind existing pad/eos — do not add a new [PAD] token (breaks decoder start id)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = "<pad>"   # id 0 in GreTa
     if tokenizer.eos_token is None:
@@ -320,7 +320,7 @@ def load_model_with_lora(tokenizer, device: str = "cpu"):
     """Load the Koine-T5 base (bowphs/GreTa) in bfloat16 with LoRA on all attention + FFN projections.
 
     bfloat16 halves VRAM vs float32 (same exponent range so no overflow risk),
-    which is the primary fix for A10G OOM at batch=4, seq_len=256.
+    which avoids A10G OOM at batch=4, seq_len=256.
     """
     import torch
     from transformers import AutoModelForSeq2SeqLM
@@ -559,7 +559,7 @@ def load_synoptic_pairs(tokens_path: str, pericopes_path: str) -> tuple[list[dic
       * examples  — instruction dicts (task, input_text, target_text) covering
                     pos / lemma / synoptic_mk_to_mt / synoptic_mk_to_lk
       * raw_texts — the raw Greek surface text of every book's pericope, for the
-                    denoise pool (denoise trains on RAW Greek prose, never POS/lemma target strings)
+                    denoise pool (denoise trains on raw Greek prose, never POS/lemma target strings)
     """
     import pandas as pd  # noqa: F401  (kept explicit for the Modal image)
 
@@ -679,11 +679,11 @@ def sample_balanced_batch(pools: dict[str, list[dict]], batch_size: int, rng_py)
     Each of the `batch_size` slots independently picks a task ∝ TASK_WEIGHTS (restricted to the
     non-empty pools), then fills it via `random.choice` on that pool. Two invariants matter:
 
-      * WITH-REPLACEMENT per task: a tiny pool (synoptic, ~155) must fill its slot across
+      * With replacement per task: a tiny pool (synoptic, ~155) must fill its slot across
         hundreds of thousands of batches; `random.sample` cannot upsample beyond a pool's size
-        and would starve a minority task. `random.choice` gives every item equal probability on
-        every draw and never runs out.
-      * WEIGHTED, not one-slot-each: pos/denoise draw at 3/8 each, lemma/synoptic at 1/8 each.
+        and would under-sample a minority task. `random.choice` gives every item equal probability
+        on every draw and never runs out.
+      * Weighted, not one-slot-each: pos/denoise draw at 3/8 each, lemma/synoptic at 1/8 each.
         Even the least-weighted task (synoptic, 1/8) appears ~4× per optimizer step (32 draws) —
         far above the frequency at which a task is catastrophically forgotten — so up-weighting
         pos triples its gradient at no cost to the minority tasks.
@@ -699,7 +699,7 @@ def sample_balanced_batch(pools: dict[str, list[dict]], batch_size: int, rng_py)
 def _collate_batch(examples: list[dict], tokenizer, rng, max_len: int = MAX_SEQ_LEN):
     """Build a training batch from a list of task examples.
 
-    For 'denoise' the corruption is applied online on the RAW Greek text (so every batch sees
+    For 'denoise' the corruption is applied online on the raw Greek text (so every batch sees
     a fresh masking). All other tasks tokenize input/target directly.
     """
     import torch
@@ -739,7 +739,7 @@ def _collate_batch(examples: list[dict], tokenizer, rng, max_len: int = MAX_SEQ_
         # Mask pad positions (id=0) in labels so they don't contribute to loss
         label_ids[label_ids == PAD_ID] = -100
 
-        # Guard: skip any example where ALL labels are masked — would produce NaN loss
+        # Guard: skip any example where all labels are masked — would produce NaN loss
         if (label_ids != -100).sum() == 0:
             continue
 
@@ -942,26 +942,23 @@ def _training_loop(
         return max(0.0, 0.5 * (1.0 + math.cos(math.pi * progress)))
 
     scheduler = LambdaLR(optimizer, lr_lambda)
-    # bfloat16 needs no GradScaler (that was for float16 underflow); bf16 autocast has the
-    # same memory benefit with no overflow risk (float16 autocast previously caused NaN losses).
+    # bfloat16 needs no GradScaler (that guards float16 underflow); bf16 autocast gives the same
+    # memory saving without float16's NaN risk.
     USE_BF16 = True
 
     # Deterministic eval subset (stable across evals → comparable token-acc for model selection)
     eval_subset = _select_eval_subset(eval_records, EVAL_MAX_PER_SUBSET) if eval_records else []
-    best_score = -1.0   # selection metric = POS token-accuracy (full-sentence EM is ~0, useless)
+    best_score = -1.0   # selection metric = POS token-accuracy (full-sentence EM is ~0, uninformative)
 
-    # Run fingerprint: a short hash of the config that defines "the same run". Auto-resume ONLY
-    # from checkpoints stamped with this exact fingerprint, so a stale/foreign checkpoint (e.g.
-    # the old 30k-step, pre-PROIEL adapter sitting on the persistent volume) can never hijack the
-    # run or — worse — silently no-op it because its step number already exceeds MAX_STEPS.
+    # Run fingerprint: a short hash of the config that defines "the same run". Auto-resume only
+    # from checkpoints stamped with this exact fingerprint, so a stale or foreign checkpoint on the
+    # persistent volume cannot resume into a changed config, or silently no-op the run because its
+    # step number already exceeds MAX_STEPS.
     fingerprint = hashlib.sha1(json.dumps({
         "max_steps": MAX_STEPS, "lr": LR, "batch": BATCH_SIZE, "accum": GRAD_ACCUM,
         "warmup": WARMUP_STEPS, "lora_r": LORA_R, "lora_alpha": LORA_ALPHA, "seq": MAX_SEQ_LEN,
         "weights": {t: TASK_WEIGHTS[t] for t in _TASK_ORDER},
-        # Bump `rev` to force a clean fresh run — ignore superseded checkpoints instead of
-        # resuming them. rev 2 = LR-schedule unit fix + T5 right-padding eval. rev 3 = POS-EM
-        # case-fold fix. rev 4 = token-acc best-selection + weighted sampling (pos/denoise 3×) +
-        # LoRA r=64 + 30k steps + resumable optimizer/scheduler state (LR no longer re-warms).
+        # Bump `rev` to force a fresh run — superseded checkpoints are ignored, not resumed.
         "rev": 4,
         "pools": {t: len(pools.get(t, [])) for t in _TASK_ORDER},
     }, sort_keys=True).encode()).hexdigest()[:12]
@@ -976,7 +973,7 @@ def _training_loop(
         if output_dir.exists() else []
 
     if not force_fresh:
-        # compatible = same fingerprint AND still short of MAX_STEPS (i.e. genuine unfinished work)
+        # compatible = same fingerprint and still short of MAX_STEPS (i.e. genuine unfinished work)
         compatible = sorted(
             ((int(d.name.split("-")[1]), d) for d in step_dirs
              if (d / "run_fp.txt").exists() and (d / "run_fp.txt").read_text().strip() == fingerprint
@@ -994,7 +991,7 @@ def _training_loop(
                 set_peft_model_state_dict(model, load_file(str(adapter_file)))
                 step = latest_step
                 # Restore optimizer + scheduler + best-score + RNG so the LR schedule continues
-                # smoothly instead of re-warming from zero (the pre-rev-4 resume bug).
+                # smoothly instead of re-warming from zero on resume.
                 state_file = latest / "training_state.pt"
                 if state_file.exists():
                     state = torch.load(str(state_file), map_location=device, weights_only=False)
@@ -1147,7 +1144,7 @@ def generate(
     """Generate a response for any task.
 
     Decoding strategy is task-conditional:
-      * pos / lemma        → GREEDY (their outputs legitimately repeat tokens; penalties would
+      * pos / lemma        → greedy (their outputs legitimately repeat tokens; penalties would
                              corrupt the tag/lemma sequence).
       * denoise / synoptic → Contrastive Search (anti-degeneration for free-form Greek).
 
@@ -1290,7 +1287,7 @@ def train() -> None:
     tokens_path    = "/data/processed/tokens.parquet"
     pericopes_path = "/data/processed/pericopes.parquet"
 
-    # Phase 1: tokenizer (sentinel hack)
+    # Phase 1: tokenizer (register the T5 sentinels)
     print("Phase 1: Building Koine-T5 tokenizer with sentinel tokens...")
     tokenizer = build_tokenizer()
     print(f"  Tokenizer vocab size: {len(tokenizer)}")

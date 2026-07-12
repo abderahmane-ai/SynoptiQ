@@ -1,26 +1,26 @@
-"""Koine-T5-Hexapla: the MAX edition — powerful generation, zero analysis regression.
+"""Koine-T5-Hexapla: a generation-focused evolution of ``app_koine_t5.py``.
 
-A generation-focused evolution of ``app_koine_t5.py`` (named after Origen's Hexapla, the
-six-column parallel-scripture alignment — the ancient precedent for SynoptiQ). Same GreTa
-base + LoRA, but built to fix the discourse-level failures seen in
-``docs/gospel_of_the_savior.md`` (speaker/pericope bleed, mode-collapse) WITHOUT sacrificing
-the POS/lemma/synoptic competence the model already has. Five levers over Koine-T5:
+Named after Origen's Hexapla, the six-column parallel-scripture alignment. Same GreTa base +
+LoRA as Koine-T5, aimed at the discourse-level failures in ``docs/gospel_of_the_savior.md``
+(speaker/pericope bleed, mode-collapse) while holding POS/lemma/synoptic accuracy at or above
+Koine-T5. It differs from Koine-T5 in five ways:
 
   1. A ~17M-word raw-Koine diet (LXX + First1KGreek + Apostolic Fathers + SBLGNT-minus-
-     synoptics), prepared by ``scripts/prepare_koine_maxi_corpus.py`` (was ~263K tokens).
-  2. A new **continuation (prefix-LM)** task that teaches autoregressive fluency — the signal
-     span-infill denoise never provides.
-  3. **Passage-level** units (whole windows) + **512-token** context (was 256) for
-     cross-sentence state tracking.
-  4. More adapter capacity (LoRA **r=128 α=256**) so added tasks stop competing with POS.
-  5. A **two-stage curriculum** (generative backbone → rebalanced multitask) + a
-     **regression-gated** ``evaluate_all``: a checkpoint is only "best" if POS/lemma stay at
-     or above the published Koine-T5 gates, then the generation score is maximized. "No
-     sacrifice" is enforced, not hoped for.
+     synoptics), prepared by ``scripts/prepare_koine_maxi_corpus.py``.
+  2. A continuation (prefix-LM) task for autoregressive fluency, which span-infill denoise
+     does not provide.
+  3. Passage-level units and a 512-token context for cross-sentence state tracking.
+  4. Larger adapter capacity (LoRA r=128 α=256).
+  5. Single-stage POS-favorable task weighting and a regression-gated ``evaluate_all``: a
+     checkpoint becomes "best" only if POS and lemma stay at or above the Koine-T5 gates, and
+     among gate-passing checkpoints the generation score decides.
 
 The script is standalone (no ``synoptiq`` imports), mirroring ``app_koine_t5.py``. It reads
 the prepared corpus from the ``synoptiq-data`` volume (``/data/koine_maxi``); if absent it
-falls back to the Gospel+PROIEL pools so a run is always possible.
+falls back to the Gospel+PROIEL pools.
+
+Status: shelved. Neither training run matched Koine-T5, so Koine-T5 remains the published
+generation model; ``docs/GENERATION_PLAN.md`` records the outcome.
 
 Usage:
     modal run modal/app_koine_hexapla.py::train        # A10G/A100 GPU, auto-resumes
@@ -52,7 +52,7 @@ TIMEOUT = 86_400
 
 BASE_MODEL_ID = "bowphs/GreTa"
 
-# LoRA / model — 2× Koine-T5's rank so the new generation tasks don't crowd out POS.
+# LoRA / model — 2× Koine-T5's rank so the generation tasks don't crowd out POS.
 LORA_R = 128
 LORA_ALPHA = 256
 LORA_DROPOUT = 0.05
@@ -68,12 +68,11 @@ EVAL_STEPS = 1_000
 LOG_STEPS = 100
 CKPT_KEEP = 2
 
-# Single-stage weighting that reproduces Koine-T5's PROVEN balance (POS 37.5% = generation 37.5%,
-# which reaches 0.966 POS), with the generation share split across the two complementary generative
-# objectives (span-infill denoise + prefix-LM continuation). POS is the single largest task, so it
-# never loses the tag-vs-prose tug-of-war. The earlier two-stage curriculum (POS at 10% during a
-# generation-heavy Stage A) collapsed POS into a prose-output basin it could not climb out of at a
-# decayed LR — POS plateaued ~0.38 vs 0.966. See docs/GENERATION_PLAN.md.
+# Constant single-stage weighting matching Koine-T5's task balance (POS at 37.5%, generation at
+# 37.5%), with the generation share split across the two generative objectives (span-infill
+# denoise + prefix-LM continuation). POS is the largest single task, so it stays dominant from the
+# first step. A generation-heavy schedule instead lets POS decay into prose-style output; see
+# docs/GENERATION_PLAN.md.
 TASK_WEIGHTS = {"pos": 3.0, "lemma": 1.0, "synoptic": 1.0, "denoise": 1.5, "continuation": 1.5}
 _TASK_ORDER = ("pos", "lemma", "synoptic", "denoise", "continuation")
 
@@ -82,11 +81,10 @@ _TASK_ORDER = ("pos", "lemma", "synoptic", "denoise", "continuation")
 REGISTER_WEIGHTS = {"koine": 0.7, "classical": 0.3}
 _KOINE_SOURCES = {"lxx", "apostolic", "sblgnt"}
 
-# Regression gates: a checkpoint may only become "best" if it holds these. POS gates are the
-# published Koine-T5 dev numbers; measuring Koine-T5 under THIS eval harness confirms it clears
-# them (NT 0.978, Cl 0.909 on a PROIEL-dev probe), so they are valid conservative floors. GATE_LEMMA
-# is Koine-T5's measured lemma dev-acc (0.7685 under this harness) minus a small noise margin — an
-# earlier 0.80 placeholder sat ABOVE Koine-T5 itself and would have been unmeetable.
+# Regression gates: a checkpoint may only become "best" if it holds these floors. The POS gates
+# are the published Koine-T5 dev numbers, which Koine-T5 itself clears under this eval harness
+# (NT 0.978, Classical 0.909 on a PROIEL-dev probe). GATE_LEMMA is Koine-T5's measured lemma
+# dev-accuracy (0.7685 under this harness) less a small noise margin.
 GATE_POS_NT = 0.966
 GATE_POS_CL = 0.877
 GATE_LEMMA = 0.76
@@ -229,10 +227,8 @@ def _commit() -> None:
 
 
 def _quiet_logging() -> None:
-    """Silence the repetitive transformers / HF-hub log spam (the max_new_tokens-vs-max_length
-    advisory printed once per generate() call, the tied-weights notice, the contrastive-search
-    deprecation, the HF_TOKEN hint, …) so a detached training log shows only our own lines +
-    the per-eval metrics and gold/pred samples. Call once before the model loads."""
+    """Lower transformers / HuggingFace-hub logging to error level so the training log shows
+    only this script's own output. Call once before the model loads."""
     import logging
     import warnings
 
@@ -467,7 +463,7 @@ def load_synoptic_pairs(tokens_path, pericopes_path) -> tuple[list[dict], list[s
     return examples, raw_texts
 
 
-# ── Prepared MAXI corpus (the new generative fuel) ────────────────────────────
+# ── Prepared MAXI corpus ────────────────────────────
 
 def _register_of(source: str) -> str:
     return "koine" if source in _KOINE_SOURCES else "classical"
@@ -544,7 +540,7 @@ def build_task_pools(tokens_path, pericopes_path, proiel_dir, corpus_dir):
     return pools, cont_eval
 
 
-# ── Register-aware, two-stage weighted sampling ───────────────────────────────
+# ── Register-aware weighted sampling ───────────────────────────────
 
 def _pool_nonempty(pool) -> bool:
     if isinstance(pool, dict):
@@ -647,7 +643,7 @@ def evaluate_tagging(model, tokenizer, records, device, prefix, *, upper,
     """Token-accuracy + EM on PROIEL-dev records, split NT / Classical. Shared by pos & lemma.
 
     When ``print_samples`` is set, prints one gold-vs-pred example per subset — the quickest way to
-    see WHY an accuracy is low (misaligned length, prose instead of tags, empty generation, …).
+    see why an accuracy is low (misaligned length, prose instead of tags, empty generation, …).
     """
     was_training = model.training
     model.eval()
@@ -801,8 +797,8 @@ def evaluate_all(model, tokenizer, pos_eval, lemma_eval, cont_eval, device):
 
     ``select_key`` = (1, gen_score) once the POS/lemma gates pass, else (0, pos_tok). Any
     gate-passing checkpoint outranks any non-passing one; among passers the generation score
-    (token-F1 + self-consistency) decides — i.e. "maximize generation SUBJECT TO no analysis
-    regression". Before the gates are met, POS token-acc still tracks early progress.
+    (token-F1 + self-consistency) decides — i.e. maximize generation subject to no analysis
+    regression. Before the gates are met, POS token-acc still tracks early progress.
     """
     pos_m = evaluate_tagging(model, tokenizer, pos_eval, device, "pos: ", upper=True,
                              print_samples=True)
@@ -871,7 +867,7 @@ def _training_loop(model, tokenizer, pools, pos_eval, lemma_eval, cont_eval,
         "max_steps": MAX_STEPS, "lr": LR, "batch": BATCH_SIZE, "accum": GRAD_ACCUM,
         "warmup": WARMUP_STEPS, "lora_r": LORA_R, "lora_alpha": LORA_ALPHA, "seq": MAX_SEQ_LEN,
         "weights": TASK_WEIGHTS, "register": REGISTER_WEIGHTS,
-        "rev": 2,  # rev 2: single-stage POS-favorable weights (rev 1 two-stage collapsed POS ~0.38)
+        "rev": 2,  # config-fingerprint version; bump to invalidate resumes from a changed config
         "pools": {t: (sum(len(v) for v in pools[t].values()) if isinstance(pools[t], dict)
                       else len(pools.get(t, []))) for t in _TASK_ORDER},
     }, sort_keys=True).encode()).hexdigest()[:12]

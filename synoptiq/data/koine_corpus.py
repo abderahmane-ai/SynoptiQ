@@ -1,4 +1,4 @@
-"""Unified Koine corpus builder for the Koine-T5-Hexapla (MAX) edition.
+"""Unified Koine corpus builder for Koine-T5-Hexapla.
 
 Assembles large-scale raw Koine prose into passage-level training units for the
 generation-focused multitask model. It adds two capabilities the current pipeline
@@ -8,8 +8,8 @@ lacked (see ``docs/GENERATION_PLAN.md``):
      LXX (``data/raw/lxx/tf/1935``, 623,693 words). The section features
      (``book``/``chapter``/``verse``) are stored dense per word-slot and line-aligned
      with ``word.tf``, so grouping into verses is a single ``zip`` — no ``oslots``/
-     ``otype`` parsing needed. This recovers the single largest body of Koine Greek,
-     previously unusable because ``_extract_text_from_dir`` cannot parse TF slot files
+     ``otype`` parsing needed. This recovers the single largest body of Koine Greek, which
+     ``_extract_text_from_dir`` cannot read because it does not parse TF slot files
      (the documented "LXX = 0 chunks"). The on-disk LXX is the *eliranwong* Text-Fabric
      edition, not the *biblicalhumanities* plaintext one that ``_parse_lxx`` expects —
      hence the mismatch.
@@ -262,7 +262,7 @@ SYNOPTIC_BOOKS: tuple[str, ...] = ("Matthew", "Mark", "Luke")
 def build_raw_passages(data_raw: Path | str) -> Iterator[Passage]:
     """Stream :class:`Passage` units from every raw Koine/Classical source on disk.
 
-    LXX via the TF reader (verse units); first1k/apostolic/sblgnt via the proven TEI/txt
+    LXX via the TF reader (verse units); first1k/apostolic/sblgnt via the shared TEI/txt
     extractor (``synoptiq.training.dapt._extract_text_from_dir``), with the synoptic
     gospels held out of SBLGNT. Torch is imported lazily so the pure helpers above stay
     import-light for testing.

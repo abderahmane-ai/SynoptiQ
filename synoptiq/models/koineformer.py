@@ -45,7 +45,7 @@ class KoineFormer:
 
     Wraps a frozen ``bowphs/GreTa`` checkpoint with LoRA adapters injected
     into attention projections and feed-forward layers.  The adapters are
-    the ONLY trainable parameters during DAPT.
+    the only trainable parameters during DAPT.
 
     Attributes:
         model: The underlying PeftModel (GreTa + LoRA).

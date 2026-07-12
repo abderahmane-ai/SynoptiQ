@@ -34,8 +34,8 @@ def test_read_tf_column_skips_header_and_blank(tmp_path: Path) -> None:
 
 
 def test_iter_lxx_verses_groups_and_truncates_node_labels(tmp_path: Path) -> None:
-    # 5 word slots across two verses; section columns carry per-word labels PLUS the
-    # trailing section-node labels that caused the original misalignment bug.
+    # 5 word slots across two verses; the section columns carry per-word labels plus
+    # trailing section-node labels, which must be truncated to stay aligned with the words.
     _write_tf(tmp_path / "word.tf", ["w1", "w2", "w3", "w4", "w5"])
     _write_tf(tmp_path / "book.tf", ["Gen", "Gen", "Gen", "Gen", "Gen", "Gen"])  # +1 book node
     _write_tf(tmp_path / "chapter.tf", ["1", "1", "1", "1", "1", "1"])  # +1 chapter node

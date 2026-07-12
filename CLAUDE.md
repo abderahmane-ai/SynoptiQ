@@ -30,8 +30,8 @@ Rules:
 
 ## Where things stand (read me first)
 
-**Branch `feat/phase5-koine-t5`** — pushed to origin, ~26 commits ahead of `main`, not yet merged.
-**186 tests pass; repo pristine** (zero cache/`.DS_Store`; `data/ models/ outputs/ graphify-out/`
+**Branch `feat/phase5-koine-t5`** — pushed to origin and merged into `main` (both at `a4d5d9a`).
+**194 tests pass; repo pristine** (zero cache/`.DS_Store`; `data/ models/ outputs/ graphify-out/`
 git-ignored). Four deliverables; two published, one code-complete, one drafted.
 
 **Done + published**

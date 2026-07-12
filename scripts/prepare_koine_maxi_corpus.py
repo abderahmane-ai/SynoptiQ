@@ -1,12 +1,12 @@
-"""Build the Koine-T5-Hexapla (MAX) training corpus artifact.
+"""Build the Koine-T5-Hexapla training corpus artifact.
 
 Ingests every raw Koine/Classical source on disk — the Rahlfs-1935 LXX via a Text-Fabric
-reader (623,693 words, previously unusable), plus first1k / apostolic / sblgnt via the
-proven TEI/txt extractor — chunks them into passage windows, decontaminates against the
+reader (623,693 words), plus first1k / apostolic / sblgnt via the shared TEI/txt
+extractor — chunks them into passage windows, decontaminates against the
 held-out Gospel test/val splits, deduplicates, and emits a unified corpus with held-out
 eval splits and a source/license census.
 
-This is the generative fuel the current Koine-T5 lacks: its denoise pool sees only
+This adds the generative data the current Koine-T5 lacks: its denoise pool sees only
 ~263K tokens (Gospel + PROIEL); this artifact adds ~1M+ words of coherent Koine prose plus
 a continuation (prefix-LM) task, without touching the analysis-task data.
 
@@ -122,7 +122,7 @@ def build(args: argparse.Namespace) -> None:
                "contaminated_screened": n_contaminated},
     )
 
-    # Deterministic train/eval split on windows (eval windows are NEVER trained on).
+    # Deterministic train/eval split on windows (eval windows are never trained on).
     rng.shuffle(windows)
     n_eval = max(1, int(len(windows) * args.eval_frac)) if windows else 0
     eval_windows = windows[:n_eval]
