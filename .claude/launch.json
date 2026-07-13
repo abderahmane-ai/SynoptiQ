@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "koine-reader",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["spaces/koine-reader/app.py"],
+      "port": 7860
+    }
+  ]
+}

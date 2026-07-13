@@ -31,8 +31,9 @@ Rules:
 ## Where things stand (read me first)
 
 **Branch `feat/phase5-koine-t5`** — pushed to origin and merged into `main` (both at `a4d5d9a`).
-**194 tests pass; repo pristine** (zero cache/`.DS_Store`; `data/ models/ outputs/ graphify-out/`
-git-ignored). Four deliverables; two published, one code-complete, one drafted.
+**224 tests pass; repo pristine** (zero cache/`.DS_Store`; `data/ models/ outputs/ graphify-out/`
+git-ignored). Four research deliverables (two published, one code-complete, one drafted) + the
+**Koine Reader** tool (`synoptiq/reader/` + `spaces/koine-reader/`, built + locally verified).
 
 **Done + published**
 - **Paper A — KoineFormer + SynoptiQ corpus** (`paper/main.tex`): GreTa DAPT'd to Koine, 96.62%
@@ -69,6 +70,19 @@ Us — and What They Can*. Framing rules in `docs/PAPER_PLAN.md`; memory `honest
 - Paper: affiliation + contact done (ENSIA); Mt-target landed; remaining is an optional figure, then Overleaf compile.
 
 **Changelog (newest first)**
+- 2026-07-13 — **Koine Reader built — the published models become a usable tool** (`synoptiq/reader/` +
+  `spaces/koine-reader/`). A two-engine interlinear reading assistant: **gold mode** surfaces the on-disk
+  Nestle-1904 GNT Text-Fabric data (per word: lemma, full morphology, BGVB gloss, Strong's) by reference
+  lookup + **synoptic parallels** via `ALAND_PERICOPES`; **neural mode** analyses arbitrary Koine with the
+  published Koine-T5 (POS+lemma, glossed against the GNT lexicon). New pkg `synoptiq/reader/`: a
+  dependency-free TF reader that correctly **expands TF compact encoding** (the naive `read_tf_column`
+  misaligns sparse morphology after the first caseless word) + gold reader + morphology formatting +
+  parallels + index serializer + lazy neural engine. `scripts/build_reader_index.py` → a **1.9 MB** gzipped
+  artifact (`spaces/koine-reader/data/n1904_index.json.gz`, 137,779 words / 5,379 lemmas) the Gradio Space
+  bundles. **Space verified live** (Read tab + Mark 1:9-11 → Matt 3:13-17 / Luke 3:21-22 parallels). **30
+  new tests (224 pass)**, ruff clean. Louw-Nida domains deliberately NOT surfaced (UBS copyright); confirm
+  MACULA/BOL gloss redistribution license before making the Space public. Noted: Aland §011 pairs John
+  1:1-18 with Matt 1:1-18 in `ALAND_PERICOPES` (surfaced faithfully; verify vs the print Synopsis).
 - 2026-07-12 — **Koine-T5-Hexapla SHELVED — the generation-MAX strategy is a negative result.**
   Two GPU revs, both fail to beat the published Koine-T5. **rev 1** (two-stage curriculum, a
   generation-heavy Stage A with POS at 10% weight) collapsed POS into a prose-output basin (~**0.38**
@@ -161,6 +175,7 @@ SynoptiQ/
 │   ├── evaluation/         # bootstrap CIs, scoring (NLL), model_comparison (power/DiD),
 │   │                       #   contamination audit, reconstruction F1, linear probes, verdict core
 │   ├── interpretability/   # SHAP, Hawkins comparison, BERTViz
+│   ├── reader/             # Koine Reader: TF reader, gold engine, morphology, synoptic parallels, index, neural
 │   └── utils/              # Greek text, tokenization, shared types, constants, logging
 ├── scripts/                # CLI entry points
 │   ├── prepare_data.py     # Phase 1: download → parse → align → split → cache
@@ -172,11 +187,13 @@ SynoptiQ/
 │   ├── train_fid.py        # Phase 5 M2: train FiD, any --witnesses/--target (Track A or E2)
 │   ├── run_mai_test.py     # Phase 5 M4: E2 excess-lift verdict + DiD + G3 floor
 │   ├── pool_mai.py         # Phase 5 M4: pool per-fold rows → CV verdict
+│   ├── build_reader_index.py # Koine Reader: serialize N1904 gold → gzipped Space artifact
 │   └── _cli_utils.py       # Shared CLI helpers (canonical detect_device())
 ├── modal/                  # Modal GPU: app_dapt.py, app_fid.py (Phase 5), app_koine_t5.py, app_koine_hexapla.py
+├── spaces/                 # HF Gradio Spaces: koine-t5-demo · koine-reader (interlinear GNT reader + parallels)
 ├── paper/                  # Paper A: KoineFormer (XeLaTeX) — LOCAL-ONLY (git-ignored, not on GitHub)
 ├── paper_limit/            # The honest paper (XeLaTeX) — LOCAL-ONLY (git-ignored, not on GitHub)
-├── tests/                  # pytest suite (mirrors synoptiq/ structure) — 186 pass
+├── tests/                  # pytest suite (mirrors synoptiq/ structure) — 224 pass
 ├── data/ models/ outputs/  # All git-ignored (corpora, adapters, logs)
 ├── docs/DIRECTION_NEGATIVE_RESULT.md   # why copying-direction detection was closed
 ├── docs/SOURCE_CRITICISM_STUDY.md      # Phase 5 preregistration (Q reconstruction + source ID)
