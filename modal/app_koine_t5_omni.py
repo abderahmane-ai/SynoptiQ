@@ -1,21 +1,19 @@
 """Koine-T5 Omni: a general-purpose multitask Ancient Greek seq2seq model.
 
 Standalone Modal training script — no imports from the synoptiq package. Trains a
-single GreTa+LoRA model on EIGHT balanced task pools simultaneously:
+single GreTa+LoRA model on SEVEN balanced task pools simultaneously:
 
   1. denoise    — T5 span corruption (online, on raw Greek prose)
   2. pos        — part-of-speech tagging  (MorphGNT tagset)
   3. lemma      — lemmatization
   4. morphology — full parse code per token, compact encoding (MorphGNT col 2+3)
-  5. gloss      — context-aware English gloss per word (MACULA Greek TSV)
-  6. normalize  — crasis/itacism resolution → standard polytonic form
-  7. restore    — uncial/scriptio-continua → polytonic with diacritics (synthetic)
-  8. synoptic   — Mark→Matthew and Mark→Luke style transfer (small curated pool)
+  5. normalize  — crasis/itacism resolution → standard polytonic form
+  6. restore    — uncial/scriptio-continua → polytonic with diacritics (synthetic)
+  7. synoptic   — Mark→Matthew and Mark→Luke style transfer (small curated pool)
 
 Data sources:
   * PROIEL CoNLL-U (NT Koine + Herodotus, ~214K tokens) → pos/lemma/denoise
   * MorphGNT all 27 NT books (on disk: data/raw/morphgnt/) → morphology/pos/lemma/denoise
-  * MACULA Greek TSV (Clear-Bible, CC BY-SA, downloaded at runtime) → gloss
   * Real crasis expansions + lexicon-gated itacism on raw texts → normalize
   * Synthetic diacritic stripping on existing raw texts → restore
   * Synoptic Gospel corpus (existing processed parquets) → synoptic/pos/lemma/denoise
@@ -23,10 +21,11 @@ Data sources:
 All new pools are graceful-fallback: if any download fails, the pool is skipped
 and training continues on the remaining pools.
 
-A ninth pool, `translate` (Greek→English verse via the ASV), was tried and removed: GreTa has no
-English pretraining and only ~6K verse pairs (~150K English words) are available, which is the
-same bet that failed in the shelved Koine-T5-Hexapla line. `gloss` is kept — monotone and
-lexicon-like, so learnable at this data scale.
+TWO English-output pools were tried and removed. `translate` (Greek→English verse) never ran: no
+English pretraining plus ~6K verse pairs is the shelved Koine-T5-Hexapla bet again. `gloss`
+(word-level English) DID run for 54,000 steps and reached 0.10 token accuracy — see TASK_WEIGHTS
+for the measured post-mortem. This backbone does not cross into English at this data scale, by
+either route.
 
 Validation runs every task with greedy decoding. `pos` is scored on PROIEL **dev**, split into
 Koine-NT and Classical subsets; the remaining tasks are scored on held-out slices carved out of
@@ -112,15 +111,14 @@ LR              = 1e-4
 # and the best checkpoint landed on the FINAL step, i.e. POS never plateaued. Never edit this
 # block without recomputing the table below.
 #
-# Current budget: 75,000 micro-steps × BATCH_SIZE 4 = 300,000 draws, weights summing to 17.7:
-#     pos        4.5  →  76,271 draws / 22,968  =  3.32 epochs   (the reported/validated task)
-#     lemma      3.5  →  59,322 draws / 22,968  =  2.58 epochs
-#     denoise    3.0  →  50,847 draws / 23,011  =  2.21 epochs   (the general-LM backbone)
-#     morphology 2.0  →  33,898 draws /  7,927  =  4.28 epochs   (hardest: 10 joint axes)
-#     gloss      1.5  →  25,424 draws /  7,939  =  3.20 epochs
-#     restore    1.5  →  25,424 draws /  9,196  =  2.76 epochs
-#     normalize  1.2  →  20,339 draws / ~7,700  =  2.64 epochs
-#     synoptic   0.5  →   8,475 draws /    155  = 54.7×        (tiny pool, upsampled)
+# Current budget: 75,000 micro-steps × BATCH_SIZE 4 = 300,000 draws, weights summing to 17.5:
+#     pos        4.5  →  77,143 draws / 22,856  =  3.38 epochs   (the reported/validated task)
+#     lemma      3.5  →  60,000 draws / 22,711  =  2.64 epochs
+#     denoise    3.0  →  51,429 draws / 23,011  =  2.23 epochs   (the general-LM backbone)
+#     morphology 2.5  →  42,857 draws /  7,727  =  5.55 epochs   (hardest: 10 joint axes)
+#     restore    2.0  →  34,286 draws /  9,114  =  3.76 epochs
+#     normalize  1.5  →  25,714 draws / ~7,900  =  3.25 epochs
+#     synoptic   0.5  →   8,571 draws /     98  = 87×           (tiny pool, upsampled)
 #
 # 3 epochs is the proven POS budget (0.8-0.9 lands below a majority-class baseline of 0.215).
 # _training_loop prints this table live at startup from the ACTUAL pool sizes — read it and confirm
@@ -145,7 +143,7 @@ MEAN_NOISE_SPAN_LEN   = 3.0
 # Tasks decoded greedily: every one emits exactly one output unit per input word, so beam search
 # buys nothing and any repetition penalty is actively harmful (tags, lemmas and near-copy Greek all
 # repeat by design). See generate() for the full rationale.
-_GREEDY_TASKS = frozenset({"pos", "lemma", "morphology", "gloss", "normalize", "restore"})
+_GREEDY_TASKS = frozenset({"pos", "lemma", "morphology", "normalize", "restore"})
 
 # Contrastive-search generation defaults (denoise inference only)
 GEN_PENALTY_ALPHA  = 0.6
@@ -178,14 +176,6 @@ def resolve_morphgnt_dir() -> str | None:
         if p.exists() and list(p.glob("*-morphgnt.txt")):
             return candidate
     return None
-
-# MACULA Greek (Clear-Bible) — per-word English glosses, CC BY-SA 4.0
-MACULA_TSV_URL   = (
-    "https://raw.githubusercontent.com/Clear-Bible/macula-greek/"
-    "main/Nestle1904/tsv/macula-greek-Nestle1904.tsv"
-)
-MACULA_CACHE_PATH = "/tmp/macula_greek.tsv"
-MACULA_LOCAL_PATH = "data/raw/macula_greek.tsv"   # pre-staged local copy (optional)
 
 # Synthetic task hyper-parameters
 NORMALIZE_PROB  = 0.4    # fraction of raw texts to use for normalize examples
@@ -899,91 +889,6 @@ def build_morphgnt_training(
     return morphology_examples, pos_examples, lemma_examples, raw_texts
 
 
-# ── MACULA Greek gloss pool ────────────────────────────────────────────────────
-
-def _resolve_macula_path() -> str | None:
-    """Return the path to the MACULA Greek TSV, downloading if necessary."""
-    import urllib.request
-
-    for candidate in (MACULA_LOCAL_PATH, MACULA_CACHE_PATH):
-        if Path(candidate).exists() and Path(candidate).stat().st_size > 1000:
-            return candidate
-    # Download
-    try:
-        Path(MACULA_CACHE_PATH).parent.mkdir(parents=True, exist_ok=True)
-        print("  [macula] downloading from Clear-Bible/macula-greek...")
-        urllib.request.urlretrieve(MACULA_TSV_URL, MACULA_CACHE_PATH)
-        if Path(MACULA_CACHE_PATH).stat().st_size > 1000:
-            return MACULA_CACHE_PATH
-    except Exception as exc:
-        print(f"  [macula] download failed ({type(exc).__name__}: {exc}) — gloss pool skipped")
-    return None
-
-
-def build_gloss_training(macula_path: str | None) -> list[dict]:
-    """Build gloss examples from the MACULA Greek Nestle1904 TSV.
-
-    TSV columns include: ref, text, lemma, gloss (English word-level gloss).
-    Groups tokens by verse reference and emits one example per verse:
-      Input:  "gloss: ἐν ἀρχῇ ἦν ὁ λόγος"
-      Output: "in beginning was the word"
-
-    Each Greek word maps to EXACTLY ONE output unit, because 30.1% of MACULA glosses are
-    multi-word ("of [the] genealogy" for γενέσεως). Emitting them space-separated makes the target
-    silently unalignable — 99% of verses would have an output-unit count that differs from the
-    input word count, which destroys the one-unit-per-word contract every other task in this script
-    honours and makes positional scoring meaningless. Joining the words of a single gloss with "_"
-    keeps the task monotone and 1:1, which is also exactly the shape the Koine Reader consumes.
-    Editorial brackets (3.5% of glosses) are stripped; MACULA's "-" for untranslated function
-    words (4.0%) is kept as an explicit null gloss.
-    """
-    import csv
-    from collections import defaultdict
-
-    gloss_examples: list[dict] = []
-    if not macula_path:
-        return gloss_examples
-
-    def _as_unit(gloss: str) -> str:
-        cleaned = gloss.replace("[", "").replace("]", "").strip()
-        return "_".join(cleaned.split()) if cleaned else "-"
-
-    # verse_key → [(surface, gloss), ...]
-    verse_data: dict[str, list[tuple[str, str]]] = defaultdict(list)
-    try:
-        with open(macula_path, encoding="utf-8", newline="") as fh:
-            reader = csv.DictReader(fh, delimiter="\t")
-            for row in reader:
-                ref   = row.get("ref", "").strip()
-                text  = (row.get("text") or row.get("normalized") or "").strip()
-                gloss = row.get("gloss", "").strip()
-                if not (ref and text and gloss):
-                    continue
-                # Normalize ref to a simple verse key (drop word suffix after '!')
-                verse_key = ref.split("!")[0].strip()
-                text = text.rstrip(",.:;·!?()")
-                verse_data[verse_key].append((text, _as_unit(gloss)))
-    except Exception as exc:
-        print(f"  [macula] parse error ({type(exc).__name__}: {exc}) — gloss pool skipped")
-        return gloss_examples
-
-    for verse_key, tokens in verse_data.items():
-        if len(tokens) < 2 or len(tokens) > MAX_POS_WORDS:
-            continue
-        surface_seq = " ".join(t[0] for t in tokens)
-        gloss_seq   = " ".join(t[1] for t in tokens)
-        if not gloss_seq.strip():
-            continue
-        gloss_examples.append({
-            "task": "gloss",
-            "input_text":  f"gloss: {surface_seq}",
-            "target_text": gloss_seq,
-        })
-
-    print(f"  MACULA gloss: {len(gloss_examples):,} verse-level gloss examples")
-    return gloss_examples
-
-
 # ── Synthetic normalize pool (crasis/itacism) ──────────────────────────────────
 
 # Koine crasis forms, keyed by ACCENT-STRIPPED crasis form → expansion (also accent-stripped).
@@ -996,18 +901,22 @@ def build_gloss_training(macula_path: str | None) -> list[dict]:
 # Attic, not Koine. So the model essentially never saw the κἀγώ ↔ καὶ ἐγώ mapping it is asked for.
 # Building in the natural direction (find a crasis form that is actually there, expand it) yields
 # 130 genuine anchors instead of ~1.
+# Keys are accent-stripped (matching is accent-insensitive); VALUES CARRY THEIR REAL ACCENTS.
+# The values must be properly accented Greek: an earlier revision stored them accent-stripped, which
+# made every crasis target read like "και εγω δέ σοι λέγω" — unaccented words spliced into accented
+# text. The model was being asked to produce something incoherent, and unsurprisingly never did.
 _CRASIS_EXPANSIONS: dict[str, str] = {
-    "καγω":       "και εγω",        # 71 occurrences
-    "καν":        "και εαν",        # 14
-    "κακει":      "και εκει",       # 10
-    "κακειθεν":   "και εκειθεν",    #  8
-    "κακεινος":   "και εκεινος",    #  7
-    "κακεινοι":   "και εκεινοι",    #  7
-    "καμοι":      "και εμοι",       #  5
-    "καμε":       "και εμε",        #  3
-    "τουναντιον": "το εναντιον",    #  3
-    "κακεινους":  "και εκεινους",   #  1
-    "τουνομα":    "το ονομα",       #  1
+    "καγω":       "καὶ ἐγὼ",        # 71 occurrences
+    "καν":        "καὶ ἐάν",        # 14
+    "κακει":      "καὶ ἐκεῖ",       # 10
+    "κακειθεν":   "καὶ ἐκεῖθεν",    #  8
+    "κακεινος":   "καὶ ἐκεῖνος",    #  7
+    "κακεινοι":   "καὶ ἐκεῖνοι",    #  7
+    "καμοι":      "καὶ ἐμοὶ",       #  5
+    "καμε":       "καὶ ἐμὲ",        #  3
+    "τουναντιον": "τὸ ἐναντίον",    #  3
+    "κακεινους":  "καὶ ἐκείνους",   #  1
+    "τουνομα":    "τὸ ὄνομα",       #  1
     # deliberately absent: κοὐ / κοὐκ (0 occurrences in the NT — Attic, not Koine)
 }
 
@@ -1021,7 +930,16 @@ _ITACISMS: list[tuple[str, str]] = [
     ("ω",  "ο"),   # ω  written ο
 ]
 
-MAX_ITACISM_EDITS = 3   # edits per example, drawn at random positions (not always the first)
+# Fraction of eligible words to corrupt per example. This is the single most important number in
+# the normalize task, and the first revision got it wrong: 1-3 edits per sentence left ~90% of
+# tokens already correct, so "echo the input" was a near-optimal policy and the model learned
+# exactly that (measured lift over copying: −0.011, i.e. worse than a no-op).
+#
+# `restore` is the control that shows why: it corrupts EVERY token (strips all diacritics), copying
+# earns 0.052, and the model genuinely learned the task (+0.665 lift). Dense corruption is what
+# forces learning. 0.40 puts normalize in the same regime while keeping sentences readable.
+ITACISM_EDIT_RATE = 0.40
+MIN_ITACISM_EDITS = 2
 
 
 def build_normalize_lexicon(morphgnt_dir: str | None) -> set[str]:
@@ -1095,7 +1013,7 @@ def build_normalize_examples(raw_texts: list[str], rng_py,
         rng_py.shuffle(order)
         corrupted = list(words)
         edits = 0
-        budget = rng_py.randint(1, MAX_ITACISM_EDITS)
+        budget = max(MIN_ITACISM_EDITS, int(len(words) * ITACISM_EDIT_RATE))
         for i in order:
             if edits >= budget:
                 break
@@ -1183,16 +1101,13 @@ def build_task_pools(
     Sources (in order of addition to each pool):
       pos/lemma/denoise : Gospel corpus → PROIEL → MorphGNT all-27-books
       morphology        : MorphGNT all-27-books (compact tag encoding)
-      gloss             : MACULA Greek TSV (downloaded at runtime)
-      normalize         : Real crasis expansions + lexicon-gated itacism on combined raw texts
+      normalize         : Real crasis expansions + dense lexicon-gated itacism on raw texts
       restore           : Synthetic uncial stripping on combined raw texts
       synoptic          : Gospel pericope pairs (tiny, upsampled)
       denoise           : All raw texts (Gospel + PROIEL + MorphGNT)
 
-    The `translate` (Greek→English verse) pool was removed: GreTa has no English pretraining and
-    the available ASV-aligned data is only ~6K verses (~150K English words), which is the same bet
-    that failed in the shelved Koine-T5-Hexapla line. `gloss` is kept — it is monotone and
-    lexicon-like, so it is learnable at this data scale, and it feeds the Koine Reader.
+Both English-output pools (`translate`, `gloss`) were removed — see TASK_WEIGHTS for the measured
+    post-mortem. Neither is a budget problem; this backbone has no English prior.
     """
     import random as _random
     rng_py = _random.Random(42)   # deterministic synthetic data
@@ -1227,10 +1142,6 @@ def build_task_pools(
         morphology_pool = []
         normalize_lex   = set()
 
-    # ── MACULA gloss (downloaded at runtime) ───────────────────────────────────
-    macula_path = _resolve_macula_path()
-    gloss_pool  = build_gloss_training(macula_path)
-
     # ── Synthetic normalize + restore (on combined raw texts) ──────────────────
     all_raw        = denoise_texts   # all raw Greek text accumulated so far
     normalize_pool = build_normalize_examples(all_raw, rng_py, normalize_lex)
@@ -1244,7 +1155,6 @@ def build_task_pools(
         "pos":        pos_pool,
         "lemma":      lemma_pool,
         "morphology": morphology_pool,
-        "gloss":      gloss_pool,
         "normalize":  normalize_pool,
         "restore":    restore_pool,
         "synoptic":   synoptic_pool,
@@ -1265,18 +1175,22 @@ def build_task_pools(
 # (pos is the reported metric; denoise is the general-LM backbone) so they take the lion's share
 # of every micro-batch; lemma is easy and synoptic is tiny, so they get one share each. Weights
 # are relative — normalized against the non-empty pools at sample time.
-_TASK_ORDER  = ("pos", "lemma", "morphology", "gloss", "normalize", "restore",
-                "synoptic", "denoise")
+# `gloss` was REMOVED after the rev-6 run measured it at 0.10 token accuracy and still climbing at
+# ~0.001/1000 steps — it was never going to arrive. Two compounding reasons, both now understood:
+# GreTa has no English pretraining, and joining multi-word MACULA glosses with "_" (needed to make
+# the task word-aligned at all) turned the output into open-vocabulary generation over 19,710 types
+# of which 63% are hapax, at 5.1 subword pieces each. Word-level English glossing needs an
+# English-capable backbone; it is not a budget problem. Its 1.5 share is redistributed below.
+_TASK_ORDER  = ("pos", "lemma", "morphology", "normalize", "restore", "synoptic", "denoise")
 TASK_WEIGHTS = {
     "pos":        4.5,   # primary eval metric — must clear ~3 epochs (see step-budget block)
-    "lemma":      3.5,   # large pool; also feeds gloss semantic coherence
-    "morphology": 2.0,   # full parse codes — hardest task, smallest pool, so 4+ epochs
-    "gloss":      1.5,   # English word-level glosses (monotone, lexicon-like)
-    "normalize":  1.2,   # crasis expansion + lexicon-gated itacism
-    "restore":    1.5,   # diacritic restoration from uncial (synthetic)
-    "synoptic":   0.5,   # tiny pool (155) — already ~55× upsampled at this weight
+    "lemma":      3.5,   # large pool
+    "morphology": 2.5,   # full parse codes — hardest task; still climbing at 75K, so +0.5
+    "normalize":  1.5,   # crasis expansion + dense lexicon-gated itacism
+    "restore":    2.0,   # diacritic restoration from uncial — proven learnable, +0.5
+    "synoptic":   0.5,   # tiny pool (98 after length filtering) — already ~55× upsampled
     "denoise":    3.0,   # backbone LM — keep high
-}   # sum = 17.7; see the step-budget block above for the resulting per-task epoch table
+}   # sum = 17.5; see the step-budget block above for the resulting per-task epoch table
 
 
 def sample_balanced_batch(pools: dict[str, list[dict]], batch_size: int, rng_py) -> list[dict]:
@@ -1372,8 +1286,8 @@ def _collate_batch(examples: list[dict], tokenizer, rng, max_len: int = MAX_SEQ_
             input_ids = torch.tensor(corrupted, dtype=torch.long)
             label_ids = torch.tensor(target,    dtype=torch.long)
         else:
-            # Seq2seq instruction tasks (pos, lemma, morphology, gloss, normalize, restore,
-            # synoptic). These are all ALIGNED tasks — one output unit per input word — so a
+            # Seq2seq instruction tasks (pos, lemma, morphology, normalize, restore, synoptic).
+            # These are all ALIGNED tasks — one output unit per input word — so a
             # truncated target does not merely lose the tail, it teaches the model to stop early
             # and destroys the word↔output correspondence for every subsequent example. Drop the
             # example instead; `filter_overlong_examples` removes these at pool-build time, so
@@ -1509,7 +1423,7 @@ def evaluate_pos_em(model, tokenizer, records: list[dict], device: str,
 
 
 # ── Generic per-task evaluation (all non-denoise tasks are word-aligned) ────────
-# pos / lemma / morphology / gloss / normalize / restore all emit one whitespace unit per input
+# pos / lemma / morphology / normalize / restore all emit one whitespace unit per input
 # word, so a single token-accuracy + exact-match evaluator covers every one of them. Mirrors the
 # structure of evaluate_tagging in app_koine_hexapla.py.
 
@@ -1538,26 +1452,55 @@ def _batch_predict(model, tokenizer, texts: list[str], device: str, prefix: str,
 
 def evaluate_tagging(model, tokenizer, records: list[dict], device: str, prefix: str,
                      upper: bool = False, batch_size: int = EVAL_BATCH_SIZE) -> dict:
-    """Token-accuracy + exact-match for any word-aligned task. Records: {text, gold: list[str]}."""
+    """Token-accuracy + exact-match for any word-aligned task, WITH a copy baseline.
+
+    Returns `tok`, `em`, `copy`, `lift`, and `edit` — and `lift`/`edit` are the ones that mean
+    something for near-copy tasks.
+
+    Raw token accuracy is a trap whenever the correct output resembles the input. The `normalize`
+    task scored a healthy-looking 0.86 for 54,000 steps while having learned nothing at all: only
+    1-3 words per sentence are corrupted, so ~90% of tokens are already correct in the input and
+    echoing it scores 0.90. The model sat *below* that no-op baseline and no one could see it.
+
+      * `copy` — what you get by emitting the input verbatim.
+      * `lift` — tok − copy. This is the real signal. `restore` scores +0.665 (genuine skill);
+        `normalize` scored −0.011 (worse than a no-op).
+      * `edit` — accuracy restricted to the positions that actually differ between input and gold,
+        i.e. the only positions where the task is being asked to do anything.
+
+    A task whose `lift` is near zero has not been learned, no matter how high `tok` is.
+    """
     if not records:
-        return {"tok": 0.0, "em": 0.0, "n": 0}
+        return {"tok": 0.0, "em": 0.0, "copy": 0.0, "lift": 0.0, "edit": 0.0, "n": 0}
     was_training = model.training
     model.eval()
 
-    tok_correct = tok_total = em = 0
+    tok_correct = tok_total = em = copy_correct = 0
+    edit_correct = edit_total = 0
     for start in range(0, len(records), batch_size):
         chunk = records[start: start + batch_size]
         preds = _batch_predict(model, tokenizer, [r["text"] for r in chunk], device, prefix, upper)
         for r, pred in zip(chunk, preds):
             gold = r["gold"]
-            tok_correct += sum(1 for g, p in zip(gold, pred) if g == p)
-            tok_total   += len(gold)
-            em          += int(pred == gold)
+            src  = (r["text"].upper() if upper else r["text"].lower()).split()
+            tok_correct  += sum(1 for g, p in zip(gold, pred) if g == p)
+            copy_correct += sum(1 for g, s in zip(gold, src) if g == s)
+            tok_total    += len(gold)
+            em           += int(pred == gold)
+            # Positions the task is actually being asked to change.
+            for i, g in enumerate(gold):
+                if i < len(src) and src[i] == g:
+                    continue
+                edit_total += 1
+                if i < len(pred) and pred[i] == g:
+                    edit_correct += 1
 
     if was_training:
         model.train()
-    return {"tok": tok_correct / max(1, tok_total), "em": em / max(1, len(records)),
-            "n": len(records)}
+    tok  = tok_correct / max(1, tok_total)
+    copy = copy_correct / max(1, tok_total)
+    return {"tok": tok, "em": em / max(1, len(records)), "copy": copy, "lift": tok - copy,
+            "edit": edit_correct / max(1, edit_total), "n": len(records)}
 
 
 # Gates for checkpoint selection. POS-NT is set just under published Koine-T5's 0.966 (this run's
@@ -1566,8 +1509,12 @@ def evaluate_tagging(model, tokenizer, records: list[dict], device: str, prefix:
 GATE_POS_NT = 0.950
 GATE_LEMMA  = 0.760
 
-# Tasks whose mean score decides between gate-passing checkpoints.
-_SECONDARY_TASKS = ("morphology", "gloss", "restore", "normalize")
+# Tasks whose mean score decides between gate-passing checkpoints, each paired with the metric to
+# rank it on. morphology is not a copy task (input is Greek, output is tag codes) so raw accuracy is
+# honest there. normalize and restore ARE near-copy tasks, so they are ranked on `lift` — accuracy
+# over the copy-the-input baseline. Ranking normalize on `tok` is what made a model with NEGATIVE
+# lift look like a 0.86 performer for 54,000 steps.
+_SECONDARY_TASKS = {"morphology": "tok", "restore": "lift", "normalize": "lift"}
 
 
 def evaluate_all(model, tokenizer, pos_eval: list[dict], task_evals: dict[str, list[dict]],
@@ -1594,7 +1541,8 @@ def evaluate_all(model, tokenizer, pos_eval: list[dict], task_evals: dict[str, l
     lemma_tok = per_task.get("lemma", {}).get("tok", 0.0)
     gated = pos_m["nt"]["tok"] >= GATE_POS_NT and lemma_tok >= GATE_LEMMA
 
-    secondary = [per_task[t]["tok"] for t in _SECONDARY_TASKS if per_task.get(t, {}).get("n")]
+    secondary = [per_task[t][metric] for t, metric in _SECONDARY_TASKS.items()
+                 if per_task.get(t, {}).get("n")]
     secondary_score = sum(secondary) / len(secondary) if secondary else 0.0
 
     select_key = (1.0, secondary_score) if gated else (0.0, pos_m["overall"]["tok"])
@@ -1738,7 +1686,7 @@ def _training_loop(
         "warmup": WARMUP_STEPS, "lora_r": LORA_R, "lora_alpha": LORA_ALPHA, "seq": MAX_SEQ_LEN,
         "weights": {t: TASK_WEIGHTS[t] for t in _TASK_ORDER},
         # Bump `rev` to force a fresh run — superseded checkpoints are ignored, not resumed.
-        "rev": 6,   # omni v2: translate dropped, tagset overrides, compact morphology, 75K steps
+        "rev": 7,   # omni v3: gloss dropped, dense normalize, lift-aware selection
         "pools": {t: len(pools.get(t, [])) for t in _TASK_ORDER},
     }, sort_keys=True).encode()).hexdigest()[:12]
 
@@ -1877,7 +1825,10 @@ def _training_loop(
                   f"Classical tok={pos['classical']['tok']:.3f} "
                   f"em={pos['classical']['em']:.3f} (n={pos['classical']['n']})")
             print("    tasks: " + "  ".join(
-                f"{t}={v['tok']:.3f}" for t, v in m["tasks"].items() if t != "pos")
+                (f"{t}={v['tok']:.3f}(lift{v['lift']:+.3f})"
+                 if t in _SECONDARY_TASKS and _SECONDARY_TASKS[t] == "lift"
+                 else f"{t}={v['tok']:.3f}")
+                for t, v in m["tasks"].items() if t != "pos")
                 + f"  |  gated={m['gated']} secondary={m['secondary_score']:.3f}")
             if m["select_key"] > best_key:
                 best_key = m["select_key"]
@@ -1945,7 +1896,6 @@ def generate(
       - pos:               prefix ``pos: <greek text>``
       - lemma:             prefix ``lemma: <greek text>``
       - morphology:        prefix ``morphology: <greek text>``
-      - gloss:             prefix ``gloss: <greek text>``
       - normalize:         prefix ``normalize: <crasis/itacism text>``
       - restore:           prefix ``restore: <UNCIAL TEXT>``
       - synoptic_mk_to_mt: prefix ``synoptic mark_to_matt: <mark text>``
@@ -1960,7 +1910,6 @@ def generate(
         "pos":               "pos: ",
         "lemma":             "lemma: ",
         "morphology":        "morphology: ",
-        "gloss":             "gloss: ",
         "normalize":         "normalize: ",
         "restore":           "restore: ",
         "synoptic_mk_to_mt": "synoptic mark_to_matt: ",
@@ -1978,9 +1927,8 @@ def generate(
     # Previously everything except pos/lemma/morphology fell through to contrastive search with
     # repetition_penalty=1.25 + no_repeat_ngram_size=3 + encoder_no_repeat_ngram_size=3. For
     # normalize and restore — near-copy tasks whose correct output repeats the input — forbidding
-    # repeated 3-grams makes the right answer literally unreachable, and for gloss it penalises the
-    # English function words ("the", "of", "and") that a correct gloss must repeat. Degenerate
-    # output under that config is a decoding artefact, not evidence about the trained model.
+    # repeated 3-grams makes the right answer literally unreachable. Degenerate output under that
+    # config is a decoding artefact, not evidence about the trained model.
     if task in _GREEDY_TASKS:
         # Aligned, deterministic tasks: one output unit per input word, units legitimately repeat.
         gen_kwargs = dict(max_new_tokens=GEN_MAX_NEW_TOKENS, num_beams=1, do_sample=False)
@@ -1997,6 +1945,7 @@ def generate(
             repetition_penalty=GEN_REP_PENALTY,
             no_repeat_ngram_size=GEN_NO_REPEAT_NGRAM,
             early_stopping=True,
+            trust_remote_code=True,
         )
 
     model.eval()
@@ -2337,12 +2286,6 @@ def _run_demo(adapter_path: str | None = None) -> None:
             "name": "Luke 1:46 — Full Morphology Tagging (compact encoding)",
             "text": "μεγαλύνει ἡ ψυχή μου τὸν κύριον",
             "note": "Expected: v-3pais ra n-nsf rp-gs ra n-asm  (decode via morph_tags.json)",
-        },
-        {
-            "task": "gloss",
-            "name": "John 1:1 — Word Glossing",
-            "text": "ἐν ἀρχῇ ἦν ὁ λόγος",
-            "note": "Expected: in beginning was the word",
         },
         {
             "task": "normalize",
