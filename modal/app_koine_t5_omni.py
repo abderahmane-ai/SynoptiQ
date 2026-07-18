@@ -127,13 +127,19 @@ LR              = 1e-4
 MAX_STEPS           = 75_000
 WARMUP_STEPS        = 3_750   # micro-steps; ~5% of MAX_STEPS (converted to opt-steps in lr_lambda)
 SAVE_STEPS          = 1_000   # checkpoint + resumable training-state cadence
-EVAL_STEPS          = 1_000   # POS validation + best-checkpoint selection cadence
+# Eval cadence is a WALL-CLOCK decision, not just a resolution one. Each eval generates
+# EVAL_MAX_PER_SUBSET*2 POS sentences plus HOLDOUT_PER_TASK for every secondary task; at
+# EVAL_STEPS=1000 with 5 secondary tasks the rev-6 run spent several of its ~8 hours generating
+# rather than training (~3,500 generate() calls vs v1's ~480). 2,500 keeps 30 evals across the run
+# — ample for picking a checkpoint — at ~40% of the eval cost.
+EVAL_STEPS          = 2_500   # multi-task validation + best-checkpoint selection cadence
 LOG_STEPS           = 100
 CKPT_KEEP           = 2       # retain only the N newest step-N checkpoints (older ones pruned)
 
 # POS/eval example shaping
 MAX_POS_WORDS       = 60      # cap PROIEL sentence length so pos/lemma input↔target stay aligned
 EVAL_MAX_PER_SUBSET = 250     # dev sentences per subset (NT / Classical) per eval — 500 total
+HOLDOUT_PER_TASK    = 150     # held-out examples per secondary task (was 200; see EVAL_STEPS)
 EVAL_BATCH_SIZE     = 32      # sentences per generate() call; ~15x faster than batch=1 on A10G
 
 # Span-corruption hyper-parameters (T5 paper §3.1)
@@ -1550,7 +1556,7 @@ def evaluate_all(model, tokenizer, pos_eval: list[dict], task_evals: dict[str, l
             "secondary_score": secondary_score, "select_key": select_key}
 
 
-def carve_holdout(pools: dict[str, list[dict]], per_task: int = 200,
+def carve_holdout(pools: dict[str, list[dict]], per_task: int = HOLDOUT_PER_TASK,
                   seed: int = 7) -> tuple[dict[str, list[dict]], dict[str, list[dict]]]:
     """Split a deterministic held-out slice off each non-denoise pool for evaluation.
 
