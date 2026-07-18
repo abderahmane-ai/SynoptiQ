@@ -4,7 +4,7 @@ A neural source-criticism framework for the Synoptic Problem. Applies transforme
 (KoineFormer, a DAPT'd Koine-Greek T5) to the Gospels of Matthew, Mark, and Luke: a curated
 parallel corpus + representation learning (Paper A, done), a general-purpose Koine model
 (Koine-T5, published), a preregistered source-criticism study (Phase 5), and an honest
-write-up (`paper_limit/`, drafted).
+write-up (done; Overleaf-only). **Project closed 2026-07-18.**
 
 > **Copying-direction detection is a CLOSED NEGATIVE RESULT.** Phases 3 (direction scorer)
 > and 6 (Bayesian hypothesis comparison) were investigated at length and **removed** on
@@ -32,7 +32,7 @@ Rules:
 
 **Branch `feat/phase5-koine-t5`** — pushed to origin and merged into `main` (both at `a4d5d9a`).
 **224 tests pass; repo pristine** (zero cache/`.DS_Store`; `data/ models/ outputs/ graphify-out/`
-git-ignored). Four research deliverables (two published, one code-complete, one drafted) + the
+git-ignored). Four research deliverables (two published, one code-complete, one written up) + the
 **Koine Reader** tool (`synoptiq/reader/` + `spaces/koine-reader/`, built + locally verified).
 
 **Done + published**
@@ -54,7 +54,14 @@ git-ignored). Four research deliverables (two published, one code-complete, one 
 - Track A reconstruction = **bounded negative** (FiD Mt+Lk→Mark F1 0.31 < nearest-witness 0.56).
 - Contamination negligible (memorization gap 0.016 ≪ 0.25; 0% verse-completion exact-match).
 
-**The honest paper — DRAFTED (2026-07-11) at `paper_limit/main.tex`** (+ `references.bib`).
+**The honest paper — DONE.** Finished by the user (confirmed 2026-07-18). **The canonical copy lives
+in Overleaf, NOT in this repo** — `paper/` and `paper_limit/` are git-ignored (`.gitignore:85-86`),
+were removed from the GitHub remote on 2026-07-11, and are **not present on the working machine**.
+Do not infer the paper's state from this file or from a missing local directory; ask, or check
+Overleaf. (An earlier session wasted the user's time by reading the stale "drafted" note below as
+ground truth.) Historical detail on the draft follows.
+
+**Draft history — `paper_limit/main.tex`** (+ `references.bib`).
 Full ~15-page manuscript reusing `paper/main.tex` styling. **Overleaf-only compile** (local TeX
 lacks `pdfcol` + the fonts). Contents: **C1** negative result (Theorem 1 = direction unidentifiable
 without a prior over editing operators; sign-flip demonstration) · **R1** SynoptiQ corpus · **R2**
@@ -62,14 +69,46 @@ Koine-T5 · **C2** the E2 null. Every number traced to source; **all 33 referenc
 Appendix XPOS table checked against the code. Title: *Who Copied Whom? Why the Texts Cannot Tell
 Us — and What They Can*. Framing rules in `docs/PAPER_PLAN.md`; memory `honest-paper-not-nll-direction`.
 
-**Next (finish the paper)**
-- **Mt-target E2 — DONE** (`mai_cv_mt`, symmetric null, `tab:symmetry`); results already on the volume,
-  downloaded to `outputs/study/mai_mt/`. No re-run needed.
-- **Edition-swap ablation** (T8) — Westcott–Hort / Robinson–Pierpont; the one designed robustness check left.
-- M3 gates G1/G2/G4; M5 E1 is likely **not run** (underpowered at N=17 — itself a prereg outcome).
-- Paper: affiliation + contact done (ENSIA); Mt-target landed; remaining is an optional figure, then Overleaf compile.
+**Project status: CLOSED (2026-07-18).** All four research deliverables shipped, plus the Koine
+Reader tool. The user deliberately closed the door on new modelling work. Nothing below is a
+pending task — treat the remaining items as documented non-goals, not a backlog:
+- **Edition-swap ablation** (T8) — never run. A designed robustness check that was not needed for
+  the paper's conclusions.
+- M3 gates G1/G2/G4; M5 E1 — not run (E1 underpowered at N=17, itself a prereg outcome).
+- **Koine-T5-Omni** — fixed and statically verified, **never trained** (see below). One GPU run away
+  if ever revived; not required by any published result.
 
 **Changelog (newest first)**
+- 2026-07-18 — **Koine-T5-Omni diagnosed + fixed, never trained. Project closed.**
+  `modal/app_koine_t5_omni.py` (9 tasks) had regressed POS to **0.610 pooled / 0.678 NT** vs
+  published Koine-T5's 0.917/0.966. A third-party report blamed a metric artefact, an English-poor
+  tokenizer, and task weights favouring pos/lemma — **all three were disproved**: the eval code is
+  byte-identical to `app_koine_t5.py`'s (which scored 0.966), GreTa encodes English at ~2 tok/word
+  with **zero** `<unk>` and an exact round-trip, and morphology got *more* budget than pos (1.78
+  vs 0.92 epochs). The four real causes, each measured:
+  **(1) Task dilution.** `TASK_WEIGHTS` summed 8→17 while `MAX_STEPS` stayed 30K and the pos pool
+  grew 15,041→22,968, cutting pos from **2.99 → 0.92 epochs**. The best checkpoint landed on the
+  *final* step — POS never plateaued. The comment block warning about exactly this was stale
+  copy-paste from v1. **(2) Tagset conflict.** Adding MorphGNT pos data put contradictory labels on
+  δέ/γάρ/μέν/οὖν/ἄν/ἰδού against PROIEL (= the eval set); MorphGNT-convention share of the pos pool
+  went **1.6% → 35.6%**, conflicting on **8.30%** of dev tokens. **(3) Silent truncation.**
+  `_collate_batch` cut targets at 256: **10.9%** of morphology and **24.5%** of synoptic targets
+  (+27.7% of synoptic inputs). **(4) Decoding.** gloss/normalize/restore were graded under
+  contrastive search with repetition penalties — fatal for copy-heavy and function-word-heavy
+  outputs, so some "failures" were harness artefacts.
+  **Fixes** (all statically verified before any GPU spend): 16 data-derived `PROIEL_LEMMA_OVERRIDES`
+  (conflict **8.30% → 2.78%**, NT **1.53%**); compact morphology encoding `N----NSF-`→`N-NSF`
+  (**0 collisions** across all 602 tags, truncation → **0%**); 75K steps + retuned weights (pos
+  **3.34 epochs**); drop-don't-truncate + pool pre-filter; normalize rebuilt on the **147** real
+  crasis anchors + a 20,487-form lexicon gate (97.4% of edits unambiguously restorable); per-task
+  decoding split; **gated 8-task checkpoint selection** (ported from `app_koine_hexapla.py`) with
+  held-out slices; `run_test`/`reeval_v1` entrypoints so headline numbers come from PROIEL **test**.
+  Also caught by eyeballing real data: **gloss was 99% word-misaligned** (30% of MACULA glosses are
+  multi-word → now `_`-joined, 1 unit/word) and **~8,700 SBLGNT apparatus sigla** (⸀⸂⸃⸁) were being
+  fed as Greek (now uses MorphGNT's `normalized` column). `translate` **dropped** — GreTa has no
+  English prior and ~6K verses (~150K words) is the shelved-Hexapla bet again. **12-step CPU smoke
+  run passes end-to-end** (finite loss, all 8 tasks evaluated, gates fire, checkpoints write).
+  **Status: never trained.** 224 tests pass.
 - 2026-07-13 — **Koine Reader built — the published models become a usable tool** (`synoptiq/reader/` +
   `spaces/koine-reader/`). A two-engine interlinear reading assistant: **gold mode** surfaces the on-disk
   Nestle-1904 GNT Text-Fabric data (per word: lemma, full morphology, BGVB gloss, Strong's) by reference
@@ -189,7 +228,8 @@ SynoptiQ/
 │   ├── pool_mai.py         # Phase 5 M4: pool per-fold rows → CV verdict
 │   ├── build_reader_index.py # Koine Reader: serialize N1904 gold → gzipped Space artifact
 │   └── _cli_utils.py       # Shared CLI helpers (canonical detect_device())
-├── modal/                  # Modal GPU: app_dapt.py, app_fid.py (Phase 5), app_koine_t5.py, app_koine_hexapla.py
+├── modal/                  # Modal GPU: app_dapt.py, app_fid.py (Phase 5), app_koine_t5.py,
+│                        #   app_koine_hexapla.py (shelved), app_koine_t5_omni.py (fixed, never trained)
 ├── spaces/                 # HF Gradio Spaces: koine-t5-demo · koine-reader (interlinear GNT reader + parallels)
 ├── paper/                  # Paper A: KoineFormer (XeLaTeX) — LOCAL-ONLY (git-ignored, not on GitHub)
 ├── paper_limit/            # The honest paper (XeLaTeX) — LOCAL-ONLY (git-ignored, not on GitHub)
@@ -295,8 +335,10 @@ Run: `modal run modal/app_koine_hexapla.py::train` ·
 | Phase 7   | ○ Interpretability | Not started |
 | Koine-T5  | ✓ Published | 96.6 NT / 91.7 pooled POS; HF, CC BY-NC-SA 4.0 |
 | Koine-T5-Hexapla | ✗ Shelved | Generation-MAX strategy = **negative result**: 2 GPU revs, both < Koine-T5 (rev 1 POS-collapse 0.38; rev 2 too-slow). Ceiling is the GreTa-220M backbone, not the diet. Code kept; LXX TF reader salvageable (`docs/GENERATION_PLAN.md`) |
-| Paper A   | ✓ Draft | `paper/main.tex` — complete, verified numbers (local-only) |
-| Honest paper | ◐ Drafted | `paper_limit/main.tex` — negative result + corpus + Koine-T5 + E2 null; Overleaf-only; refs web-verified |
+| Koine-T5-Omni | ◐ Fixed, never trained | 8 tasks. 30K-step run regressed POS to 0.610 (task dilution + tagset conflict + silent truncation + wrong decoding); all four diagnosed and fixed, statically verified, CPU smoke-tested. One `modal run` away — not required by any published result |
+| Koine Reader | ✓ Built | `synoptiq/reader/` + `spaces/koine-reader/`; gold N1904 interlinear + synoptic parallels + neural mode |
+| Paper A   | ✓ Done | KoineFormer — **Overleaf only**, not in this repo |
+| Honest paper | ✓ Done | Negative result + corpus + Koine-T5 + E2 null — **Overleaf only**, not in this repo |
 
 ## Key files to know
 
@@ -335,7 +377,11 @@ Run: `modal run modal/app_koine_hexapla.py::train` ·
 - `modal/app_fid.py` — `train_redactors`, `train_fid`, `train_fid_mai`, `run_mai`, `mai_cv` (Lk-target E2 CV),
   **`mai_cv_mt`** (symmetric Mt-target E2 CV — Farrer vs MPH + T4 symmetry check)
 - `modal/app_koine_t5.py` — `train`, `generate`, `build_tokenizer` (+ `demo` local)
-- `paper_limit/main.tex` — **the honest paper** (Theorem 1 + sign-flip + corpus + Koine-T5 + E2 null)
+- `modal/app_koine_t5_omni.py` — 8-task omni line: `train`, `run_test` (PROIEL test), `reeval_v1`
+  (v1 baseline under the corrected tagset mapping), `demo`. **Fixed but never trained** — read the
+  per-task epoch table it prints at startup before ever launching a run; that table is what caught
+  (and would have prevented) the 0.92-epoch pos regression
+- the two papers (Paper A + the honest paper) are **Overleaf-only** — not in this repo, not on GitHub
 - `docs/DIRECTION_NEGATIVE_RESULT.md` · `docs/SOURCE_CRITICISM_STUDY.md` · `docs/PAPER_PLAN.md`
 
 ## Phase 2A results (Paper A)

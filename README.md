@@ -11,6 +11,8 @@
 
 SynoptiQ is a suite of transformer models, datasets, and analytical tools designed to study the Greek texts of Matthew, Mark, and Luke. It provides state-of-the-art NLP infrastructure for Koine Greek, while delivering a rigorous, computationally-backed negative result on the limits of inferring textual dependence.
 
+The underlying methods — domain-adaptive pretraining (LoRA/DAPT), multitask seq2seq fine-tuning, token-level sequence alignment, span/masked restoration, and preregistered, cluster-bootstrapped evaluation — are corpus-agnostic and transfer to any low-resource or historical-text collection.
+
 </div>
 
 ---
@@ -69,13 +71,13 @@ We believe negative results are critical to scientific progress. The code attemp
 
 ---
 
-## 🔮 Roadmap: Krikri-Koine (8B)
+## 🔮 Roadmap & Related Work
 
-Following the findings from our T5 models, we have established that 220M parameter encoder-decoders have a strict ceiling for fluent Koine Greek generative discourse.
+Our generation experiments established that a 220M-parameter encoder-decoder has a strict ceiling for fluent Koine Greek discourse. A generation-maximised variant (*Koine-T5-Hexapla*) was investigated and **shelved as a negative result** — the ceiling is the backbone, not the training diet.
 
-Our next phase is **Krikri-Koine**, an 8B continued-pretraining (CPT) pipeline that will bootstrap off `Llama-Krikri-8B-Base`. By leveraging a model that already possesses deep knowledge of Modern Greek and polytonic character handling, we aim to build the world's first highly-capable generative LLM dedicated to Ancient Greek.
+A larger, different-backbone continued-pretraining attempt (*Krikri-Koine*, bootstrapping a Greek-aware base model such as `Llama-Krikri-8B-Base`) is documented as a **possible future direction**, gated behind the write-up of the current results rather than a committed next phase.
 
-Read the full preregistered feasibility scan and implementation plan: [`ANCIENT_GREEK_8B_PLAN.md`](docs/ANCIENT_GREEK_8B_PLAN.md).
+Read the preregistered feasibility scan and implementation plan: [`ANCIENT_GREEK_8B_PLAN.md`](docs/ANCIENT_GREEK_8B_PLAN.md).
 
 ---
 

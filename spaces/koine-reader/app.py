@@ -73,14 +73,15 @@ def _kbox(inner: str) -> str:
 
 def _word_card(word) -> str:  # noqa: ANN001 - WordAnalysis
     strong = f"G{word.strong}" if word.strong else ""
-    tag = "predicted" if word.predicted else _esc(word.pos)
+    pos_label = _esc(word.pos)
+    morph_label = "(predicted)" if word.predicted else _esc(word.morphology)
     return (
         '<div class="kw">'
         f'<div class="kw-grk">{_esc(word.surface)}</div>'
         f'<div class="kw-gloss">{_esc(word.gloss) or "—"}</div>'
         f'<div class="kw-lem">{_esc(word.lemma)}</div>'
-        f'<div class="kw-pos">{tag}</div>'
-        f'<div class="kw-mor">{_esc(word.morphology)}</div>'
+        f'<div class="kw-pos">{pos_label}</div>'
+        f'<div class="kw-mor">{morph_label}</div>'
         f'<div class="kw-str">{_esc(strong)}</div>'
         "</div>"
     )

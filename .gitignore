@@ -76,6 +76,10 @@ datasets/synoptiq-corpus/pericopes.parquet
 *.zip
 SYNOPTIQ_MASTER_PLAN.md
 IMPLEMENTATION_PLAN.md
+FYP_SUPERVISORS.md
+FYP_PROJECTS_TRIAGE.md
+FYP_SEARCH_PROMPT.md
+emails/
 
 # LaTeX papers — drafts kept local, deliberately NOT published to GitHub
 paper/
