@@ -21,26 +21,24 @@ Data sources:
 All new pools are graceful-fallback: if any download fails, the pool is skipped
 and training continues on the remaining pools.
 
-TWO English-output pools were tried and removed. `translate` (Greek→English verse) never ran: no
-English pretraining plus ~6K verse pairs is the shelved Koine-T5-Hexapla bet again. `gloss`
-(word-level English) DID run for 54,000 steps and reached 0.10 token accuracy — see TASK_WEIGHTS
-for the measured post-mortem. This backbone does not cross into English at this data scale, by
-either route.
+All tasks are Greek-in, Greek-or-tag-out. English-output tasks (verse translation, word-level
+glossing) are out of scope for this backbone: GreTa has no English pretraining and the available
+aligned data is a few hundred thousand English words, which is not enough to acquire one.
 
-Validation runs every task with greedy decoding. `pos` is scored on PROIEL **dev**, split into
-Koine-NT and Classical subsets; the remaining tasks are scored on held-out slices carved out of
-their own pools. Checkpoint selection is GATED (see `evaluate_all`): a checkpoint must hold POS-NT
-and lemma at threshold before its secondary-task score can win, so `best/` is the best *omni*
-model rather than the best tagger. Headline numbers come from PROIEL **test** via `run_test`.
+Validation runs every task with greedy decoding. `pos` is scored on PROIEL dev, split into
+Koine-NT and Classical subsets; other tasks are scored on held-out slices carved from their own
+pools. Checkpoint selection is gated (see `evaluate_all`): a checkpoint must hold POS-NT and lemma
+at threshold before its secondary-task score can win, so `best/` optimises the model as a whole
+rather than the tagger alone. Headline numbers come from PROIEL test via `run_test`.
 
 PROIEL background (verified against the real CoNLL-U, 20180408 release):
   * Composition: ~52–59% Koine NT (Matthew/Mark/Luke/John/Acts/Revelation/Romans…),
     ~41–48% Classical (Herodotus *Histories*). This is the right treebank for a Koine model —
     UD-Perseus has NO New Testament and is Classical poetry only.
   * License CC BY-NC-SA 3.0 (NonCommercial; fine for research training).
-  * Point of speech (POS) mapping uses the **XPOS** column, NOT UPOS/FEATS. The article ὁ/ἡ/τό is UPOS=DET with
-    FEATS `PronType=Dem` (which would mislabel it as a demonstrative); its XPOS is `S-`,
-    which maps cleanly to MorphGNT `RA`. See PROIEL_XPOS_TO_MORPHGNT below.
+  * POS mapping uses the XPOS column, not UPOS/FEATS. The article ὁ/ἡ/τό is UPOS=DET with FEATS
+    `PronType=Dem`, which would mislabel it as a demonstrative; its XPOS is `S-`, mapping cleanly
+    to MorphGNT `RA`. See PROIEL_XPOS_TO_MORPHGNT below.
 
 Usage:
     # Upload the processed Gospel corpus to the Modal volume (once):
@@ -82,7 +80,7 @@ except ImportError:
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 DATA_VOLUME   = "synoptiq-data"          # reuse existing volume with the processed parquets
-OUTPUT_VOLUME = "koine-t5-omni-outputs"    # dedicated output volume for Koine-T5 adapters (best/ + final/)
+OUTPUT_VOLUME = "koine-t5-omni-outputs"    # adapter output volume (best/ + final/)
 GPU_TYPE      = "A10G"
 TIMEOUT       = 86_400                   # 24 hours
 
@@ -104,34 +102,27 @@ LR              = 1e-4
 # task ∝ TASK_WEIGHTS. That makes every task's effective epoch count depend on the SUM of all
 # weights — so adding tasks silently starves the existing ones unless MAX_STEPS rises to match.
 #
-# This is exactly how the 9-task revision regressed. It inherited v1's MAX_STEPS=30_000 while the
-# weight total went 8 → 17 and the pos pool grew 15,041 → 22,968, which cut POS from
-#     v1:   120,000 × 3/8  ÷ 15,041 = 2.99 epochs   → 0.966 NT
-#   to  omni: 120,000 × 3/17 ÷ 22,968 = 0.92 epochs   → 0.678 NT
-# and the best checkpoint landed on the FINAL step, i.e. POS never plateaued. Never edit this
-# block without recomputing the table below.
+# Adding a task or changing a weight therefore rescales every OTHER task's coverage. Recompute the
+# table below before committing such a change; POS below ~3 epochs does not converge.
 #
-# Current budget: 75,000 micro-steps × BATCH_SIZE 4 = 300,000 draws, weights summing to 17.5:
-#     pos        4.5  →  77,143 draws / 22,856  =  3.38 epochs   (the reported/validated task)
+# Budget: 75,000 micro-steps × BATCH_SIZE 4 = 300,000 draws, weights summing to 17.5:
+#     pos        4.5  →  77,143 draws / 22,856  =  3.38 epochs   (primary reported metric)
 #     lemma      3.5  →  60,000 draws / 22,711  =  2.64 epochs
-#     denoise    3.0  →  51,429 draws / 23,011  =  2.23 epochs   (the general-LM backbone)
-#     morphology 2.5  →  42,857 draws /  7,727  =  5.55 epochs   (hardest: 10 joint axes)
+#     denoise    3.0  →  51,429 draws / 23,011  =  2.23 epochs   (general-LM backbone)
+#     morphology 2.5  →  42,857 draws /  7,727  =  5.55 epochs   (10 joint axes; hardest task)
 #     restore    2.0  →  34,286 draws /  9,114  =  3.76 epochs
 #     normalize  1.5  →  25,714 draws / ~7,900  =  3.25 epochs
-#     synoptic   0.5  →   8,571 draws /     98  = 87×           (tiny pool, upsampled)
+#     synoptic   0.5  →   8,571 draws /     98  = 87×            (tiny pool, upsampled)
 #
-# 3 epochs is the proven POS budget (0.8-0.9 lands below a majority-class baseline of 0.215).
-# _training_loop prints this table live at startup from the ACTUAL pool sizes — read it and confirm
-# it matches before letting a run proceed. best/ is selected on the eval curve, so over-shooting
-# late steps is harmless. All counts are MICRO-steps; lr_lambda converts to optimizer steps.
+# `_training_loop` prints this table at startup from the actual pool sizes; confirm it matches
+# before a run proceeds. `best/` is selected on the eval curve, so over-shooting late steps is
+# harmless. All counts are MICRO-steps; `lr_lambda` converts to optimizer steps.
 MAX_STEPS           = 75_000
 WARMUP_STEPS        = 3_750   # micro-steps; ~5% of MAX_STEPS (converted to opt-steps in lr_lambda)
 SAVE_STEPS          = 1_000   # checkpoint + resumable training-state cadence
-# Eval cadence is a WALL-CLOCK decision, not just a resolution one. Each eval generates
-# EVAL_MAX_PER_SUBSET*2 POS sentences plus HOLDOUT_PER_TASK for every secondary task; at
-# EVAL_STEPS=1000 with 5 secondary tasks the rev-6 run spent several of its ~8 hours generating
-# rather than training (~3,500 generate() calls vs v1's ~480). 2,500 keeps 30 evals across the run
-# — ample for picking a checkpoint — at ~40% of the eval cost.
+# Eval cadence is a wall-clock decision as much as a resolution one: each eval decodes
+# EVAL_MAX_PER_SUBSET*2 POS sentences plus HOLDOUT_PER_TASK for every secondary task, and
+# generation dominates. 2,500 yields 30 evals across the run, ample for checkpoint selection.
 EVAL_STEPS          = 2_500   # multi-task validation + best-checkpoint selection cadence
 LOG_STEPS           = 100
 CKPT_KEEP           = 2       # retain only the N newest step-N checkpoints (older ones pruned)
@@ -139,7 +130,7 @@ CKPT_KEEP           = 2       # retain only the N newest step-N checkpoints (old
 # POS/eval example shaping
 MAX_POS_WORDS       = 60      # cap PROIEL sentence length so pos/lemma input↔target stay aligned
 EVAL_MAX_PER_SUBSET = 250     # dev sentences per subset (NT / Classical) per eval — 500 total
-HOLDOUT_PER_TASK    = 150     # held-out examples per secondary task (was 200; see EVAL_STEPS)
+HOLDOUT_PER_TASK    = 150     # held-out examples per secondary task (see EVAL_STEPS for cost)
 EVAL_BATCH_SIZE     = 32      # sentences per generate() call; ~15x faster than batch=1 on A10G
 
 # Span-corruption hyper-parameters (T5 paper §3.1)
@@ -280,23 +271,23 @@ FALLBACK_MORPHGNT = "X-"           # particle/other bucket for any unseen XPOS
 INDEF_PRONOUN_LEMMAS = {"τις"}     # accent-stripped; the indefinite τὶς → RI (else quantifier → A-)
 
 # ── PROIEL→MorphGNT lemma overrides (tagset-convention reconciliation) ───────────
-# The XPOS table above is right about *classes* but the two treebanks disagree about a handful of
-# very high-frequency lemmas. MorphGNT calls the postpositive particles conjunctions (δέ/γάρ/οὖν
-# → C-) and buckets ἄν/δή/ἰδού into X-; PROIEL tags all of them XPOS=Df, which the class table maps
-# to D-. Since the `pos` pool mixes PROIEL, MorphGNT, and the Gospel corpus, that disagreement is
-# not a nuance — it is *contradictory supervision on the most frequent words in the corpus*, and it
-# lands on the eval set too. Measured on PROIEL dev before these overrides: the MorphGNT-majority
-# tag disagreed with PROIEL gold on 1,133/13,652 tokens = 8.30% (δέ alone 443).
+# The XPOS table above is correct about word CLASSES, but the two treebanks follow different
+# conventions for a handful of very high-frequency lemmas: MorphGNT treats the postpositive
+# particles as conjunctions (δέ/γάρ/οὖν → C-) and buckets ἄν/δή/ἰδού as X-, while PROIEL tags all of
+# them XPOS=Df, which the class table maps to D-.
 #
-# The project's canonical tagset is MorphGNT (`synoptiq/utils/constants.py`, the Gospel corpus `pos`
-# column, the Koine Reader), so PROIEL is conformed to MorphGNT — not the reverse.
+# The `pos` pool mixes PROIEL, MorphGNT and the Gospel corpus, so an unreconciled convention gap is
+# contradictory supervision on some of the most frequent words in the corpus — and it reaches the
+# eval set, which is PROIEL. Left alone it affects 8.3% of PROIEL-dev tokens (δέ alone 443).
 #
-# Derivation (not hand-picked): every lemma where MorphGNT is ≥90% pure on one tag, the XPOS class
-# mapping is ≥90% pure on a *different* tag, and PROIEL-train has ≥20 tokens. μέν is included at
-# 87.6% MorphGNT purity — PROIEL is 1,154/1,154 Df, an unambiguous convention difference.
-# Effect on PROIEL dev: NT conflict 5.06% → 1.58%, Classical 12.75% → 4.54%, pooled 8.30% → ~2.8%.
-# The residual (ὁ as relative/personal pronoun in Herodotus, adverbial καί, αὐτός as demonstrative)
-# is genuinely context-dependent and cannot be fixed at the lemma level.
+# MorphGNT is this project's canonical tagset (`synoptiq/utils/constants.py`, the Gospel corpus
+# `pos` column, the Koine Reader), so PROIEL is conformed to MorphGNT rather than the reverse.
+#
+# Membership is data-derived, not hand-picked: every lemma where MorphGNT is ≥90% pure on one tag,
+# the XPOS class mapping is ≥90% pure on a different tag, and PROIEL-train has ≥20 tokens. μέν is
+# admitted at 87.6% MorphGNT purity against 1,154/1,154 Df in PROIEL — an unambiguous convention
+# difference. Residual disagreement (ὁ as relative/personal pronoun in Herodotus, adverbial καί,
+# αὐτός as demonstrative) is context-dependent and not resolvable at the lemma level.
 PROIEL_LEMMA_OVERRIDES: dict[str, str] = {
     # postpositive particles: MorphGNT = conjunction, PROIEL XPOS = Df (adverb)
     "δε": "C-", "γαρ": "C-", "ουν": "C-", "μεν": "C-",
@@ -415,7 +406,7 @@ def build_tokenizer(local_files_only: bool = False):
 
 
 def load_model_with_lora(tokenizer, device: str = "cpu"):
-    """Load the Koine-T5 base (bowphs/GreTa) in bfloat16 with LoRA on all attention + FFN projections.
+    """Load the base model (bowphs/GreTa) in bfloat16 with LoRA on attention and FFN projections.
 
     bfloat16 halves VRAM vs float32 (same exponent range so no overflow risk),
     which avoids A10G OOM at batch=4, seq_len=256.
@@ -632,7 +623,7 @@ def build_proiel_training(proiel_dir: str) -> tuple[list[dict], list[dict], list
 
 
 def _xpos_to_morphgnt_no_overrides(xpos: str, lemma: str) -> str:
-    """The XPOS class mapping WITHOUT PROIEL_LEMMA_OVERRIDES — i.e. the convention Koine-T5 v1 learned."""
+    """The XPOS class mapping without `PROIEL_LEMMA_OVERRIDES` (the unreconciled convention)."""
     if xpos == "Px":
         return "RI" if _strip_accents(lemma) in INDEF_PRONOUN_LEMMAS else "A-"
     return PROIEL_XPOS_TO_MORPHGNT.get(xpos, FALLBACK_MORPHGNT)
@@ -641,16 +632,14 @@ def _xpos_to_morphgnt_no_overrides(xpos: str, lemma: str) -> str:
 def build_proiel_eval(proiel_dir: str, split: str = "dev") -> list[dict]:
     """Build POS eval records from a PROIEL split: [{text, gold(list[str]), subset}].
 
-    `dev` drives checkpoint selection during training; `test` is scored ONCE on the final best/
-    adapter for the headline numbers, so the reported figure is not selection-contaminated.
+    `dev` drives checkpoint selection; `test` is scored once on the final adapter, so the reported
+    figure is not selection-contaminated.
 
-    Each record also carries `neutral`: a per-token mask that is True where the gold label is the
-    SAME with and without PROIEL_LEMMA_OVERRIDES. This exists to make cross-model comparison
-    honest. The overrides encode the MorphGNT tagset convention, which omni was trained on and
-    Koine-T5 v1 was not, so scoring v1 on the overridden tokens marks it wrong for answering in the
-    convention it was actually taught. On the test split that touches 5.6% of tokens but **39.3% of
-    NT sentences and 85.5% of Classical sentences** — enough to make a full-sentence exact-match
-    comparison between the two models meaningless. Score with `neutral_only=True` to compare.
+    Each record carries `neutral`, a per-token mask that is True where the gold label is identical
+    with and without `PROIEL_LEMMA_OVERRIDES`. Models trained before the reconciliation answer in
+    the other convention on the remaining tokens, and while those are a small share of tokens they
+    occur in a large share of sentences — enough to dominate exact match. Pass `neutral_only=True`
+    to `evaluate_pos_em` when comparing across conventions.
     """
     records: list[dict] = []
     path = _proiel_file(proiel_dir, split)
@@ -754,20 +743,15 @@ def load_synoptic_pairs(tokens_path: str, pericopes_path: str) -> tuple[list[dic
 # ── MorphGNT (all 27 NT books) ────────────────────────────────────────────────
 
 # ── Compact morphology tag encoding ────────────────────────────────────────────
-# The native MorphGNT tag is POS(2) + PARSE(8) = 10 chars, e.g. "N----NSF-" / "V-3PAI-S--", where
-# the hyphens are positional padding for unfilled axes. GreTa's SentencePiece has no notion of that
-# structure and shreds each run of hyphens into single characters:
-#     "N----NSF-" → ['▁','n','-','-','-','-','ns','f','-']      (9 tokens for one tag)
-# At 9.2 tokens/word a 60-word verse needs ~550 target tokens — well past MAX_SEQ_LEN=256 — so
-# 10.9% of morphology targets were being silently truncated mid-sequence by _collate_batch, which
-# is precisely what destroys tag↔word alignment.
+# The native MorphGNT tag is POS(2) + PARSE(8) = 10 chars ("N----NSF-", "V-3PAI-S--"), where the
+# hyphens pad unfilled axes. GreTa's SentencePiece has no notion of that structure and splits each
+# run of hyphens into single characters — "N----NSF-" costs 9 tokens — so a full-length verse
+# exceeds MAX_SEQ_LEN in the target alone.
 #
-# Dropping the padding hyphens ("N----NSF-" → "N-NSF", "V-3PAI-S--" → "V-3PAIS") costs 2.26× fewer
-# tokens (p50 163 → 72, p95 292 → 132, max 575 → 242) and brings truncation to 0%.
-#
-# This is lossless: across all 602 distinct tags attested in MorphGNT the compact form produces
-# ZERO collisions, so `build_morph_decode_table()` inverts it exactly. The table is written next to
-# the adapter as `morph_tags.json` so any consumer can decode back to the canonical 10-char code.
+# Dropping the padding ("N----NSF-" → "N-NSF", "V-3PAI-S--" → "V-3PAIS") cuts target length ~2.3×
+# and keeps every verse inside the budget. The mapping is injective over all 602 tags attested in
+# MorphGNT, so `build_morph_decode_table` inverts it exactly; that table is written beside the
+# adapter as `morph_tags.json` for consumers that need the canonical 10-char code.
 
 def compact_morph_tag(tag: str) -> str:
     """Compress a 10-char MorphGNT tag to its non-padding characters ("N----NSF-" → "N-NSF")."""
@@ -778,8 +762,8 @@ def compact_morph_tag(tag: str) -> str:
 def build_morph_decode_table(morphgnt_dir: str) -> dict[str, str]:
     """Map every attested compact tag back to its canonical 10-char MorphGNT form.
 
-    Raises if the compaction is not injective over the observed tagset — that invariant is what
-    makes the compact target lossless, so it is checked rather than assumed.
+    Raises if the compaction is not injective over the observed tagset; that invariant is what
+    makes the encoding lossless, so it is asserted rather than assumed.
     """
     full: set[str] = set()
     for txt_file in sorted(Path(morphgnt_dir).glob("*-morphgnt.txt")):
@@ -858,11 +842,9 @@ def build_morphgnt_training(
                 parts = line.split()
                 if len(parts) < 7:
                     continue
-                # Use the NORMALIZED column (5th), not the raw WORD column (4th). The raw column
-                # carries SBLGNT apparatus markers — ⸀ (5,114 tokens), ⸂/⸃ (1,764/1,765), ⸁ (46) —
-                # which are textual-variant sigla, not Greek. Feeding them in puts ~8,700 junk
-                # characters into the inputs of every MorphGNT-derived task. `normalized` is the
-                # same token with the sigla and trailing punctuation already removed.
+                # NORMALIZED (5th column), not WORD (4th): the raw column carries SBLGNT
+                # apparatus sigla (⸀ ⸂ ⸃ ⸁, ~8,700 tokens) which are textual-variant markers
+                # rather than Greek. `normalized` is the same token without them.
                 bcvw, pos, parse, _word, normalized, _dict, lemma = parts[:7]
                 verse_key = bcvw[:6]   # BB CC VV (ignore word index)
                 surface = normalized.rstrip(",.:;·!?()")
@@ -915,20 +897,13 @@ def build_morphgnt_training(
 
 # ── Synthetic normalize pool (crasis/itacism) ──────────────────────────────────
 
-# Koine crasis forms, keyed by ACCENT-STRIPPED crasis form → expansion (also accent-stripped).
-# Matching is accent-insensitive because Greek accents shift with context: κἀγώ appears as κἀγὼ
-# (grave) before an enclitic-less following word, and an exact-string rule silently misses those.
+# Koine crasis forms: accent-stripped crasis form → accented expansion. Comments give occurrence
+# counts in the MorphGNT NT surface text; examples are built by finding a crasis form present in
+# the text and expanding it, which is why only forms that actually occur are listed.
 #
-# The counts below are real occurrences in the MorphGNT NT surface text. They matter: the previous
-# implementation searched for the EXPANSION and rewrote it into crasis, but "καὶ ἐγώ" occurs
-# exactly ONCE in the whole NT, and κοὐ/κοὐκ (which were in this table) occur ZERO times — they are
-# Attic, not Koine. So the model essentially never saw the κἀγώ ↔ καὶ ἐγώ mapping it is asked for.
-# Building in the natural direction (find a crasis form that is actually there, expand it) yields
-# 130 genuine anchors instead of ~1.
-# Keys are accent-stripped (matching is accent-insensitive); VALUES CARRY THEIR REAL ACCENTS.
-# The values must be properly accented Greek: an earlier revision stored them accent-stripped, which
-# made every crasis target read like "και εγω δέ σοι λέγω" — unaccented words spliced into accented
-# text. The model was being asked to produce something incoherent, and unsurprisingly never did.
+# Keys are accent-stripped so matching is accent-insensitive (Greek accents shift with context:
+# κἀγώ appears as κἀγὼ before some following words). Values must carry their real accents — an
+# unaccented expansion spliced into accented text is not a well-formed target.
 _CRASIS_EXPANSIONS: dict[str, str] = {
     "καγω":       "καὶ ἐγὼ",        # 71 occurrences
     "καν":        "καὶ ἐάν",        # 14
@@ -954,14 +929,11 @@ _ITACISMS: list[tuple[str, str]] = [
     ("ω",  "ο"),   # ω  written ο
 ]
 
-# Fraction of eligible words to corrupt per example. This is the single most important number in
-# the normalize task, and the first revision got it wrong: 1-3 edits per sentence left ~90% of
-# tokens already correct, so "echo the input" was a near-optimal policy and the model learned
-# exactly that (measured lift over copying: −0.011, i.e. worse than a no-op).
-#
-# `restore` is the control that shows why: it corrupts EVERY token (strips all diacritics), copying
-# earns 0.052, and the model genuinely learned the task (+0.665 lift). Dense corruption is what
-# forces learning. 0.40 puts normalize in the same regime while keeping sentences readable.
+# Fraction of eligible words corrupted per example, and the parameter that decides whether this
+# task is learnable at all. Sparse corruption leaves most tokens already correct, which makes
+# echoing the input a near-optimal policy and the task degenerate; `restore`, which corrupts every
+# token, is the contrasting case. 0.40 keeps the copy baseline low while leaving text readable.
+# Whenever this changes, check the `copy`/`lift` columns reported by `evaluate_tagging`.
 ITACISM_EDIT_RATE = 0.40
 MIN_ITACISM_EDITS = 2
 
@@ -1011,11 +983,9 @@ def build_normalize_examples(raw_texts: list[str], rng_py,
         if not words:
             continue
 
-        # ── Strategy 1: crasis. The raw text already contains the crasis form; the TARGET is the
-        # expanded reading, so the pair is real data, not an injected artefact.
-        # Crasis anchors are NOT subject to NORMALIZE_PROB: there are only ~130 in the entire NT,
-        # so sampling them at 0.4 would throw away 60% of the scarcest signal in this pool. The
-        # probability gate exists to keep the abundant itacism examples from swamping the mix.
+        # Crasis: the raw text already contains the crasis form and the target is its expansion,
+        # so these pairs are attested rather than synthesised. They bypass NORMALIZE_PROB — only
+        # ~130 exist in the whole NT, and the gate is there to thin the abundant itacism examples.
         crasis_idx = [i for i, w in enumerate(words)
                       if _strip_accents(w.rstrip(",.:;·!?()")) in _CRASIS_EXPANSIONS]
         if crasis_idx:
@@ -1130,8 +1100,8 @@ def build_task_pools(
       synoptic          : Gospel pericope pairs (tiny, upsampled)
       denoise           : All raw texts (Gospel + PROIEL + MorphGNT)
 
-Both English-output pools (`translate`, `gloss`) were removed — see TASK_WEIGHTS for the measured
-    post-mortem. Neither is a budget problem; this backbone has no English prior.
+    Every pool is graceful-fallback: an unavailable source yields an empty pool and training
+    continues on the rest, with the weighted sampler renormalising over what is present.
     """
     import random as _random
     rng_py = _random.Random(42)   # deterministic synthetic data
@@ -1199,22 +1169,18 @@ Both English-output pools (`translate`, `gloss`) were removed — see TASK_WEIGH
 # (pos is the reported metric; denoise is the general-LM backbone) so they take the lion's share
 # of every micro-batch; lemma is easy and synoptic is tiny, so they get one share each. Weights
 # are relative — normalized against the non-empty pools at sample time.
-# `gloss` was REMOVED after the rev-6 run measured it at 0.10 token accuracy and still climbing at
-# ~0.001/1000 steps — it was never going to arrive. Two compounding reasons, both now understood:
-# GreTa has no English pretraining, and joining multi-word MACULA glosses with "_" (needed to make
-# the task word-aligned at all) turned the output into open-vocabulary generation over 19,710 types
-# of which 63% are hapax, at 5.1 subword pieces each. Word-level English glossing needs an
-# English-capable backbone; it is not a budget problem. Its 1.5 share is redistributed below.
+# Weights are relative and normalised over the non-empty pools at sample time. See the step-budget
+# block at the top of this file for the epoch coverage these produce.
 _TASK_ORDER  = ("pos", "lemma", "morphology", "normalize", "restore", "synoptic", "denoise")
 TASK_WEIGHTS = {
-    "pos":        4.5,   # primary eval metric — must clear ~3 epochs (see step-budget block)
+    "pos":        4.5,   # primary reported metric; must clear ~3 epochs
     "lemma":      3.5,   # large pool
-    "morphology": 2.5,   # full parse codes — hardest task; still climbing at 75K, so +0.5
-    "normalize":  1.5,   # crasis expansion + dense lexicon-gated itacism
-    "restore":    2.0,   # diacritic restoration from uncial — proven learnable, +0.5
-    "synoptic":   0.5,   # tiny pool (98 after length filtering) — already ~55× upsampled
-    "denoise":    3.0,   # backbone LM — keep high
-}   # sum = 17.5; see the step-budget block above for the resulting per-task epoch table
+    "morphology": 2.5,   # 10 joint axes over the smallest pool; needs the most epochs
+    "normalize":  1.5,   # crasis expansion + lexicon-gated itacism
+    "restore":    2.0,   # diacritic restoration from uncial
+    "synoptic":   0.5,   # ~100 examples; heavily upsampled even at this weight
+    "denoise":    3.0,   # general-LM backbone
+}   # sum = 17.5
 
 
 def sample_balanced_batch(pools: dict[str, list[dict]], batch_size: int, rng_py) -> list[dict]:
@@ -1240,24 +1206,20 @@ def sample_balanced_batch(pools: dict[str, list[dict]], batch_size: int, rng_py)
     return [rng_py.choice(pools[t]) for t in tasks]
 
 
-# Running count of examples dropped mid-training for exceeding MAX_SEQ_LEN, per task. Should stay
-# at zero once filter_overlong_examples has run — a non-zero value at the end of a run means a pool
-# is producing sequences the pre-filter did not see, and is printed rather than swallowed.
+# Per-task count of examples dropped mid-training for exceeding MAX_SEQ_LEN. Expected to stay at
+# zero once `filter_overlong_examples` has run; a non-zero total is reported at the end of training
+# rather than swallowed, since it means a pool emits sequences the pre-filter did not see.
 _OVERLONG_DROPS: dict[str, int] = {}
 
 
 def filter_overlong_examples(
     pools: dict[str, list[dict]], tokenizer, max_len: int = MAX_SEQ_LEN
 ) -> dict[str, list[dict]]:
-    """Drop examples whose input or target exceeds `max_len` tokens, and report what was removed.
+    """Drop examples whose input or target exceeds `max_len` tokens, reporting what was removed.
 
-    Doing this at pool-build time (rather than truncating in the collator) has two benefits: the
-    model never sees a half-finished target, and the per-task epoch table printed at startup counts
-    only examples that can actually be trained on.
-
-    Measured against the real pools at MAX_SEQ_LEN=256, this removes ~24.5% of the `synoptic` pool
-    (whole-pericope pairs run to 1,576 target tokens) and nothing else — `morphology` is already
-    inside the budget thanks to the compact tag encoding.
+    Filtering here rather than truncating in the collator keeps half-finished targets out of
+    training and makes the startup epoch table count only trainable examples. In practice this
+    only bites `synoptic`, whose whole-pericope pairs run well past the budget.
     """
     out: dict[str, list[dict]] = {}
     for task, pool in pools.items():
@@ -1310,12 +1272,10 @@ def _collate_batch(examples: list[dict], tokenizer, rng, max_len: int = MAX_SEQ_
             input_ids = torch.tensor(corrupted, dtype=torch.long)
             label_ids = torch.tensor(target,    dtype=torch.long)
         else:
-            # Seq2seq instruction tasks (pos, lemma, morphology, normalize, restore, synoptic).
-            # These are all ALIGNED tasks — one output unit per input word — so a
-            # truncated target does not merely lose the tail, it teaches the model to stop early
-            # and destroys the word↔output correspondence for every subsequent example. Drop the
-            # example instead; `filter_overlong_examples` removes these at pool-build time, so
-            # anything reaching here is a straggler worth counting rather than silently cutting.
+            # Seq2seq instruction tasks, all of which emit one output unit per input word. A
+            # truncated target would teach the model to stop early and break that correspondence,
+            # so over-length examples are dropped rather than cut. `filter_overlong_examples`
+            # removes them at pool-build time; anything reaching here is counted as a straggler.
             src = tokenizer(ex["input_text"],  return_tensors="pt")
             tgt = tokenizer(ex["target_text"], return_tensors="pt")
             input_ids = src["input_ids"][0]
@@ -1409,8 +1369,8 @@ def evaluate_pos_em(model, tokenizer, records: list[dict], device: str,
     {"tok": token_accuracy, "em": exact_match, "n": n_sentences}.
 
     `neutral_only=True` restricts scoring to tokens whose gold label is identical with and without
-    PROIEL_LEMMA_OVERRIDES, and computes EM over those positions only. Use it for ANY comparison
-    between models trained on different tagset conventions — see build_proiel_eval.
+    `PROIEL_LEMMA_OVERRIDES`, computing EM over those positions only. Use it for any comparison
+    between models trained on different tagset conventions; see `build_proiel_eval`.
     """
     was_training = model.training
     model.eval()
@@ -1485,23 +1445,18 @@ def _batch_predict(model, tokenizer, texts: list[str], device: str, prefix: str,
 
 def evaluate_tagging(model, tokenizer, records: list[dict], device: str, prefix: str,
                      upper: bool = False, batch_size: int = EVAL_BATCH_SIZE) -> dict:
-    """Token-accuracy + exact-match for any word-aligned task, WITH a copy baseline.
+    """Token accuracy, exact match and a copy baseline for any word-aligned task.
 
-    Returns `tok`, `em`, `copy`, `lift`, and `edit` — and `lift`/`edit` are the ones that mean
-    something for near-copy tasks.
+    Returns `tok`, `em`, `copy`, `lift` and `edit`:
 
-    Raw token accuracy is a trap whenever the correct output resembles the input. The `normalize`
-    task scored a healthy-looking 0.86 for 54,000 steps while having learned nothing at all: only
-    1-3 words per sentence are corrupted, so ~90% of tokens are already correct in the input and
-    echoing it scores 0.90. The model sat *below* that no-op baseline and no one could see it.
+      * `copy` — accuracy obtained by emitting the input verbatim.
+      * `lift` — `tok` minus `copy`.
+      * `edit` — accuracy restricted to positions where input and gold differ.
 
-      * `copy` — what you get by emitting the input verbatim.
-      * `lift` — tok − copy. This is the real signal. `restore` scores +0.665 (genuine skill);
-        `normalize` scored −0.011 (worse than a no-op).
-      * `edit` — accuracy restricted to the positions that actually differ between input and gold,
-        i.e. the only positions where the task is being asked to do anything.
-
-    A task whose `lift` is near zero has not been learned, no matter how high `tok` is.
+    For tasks whose output resembles their input (`normalize`, `restore`), `tok` is dominated by
+    the copy baseline and a degenerate identity mapping scores highly on it. `lift` and `edit` are
+    the meaningful metrics there: near-zero `lift` means the task has not been learned regardless
+    of `tok`.
     """
     if not records:
         return {"tok": 0.0, "em": 0.0, "copy": 0.0, "lift": 0.0, "edit": 0.0, "n": 0}
@@ -1542,11 +1497,9 @@ def evaluate_tagging(model, tokenizer, records: list[dict], device: str, prefix:
 GATE_POS_NT = 0.950
 GATE_LEMMA  = 0.760
 
-# Tasks whose mean score decides between gate-passing checkpoints, each paired with the metric to
-# rank it on. morphology is not a copy task (input is Greek, output is tag codes) so raw accuracy is
-# honest there. normalize and restore ARE near-copy tasks, so they are ranked on `lift` — accuracy
-# over the copy-the-input baseline. Ranking normalize on `tok` is what made a model with NEGATIVE
-# lift look like a 0.86 performer for 54,000 steps.
+# Tasks that rank gate-passing checkpoints, each paired with the metric to rank it on. morphology
+# maps Greek to tag codes, so raw accuracy is meaningful. normalize and restore are near-copy tasks
+# and are ranked on `lift` instead — see `evaluate_tagging`.
 _SECONDARY_TASKS = {"morphology": "tok", "restore": "lift", "normalize": "lift"}
 
 
@@ -1554,14 +1507,12 @@ def evaluate_all(model, tokenizer, pos_eval: list[dict], task_evals: dict[str, l
                  device: str) -> dict:
     """Score every task and return metrics plus a no-regression selection key.
 
-    ``select_key`` = (1, mean secondary score) once POS-NT and lemma clear their gates, else
-    (0, pos_tok). Any gate-passer outranks any non-passer, so the secondary tasks can only ever be
-    optimised *subject to* the analysis tasks holding — the same mechanism as
-    app_koine_hexapla.py's evaluate_all. Before the gates are met, POS token-accuracy still tracks
-    early progress so selection is never blind.
+    ``select_key`` is (1, mean secondary score) once POS-NT and lemma clear their gates, else
+    (0, pos_tok). Any gate-passer outranks any non-passer, so secondary tasks are optimised only
+    subject to the analysis tasks holding; before the gates are met POS token accuracy still tracks
+    progress, so selection is never blind. Mirrors `evaluate_all` in app_koine_hexapla.py.
 
-    Selecting on POS alone (the previous behaviour) makes best/ the best *tagger*, not the best
-    omni model — with 8 tasks that is the wrong objective.
+    Ranking on POS alone would select the best tagger rather than the best multitask model.
     """
     pos_m = evaluate_pos_em(model, tokenizer, pos_eval, device)
     per_task = {"pos": {"tok": pos_m["overall"]["tok"], "em": pos_m["overall"]["em"],
@@ -1618,7 +1569,7 @@ def carve_holdout(pools: dict[str, list[dict]], per_task: int = HOLDOUT_PER_TASK
 
 
 def _select_eval_subset(records: list[dict], per_subset: int, seed: int = 1234) -> list[dict]:
-    """Deterministically pick up to `per_subset` sentences from each subset (stable across evals)."""
+    """Pick up to `per_subset` sentences per subset, deterministically (stable across evals)."""
     import random as _random
     rng = _random.Random(seed)
     out: list[dict] = []
@@ -1736,7 +1687,8 @@ def _training_loop(
         # compatible = same fingerprint and still short of MAX_STEPS (i.e. genuine unfinished work)
         compatible = sorted(
             ((int(d.name.split("-")[1]), d) for d in step_dirs
-             if (d / "run_fp.txt").exists() and (d / "run_fp.txt").read_text().strip() == fingerprint
+             if (d / "run_fp.txt").exists()
+             and (d / "run_fp.txt").read_text().strip() == fingerprint
              and int(d.name.split("-")[1]) < MAX_STEPS),
             key=lambda t: t[0],
         )
@@ -1744,8 +1696,8 @@ def _training_loop(
             latest_step, latest = compatible[-1]
             adapter_file = latest / "adapter_model.safetensors"
             if adapter_file.exists():
-                # Load LoRA weights INTO the existing "default" adapter (avoid PeftModel.load_adapter,
-                # which registers a *new* named adapter and collides on "default").
+                # Load LoRA weights into the existing "default" adapter; PeftModel.load_adapter
+                # registers a new named adapter and collides on "default".
                 from peft import set_peft_model_state_dict
                 from safetensors.torch import load_file
                 set_peft_model_state_dict(model, load_file(str(adapter_file)))
@@ -1780,9 +1732,8 @@ def _training_loop(
             print(f"Fresh start (fp={fingerprint}); ignoring {len(foreign)} checkpoint(s) from a "
                   f"different run config: {shown}")
 
-    # Report pool sizes + per-task epoch coverage under the weighted sampler.
-    # NOTE: this table is the single best early-warning signal in the whole script. The 9-task
-    # regression it was written to catch printed "pos ~0.92 epochs" here and went unread.
+    # Pool sizes and per-task epoch coverage under the weighted sampler. Confirm against the
+    # budget documented at the top of this file before a run proceeds.
     active_tasks = [t for t in _TASK_ORDER if pools.get(t)]
     w_total = sum(TASK_WEIGHTS[t] for t in active_tasks) or 1.0
     print(f"Starting training from step {step} → {MAX_STEPS}")
@@ -1955,13 +1906,9 @@ def generate(
     inputs = tokenizer(full_input, return_tensors="pt", truncation=True,
                        max_length=MAX_SEQ_LEN).to(device)
 
-    # Decoding is chosen per task, and the choice matters as much as the weights do.
-    #
-    # Previously everything except pos/lemma/morphology fell through to contrastive search with
-    # repetition_penalty=1.25 + no_repeat_ngram_size=3 + encoder_no_repeat_ngram_size=3. For
-    # normalize and restore — near-copy tasks whose correct output repeats the input — forbidding
-    # repeated 3-grams makes the right answer literally unreachable. Degenerate output under that
-    # config is a decoding artefact, not evidence about the trained model.
+    # Decoding is task-conditional. Repetition penalties are appropriate only for open-ended
+    # generation: on the aligned tasks output units legitimately repeat, and on the near-copy tasks
+    # (normalize, restore) forbidding repeated n-grams makes the correct answer unreachable.
     if task in _GREEDY_TASKS:
         # Aligned, deterministic tasks: one output unit per input word, units legitimately repeat.
         gen_kwargs = dict(max_new_tokens=GEN_MAX_NEW_TOKENS, num_beams=1, do_sample=False)
@@ -2189,10 +2136,10 @@ def _load_adapter(tokenizer, adapter_path: str, device: str):
     timeout=3600,
 ) if modal is not None else None
 def run_test(adapter: str = "/outputs/koine_t5_omni/best") -> None:
-    """Score a trained adapter ONCE on the PROIEL **test** split — the headline numbers.
+    """Score an adapter on the PROIEL test split — the reported numbers.
 
-    Kept separate from training on purpose: `best/` is selected on dev, so quoting a dev number as
-    the result would be selection-contaminated. Run this after training completes.
+    Separate from training by design: `best/` is selected on dev, so a dev figure would be
+    selection-contaminated. Run after training completes.
     """
     import json
 
@@ -2228,12 +2175,15 @@ def run_test(adapter: str = "/outputs/koine_t5_omni/best") -> None:
     timeout=3600,
 ) if modal is not None else None
 def reeval_v1(adapter: str = "/outputs/koine_t5_v1/best") -> None:
-    """Re-score the published Koine-T5 adapter under THIS script's corrected tagset mapping.
+    """Score the published Koine-T5 adapter under this script's tagset mapping, dev and test.
 
-    `PROIEL_LEMMA_OVERRIDES` changes the gold label for ~2-5% of PROIEL tokens, so omni's POS
-    number is not directly comparable to the 0.966 NT that published Koine-T5 reported under the
-    old mapping. This produces an apples-to-apples baseline on the same gold. It does NOT restate
-    the published Koine-T5 result — that number stands as measured.
+    `PROIEL_LEMMA_OVERRIDES` alters the gold label for a small fraction of tokens, so figures from
+    this entrypoint do not restate the published Koine-T5 results, which were measured under the
+    unreconciled mapping.
+
+    These numbers are not a fair comparison against this model on their own: Koine-T5 predates the
+    reconciliation and answers in the other convention, so the overridden tokens count against it.
+    Use `compare`, which reports convention-neutral scores alongside these.
     """
     import json
 
@@ -2266,18 +2216,19 @@ def reeval_v1(adapter: str = "/outputs/koine_t5_v1/best") -> None:
 ) if modal is not None else None
 def compare(omni: str = "/outputs/koine_t5_omni/best",
             v1: str = "/outputs/koine_t5_v1/best") -> None:
-    """Compare omni against Koine-T5 v1 on PROIEL test, scored two ways.
+    """Compare two adapters on PROIEL test under both scoring modes.
 
-    Scoring both models against the override-corrected gold is NOT a fair comparison, even though
-    it uses identical code and the identical split: the overrides encode the tagset convention omni
-    was trained on, so v1 is marked wrong for answering in the convention it was actually taught.
-    That penalty lands on 39.3% of NT and 85.5% of Classical test SENTENCES, which destroys the
-    exact-match comparison specifically.
+    Identical code, split and decoding are not sufficient for a controlled comparison here: the
+    gold labels themselves encode a tagset convention, and a model trained on the other convention
+    is marked wrong for answering as it was taught. The overrides touch few tokens but many
+    sentences, so exact match is affected far more than token accuracy.
 
-    This prints both views so the gap between them is visible:
-      * FULL    — all tokens, corrected gold. Flatters omni; do not quote as a model comparison.
-      * NEUTRAL — only tokens where both conventions agree (94.4% of them). This is the number
-                  that reflects tagging skill rather than answer-key alignment.
+      full     all tokens against the reconciled gold; favours whichever model shares its
+               convention, so it is not a model-quality comparison on its own
+      neutral  tokens whose gold is identical under both conventions, which isolates tagging
+               skill from answer-key alignment
+
+    Report `neutral`; report `full` only with the convention difference stated.
     """
     import json
 
@@ -2303,8 +2254,9 @@ def compare(omni: str = "/outputs/koine_t5_omni/best",
         del model
 
     for mode in ("full", "neutral"):
-        label = ("FULL (corrected gold — flatters omni)" if mode == "full"
-                 else "NEUTRAL (convention-agnostic — the fair comparison)")
+        label = ("full — all tokens, reconciled gold (favours the matching convention)"
+                 if mode == "full"
+                 else "neutral — convention-agnostic tokens only")
         print(f"\n{'=' * 78}\n{label}\n{'=' * 78}")
         print(f"{'model':14} {'NT tok':>8} {'NT EM':>8} {'Cl tok':>8} {'Cl EM':>8} "
               f"{'pool tok':>9} {'pool EM':>8}")
@@ -2322,7 +2274,7 @@ def compare(omni: str = "/outputs/koine_t5_omni/best",
               f"{(a['overall']['em']-b['overall']['em'])*100:+8.1f}")
 
     Path("/outputs/koine_t5_omni/comparison_test.json").write_text(json.dumps(out, indent=2))
-    print("\nQuote the NEUTRAL row. Report the FULL row only alongside the caveat above.")
+    print("\nReport the neutral rows; the full rows require the convention caveat.")
     _commit()
 
 
