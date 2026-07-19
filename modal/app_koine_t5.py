@@ -66,7 +66,7 @@ except ImportError:
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 DATA_VOLUME   = "synoptiq-data"          # reuse existing volume with the processed parquets
-OUTPUT_VOLUME = "koine-t5-outputs"    # dedicated output volume for Koine-T5 adapters (best/ + final/)
+OUTPUT_VOLUME = "koine-t5-outputs"    # adapter output volume (best/ + final/)
 GPU_TYPE      = "A10G"
 TIMEOUT       = 86_400                   # 24 hours
 
@@ -317,7 +317,7 @@ def build_tokenizer():
 
 
 def load_model_with_lora(tokenizer, device: str = "cpu"):
-    """Load the Koine-T5 base (bowphs/GreTa) in bfloat16 with LoRA on all attention + FFN projections.
+    """Load the base model (bowphs/GreTa) in bfloat16 with LoRA on attention and FFN projections.
 
     bfloat16 halves VRAM vs float32 (same exponent range so no overflow risk),
     which avoids A10G OOM at batch=4, seq_len=256.
@@ -859,7 +859,7 @@ def evaluate_pos_em(model, tokenizer, records: list[dict], device: str,
 
 
 def _select_eval_subset(records: list[dict], per_subset: int, seed: int = 1234) -> list[dict]:
-    """Deterministically pick up to `per_subset` sentences from each subset (stable across evals)."""
+    """Pick up to `per_subset` sentences per subset, deterministically (stable across evals)."""
     import random as _random
     rng = _random.Random(seed)
     out: list[dict] = []
@@ -948,7 +948,7 @@ def _training_loop(
 
     # Deterministic eval subset (stable across evals → comparable token-acc for model selection)
     eval_subset = _select_eval_subset(eval_records, EVAL_MAX_PER_SUBSET) if eval_records else []
-    best_score = -1.0   # selection metric = POS token-accuracy (full-sentence EM is ~0, uninformative)
+    best_score = -1.0   # selection metric: POS token-accuracy (EM is ~0 early and uninformative)
 
     # Run fingerprint: a short hash of the config that defines "the same run". Auto-resume only
     # from checkpoints stamped with this exact fingerprint, so a stale or foreign checkpoint on the
@@ -976,7 +976,8 @@ def _training_loop(
         # compatible = same fingerprint and still short of MAX_STEPS (i.e. genuine unfinished work)
         compatible = sorted(
             ((int(d.name.split("-")[1]), d) for d in step_dirs
-             if (d / "run_fp.txt").exists() and (d / "run_fp.txt").read_text().strip() == fingerprint
+             if (d / "run_fp.txt").exists()
+             and (d / "run_fp.txt").read_text().strip() == fingerprint
              and int(d.name.split("-")[1]) < MAX_STEPS),
             key=lambda t: t[0],
         )
@@ -984,8 +985,8 @@ def _training_loop(
             latest_step, latest = compatible[-1]
             adapter_file = latest / "adapter_model.safetensors"
             if adapter_file.exists():
-                # Load LoRA weights INTO the existing "default" adapter (avoid PeftModel.load_adapter,
-                # which registers a *new* named adapter and collides on "default").
+                # Load LoRA weights into the existing "default" adapter; PeftModel.load_adapter
+                # registers a new named adapter and collides on "default".
                 from peft import set_peft_model_state_dict
                 from safetensors.torch import load_file
                 set_peft_model_state_dict(model, load_file(str(adapter_file)))

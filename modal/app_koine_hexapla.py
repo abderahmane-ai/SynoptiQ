@@ -283,7 +283,8 @@ def load_model_with_lora(tokenizer, device: str = "cpu"):
     model.to(device)
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total = sum(p.numel() for p in model.parameters())
-    print(f"Koine-T5-Hexapla LoRA params: {trainable:,} / {total:,} ({100 * trainable / total:.2f}%)")
+    print(f"Koine-T5-Hexapla LoRA params: {trainable:,} / {total:,} "
+          f"({100 * trainable / total:.2f}%)")
     return model
 
 
@@ -721,7 +722,8 @@ def _generate_continuations(model, tokenizer, prefixes, device):
                 max_new_tokens=GEN_MAX_NEW_TOKENS, penalty_alpha=GEN_PENALTY_ALPHA,
                 top_k=GEN_TOP_K, repetition_penalty=GEN_REP_PENALTY,
                 no_repeat_ngram_size=GEN_NO_REPEAT_NGRAM, early_stopping=True,
-                trust_remote_code=True,  # transformers ≥4.62 fetches contrastive-search via custom_generate
+                # transformers >=4.62 fetches contrastive-search via custom_generate
+                trust_remote_code=True,
             )
         outs.append(tokenizer.decode(ids[0], skip_special_tokens=True))
     return outs
@@ -970,7 +972,8 @@ def _training_loop(model, tokenizer, pools, pos_eval, lemma_eval, cont_eval,
             m = evaluate_all(model, tokenizer, pos_subset, lemma_subset, cont_eval, device)
             g = m["gen"]
             print(f"  [eval {step}] POS nt={m['pos']['nt']['tok']:.3f} "
-                  f"cl={m['pos']['classical']['tok']:.3f} | lemma={m['lemma']['overall']['tok']:.3f} "
+                  f"cl={m['pos']['classical']['tok']:.3f} | "
+                  f"lemma={m['lemma']['overall']['tok']:.3f} "
                   f"| ppl={g['ppl']:.2f} f1={g['f1']:.3f} morph={g['morph']:.3f} "
                   f"| gated={m['gated']} gen_score={m['gen_score']:.3f}")
             if m["select_key"] > best_key:
@@ -1114,9 +1117,11 @@ def _run_demo(adapter_path: str | None = None) -> None:
     print("=" * 80)
     for case in test_cases:
         print(f"\n  {case['name']}\n  Input: {case['text']}")
-        print(f"  GreTa base:  {generate(base_model, tokenizer, case['text'], case['task'], device)}")
+        out = generate(base_model, tokenizer, case["text"], case["task"], device)
+        print(f"  GreTa base:  {out}")
         if hex_model is not None:
-            print(f"  Hexapla:     {generate(hex_model, tokenizer, case['text'], case['task'], device)}")
+            out = generate(hex_model, tokenizer, case["text"], case["task"], device)
+            print(f"  Hexapla:     {out}")
         print("-" * 80)
 
 
