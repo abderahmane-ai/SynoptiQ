@@ -631,11 +631,26 @@ def build_proiel_training(proiel_dir: str) -> tuple[list[dict], list[dict], list
     return pos_examples, lemma_examples, raw_texts
 
 
+def _xpos_to_morphgnt_no_overrides(xpos: str, lemma: str) -> str:
+    """The XPOS class mapping WITHOUT PROIEL_LEMMA_OVERRIDES — i.e. the convention Koine-T5 v1 learned."""
+    if xpos == "Px":
+        return "RI" if _strip_accents(lemma) in INDEF_PRONOUN_LEMMAS else "A-"
+    return PROIEL_XPOS_TO_MORPHGNT.get(xpos, FALLBACK_MORPHGNT)
+
+
 def build_proiel_eval(proiel_dir: str, split: str = "dev") -> list[dict]:
     """Build POS eval records from a PROIEL split: [{text, gold(list[str]), subset}].
 
     `dev` drives checkpoint selection during training; `test` is scored ONCE on the final best/
     adapter for the headline numbers, so the reported figure is not selection-contaminated.
+
+    Each record also carries `neutral`: a per-token mask that is True where the gold label is the
+    SAME with and without PROIEL_LEMMA_OVERRIDES. This exists to make cross-model comparison
+    honest. The overrides encode the MorphGNT tagset convention, which omni was trained on and
+    Koine-T5 v1 was not, so scoring v1 on the overridden tokens marks it wrong for answering in the
+    convention it was actually taught. On the test split that touches 5.6% of tokens but **39.3% of
+    NT sentences and 85.5% of Classical sentences** — enough to make a full-sentence exact-match
+    comparison between the two models meaningless. Score with `neutral_only=True` to compare.
     """
     records: list[dict] = []
     path = _proiel_file(proiel_dir, split)
@@ -644,9 +659,12 @@ def build_proiel_eval(proiel_dir: str, split: str = "dev") -> list[dict]:
     for source, toks in iter_conllu_sentences(path):
         if not (2 <= len(toks) <= MAX_POS_WORDS):
             continue
+        gold = [map_xpos_to_morphgnt(t[2], t[1]) for t in toks]
+        old  = [_xpos_to_morphgnt_no_overrides(t[2], t[1]) for t in toks]
         records.append({
             "text": " ".join(t[0] for t in toks),
-            "gold": [map_xpos_to_morphgnt(t[2], t[1]) for t in toks],
+            "gold": gold,
+            "neutral": [g == o for g, o in zip(gold, old)],
             "subset": "nt" if _is_nt_source(source) else "classical",
         })
     return records
@@ -1382,12 +1400,17 @@ def _batch_pos_predict(model, tokenizer, texts: list[str], device: str) -> list[
 
 
 def evaluate_pos_em(model, tokenizer, records: list[dict], device: str,
-                   batch_size: int = EVAL_BATCH_SIZE) -> dict[str, dict]:
-    """Compute token-level accuracy + sentence-level Exact Match on PROIEL dev.
+                   batch_size: int = EVAL_BATCH_SIZE,
+                   neutral_only: bool = False) -> dict[str, dict]:
+    """Compute token-level accuracy + sentence-level Exact Match on a PROIEL split.
 
     Generates in mini-batches of `batch_size` for ~15x speedup over batch=1 on A10G.
     Returns {"nt": {...}, "classical": {...}, "overall": {...}} where each inner dict is
     {"tok": token_accuracy, "em": exact_match, "n": n_sentences}.
+
+    `neutral_only=True` restricts scoring to tokens whose gold label is identical with and without
+    PROIEL_LEMMA_OVERRIDES, and computes EM over those positions only. Use it for ANY comparison
+    between models trained on different tagset conventions — see build_proiel_eval.
     """
     was_training = model.training
     model.eval()
@@ -1402,11 +1425,15 @@ def evaluate_pos_em(model, tokenizer, records: list[dict], device: str,
         preds = _batch_pos_predict(model, tokenizer, texts, device)
         for r, pred in zip(chunk, preds):
             gold = r["gold"]
-            tok_correct = sum(1 for g, p in zip(gold, pred) if g == p)
+            keep = r.get("neutral") if neutral_only else None
+            if keep is None:
+                keep = [True] * len(gold)
+            idx = [i for i, k in enumerate(keep) if k]
+            tok_correct = sum(1 for i in idx if i < len(pred) and pred[i] == gold[i])
             a = agg[r["subset"]]
             a[0] += tok_correct
-            a[1] += len(gold)
-            a[2] += int(pred == gold)
+            a[1] += len(idx)
+            a[2] += int(tok_correct == len(idx))   # EM over the scored positions
             a[3] += 1
             if len(samples) < 3:
                 samples.append((r["subset"], gold, pred))
@@ -2200,7 +2227,7 @@ def run_test(adapter: str = "/outputs/koine_t5_omni/best") -> None:
     volumes=_VOLUMES,
     timeout=3600,
 ) if modal is not None else None
-def reeval_v1(adapter: str = "/data/koine_t5_best") -> None:
+def reeval_v1(adapter: str = "/outputs/koine_t5_v1/best") -> None:
     """Re-score the published Koine-T5 adapter under THIS script's corrected tagset mapping.
 
     `PROIEL_LEMMA_OVERRIDES` changes the gold label for ~2-5% of PROIEL tokens, so omni's POS
@@ -2228,6 +2255,74 @@ def reeval_v1(adapter: str = "/data/koine_t5_best") -> None:
         print(f"  pooled    tok={m['overall']['tok']:.4f}  em={m['overall']['em']:.4f}")
         Path(f"/outputs/koine_t5_omni/v1_baseline_{split}.json").write_text(
             json.dumps({"split": split, "adapter": adapter, **m}, indent=2))
+    _commit()
+
+
+@app.function(  # type: ignore[misc]
+    gpu=GPU_TYPE,
+    image=_build_image(),
+    volumes=_VOLUMES,
+    timeout=7200,
+) if modal is not None else None
+def compare(omni: str = "/outputs/koine_t5_omni/best",
+            v1: str = "/outputs/koine_t5_v1/best") -> None:
+    """Compare omni against Koine-T5 v1 on PROIEL test, scored two ways.
+
+    Scoring both models against the override-corrected gold is NOT a fair comparison, even though
+    it uses identical code and the identical split: the overrides encode the tagset convention omni
+    was trained on, so v1 is marked wrong for answering in the convention it was actually taught.
+    That penalty lands on 39.3% of NT and 85.5% of Classical test SENTENCES, which destroys the
+    exact-match comparison specifically.
+
+    This prints both views so the gap between them is visible:
+      * FULL    — all tokens, corrected gold. Flatters omni; do not quote as a model comparison.
+      * NEUTRAL — only tokens where both conventions agree (94.4% of them). This is the number
+                  that reflects tagging skill rather than answer-key alignment.
+    """
+    import json
+
+    device    = "cuda"
+    tokenizer = build_tokenizer()
+    proiel_dir = resolve_proiel_dir(allow_download=True)
+    if not proiel_dir:
+        print("PROIEL unavailable.")
+        return
+    records = build_proiel_eval(proiel_dir, "test")
+    n_tok  = sum(len(r["gold"]) for r in records)
+    n_keep = sum(sum(r["neutral"]) for r in records)
+    print(f"PROIEL test: {len(records):,} sentences, {n_tok:,} tokens "
+          f"({n_keep:,} convention-neutral = {n_keep / n_tok:.1%})\n")
+
+    out: dict[str, dict] = {}
+    for name, path in (("omni", omni), ("koine-t5-v1", v1)):
+        model = _load_adapter(tokenizer, path, device)
+        out[name] = {
+            "full":    evaluate_pos_em(model, tokenizer, records, device),
+            "neutral": evaluate_pos_em(model, tokenizer, records, device, neutral_only=True),
+        }
+        del model
+
+    for mode in ("full", "neutral"):
+        label = ("FULL (corrected gold — flatters omni)" if mode == "full"
+                 else "NEUTRAL (convention-agnostic — the fair comparison)")
+        print(f"\n{'=' * 78}\n{label}\n{'=' * 78}")
+        print(f"{'model':14} {'NT tok':>8} {'NT EM':>8} {'Cl tok':>8} {'Cl EM':>8} "
+              f"{'pool tok':>9} {'pool EM':>8}")
+        for name in out:
+            m = out[name][mode]
+            print(f"{name:14} {m['nt']['tok']:8.4f} {m['nt']['em']:8.4f} "
+                  f"{m['classical']['tok']:8.4f} {m['classical']['em']:8.4f} "
+                  f"{m['overall']['tok']:9.4f} {m['overall']['em']:8.4f}")
+        a, b = out["omni"][mode], out["koine-t5-v1"][mode]
+        print(f"{'Δ (pp)':14} {(a['nt']['tok']-b['nt']['tok'])*100:+8.1f} "
+              f"{(a['nt']['em']-b['nt']['em'])*100:+8.1f} "
+              f"{(a['classical']['tok']-b['classical']['tok'])*100:+8.1f} "
+              f"{(a['classical']['em']-b['classical']['em'])*100:+8.1f} "
+              f"{(a['overall']['tok']-b['overall']['tok'])*100:+9.1f} "
+              f"{(a['overall']['em']-b['overall']['em'])*100:+8.1f}")
+
+    Path("/outputs/koine_t5_omni/comparison_test.json").write_text(json.dumps(out, indent=2))
+    print("\nQuote the NEUTRAL row. Report the FULL row only alongside the caveat above.")
     _commit()
 
 
