@@ -96,10 +96,21 @@ pending task — treat the remaining items as documented non-goals, not a backlo
   (0.10 — no English prior in the backbone) and `translate` (never run, same reason). `normalize`
   scored 0.889 against a **0.900 copy baseline**, i.e. it learned nothing; `evaluate_tagging` now
   reports `copy`/`lift`/`edit` so a degenerate identity mapping cannot look like skill, and the
-  task was rebuilt with dense corruption. Cross-model comparison must use `compare`'s
-  convention-neutral scoring — the tagset overrides shift gold on 39.3% of NT and 85.5% of
-  Classical test *sentences*, which invalidates naive exact-match comparison against Koine-T5.
-  224 tests pass.
+  task was rebuilt with dense corruption.
+  **Headline (PROIEL test, `compare`, convention-neutral scoring):**
+
+  | model | NT tok | NT EM | Cl tok | Cl EM | pooled tok | pooled EM |
+  |---|---|---|---|---|---|---|
+  | Koine-T5-Omni | 0.9583 | 0.8418 | 0.9176 | 0.5842 | **0.9419** | **0.7450** |
+  | Koine-T5 | 0.9351 | 0.8018 | 0.8718 | 0.5536 | 0.9097 | 0.7085 |
+  | Δ (pp) | +2.3 | +4.0 | +4.6 | +3.1 | **+3.2** | **+3.6** |
+
+  Quote these. The unmasked ("full") scoring gives Δ +8.6 pooled tok / +41.4 pooled EM, but that
+  compares a model trained on the reconciled tagset against one trained on the unreconciled one:
+  the overrides shift gold on 39.3% of NT and 85.5% of Classical test *sentences*, so exact match
+  in particular measures convention alignment rather than tagging skill. Omni's own score is
+  near-identical under both (0.9442 → 0.9419 pooled tok); Koine-T5's is not (0.8585 → 0.9097),
+  which is the tell. Use `compare`, never `run_test` alone, for cross-model claims. 224 tests pass.
 - 2026-07-13 — **Koine Reader built — the published models become a usable tool** (`synoptiq/reader/` +
   `spaces/koine-reader/`). A two-engine interlinear reading assistant: **gold mode** surfaces the on-disk
   Nestle-1904 GNT Text-Fabric data (per word: lemma, full morphology, BGVB gloss, Strong's) by reference
@@ -326,7 +337,7 @@ Run: `modal run modal/app_koine_hexapla.py::train` ·
 | Phase 7   | ○ Interpretability | Not started |
 | Koine-T5  | ✓ Published | 96.6 NT / 91.7 pooled POS; HF, CC BY-NC-SA 4.0 |
 | Koine-T5-Hexapla | ✗ Shelved | Generation-MAX strategy = **negative result**: 2 GPU revs, both < Koine-T5 (rev 1 POS-collapse 0.38; rev 2 too-slow). Ceiling is the GreTa-220M backbone, not the diet. Code kept; LXX TF reader salvageable (`docs/GENERATION_PLAN.md`) |
-| Koine-T5-Omni | ✓ Trained | 7 tasks. pos 0.976 NT · morphology 0.878 · lemma 0.878 · restore 0.717. `gloss`/`translate` removed (no English prior); `normalize` failed against its copy baseline. Compare against Koine-T5 only via `compare`'s convention-neutral scoring |
+| Koine-T5-Omni | ✓ Trained | 7 tasks. PROIEL **test** (convention-neutral): pooled POS tok **0.9419** / EM **0.7450**, vs Koine-T5's 0.9097 / 0.7085 (**+3.2 / +3.6 pp**). Also morphology 0.878 · lemma 0.878 · restore 0.717. `gloss`/`translate` removed (no English prior); `normalize` failed against its copy baseline |
 | Koine Reader | ✓ Built | `synoptiq/reader/` + `spaces/koine-reader/`; gold N1904 interlinear + synoptic parallels + neural mode |
 | Paper A   | ✓ Done | KoineFormer — **Overleaf only**, not in this repo |
 | Honest paper | ✓ Done | Negative result + corpus + Koine-T5 + E2 null — **Overleaf only**, not in this repo |
