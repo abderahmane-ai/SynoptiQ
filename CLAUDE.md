@@ -4,7 +4,7 @@ A neural source-criticism framework for the Synoptic Problem. Applies transforme
 (KoineFormer, a DAPT'd Koine-Greek T5) to the Gospels of Matthew, Mark, and Luke: a curated
 parallel corpus + representation learning (Paper A, done), a general-purpose Koine model
 (Koine-T5, published), a preregistered source-criticism study (Phase 5), and an honest
-write-up (done; Overleaf-only). **Project closed 2026-07-18.**
+write-up (done; Overleaf-only). **Project closed 2026-07-19.**
 
 > **Copying-direction detection is a CLOSED NEGATIVE RESULT.** Phases 3 (direction scorer)
 > and 6 (Bayesian hypothesis comparison) were investigated at length and **removed** on
@@ -32,8 +32,9 @@ Rules:
 
 **Branch `feat/phase5-koine-t5`** — pushed to origin and merged into `main` (both at `a4d5d9a`).
 **224 tests pass; repo pristine** (zero cache/`.DS_Store`; `data/ models/ outputs/ graphify-out/`
-git-ignored). Four research deliverables (two published, one code-complete, one written up) + the
-**Koine Reader** tool (`synoptiq/reader/` + `spaces/koine-reader/`, built + locally verified).
+git-ignored). Four research deliverables (two published, one code-complete, one written up), the
+**Koine Reader** tool (`synoptiq/reader/` + `spaces/koine-reader/`), and **Koine-T5-Omni**
+(published to HF 2026-07-19) — three models, one dataset and one tool now public.
 
 **Done + published**
 - **Paper A — KoineFormer + SynoptiQ corpus** (`paper/main.tex`): GreTa DAPT'd to Koine, 96.62%
@@ -68,14 +69,15 @@ Koine-T5 · **C2** the E2 null. Every number traced to source; **all 33 referenc
 Appendix XPOS table checked against the code. Title: *Who Copied Whom? Why the Texts Cannot Tell
 Us — and What They Can*. Framing rules in `docs/PAPER_PLAN.md`; memory `honest-paper-not-nll-direction`.
 
-**Project status: CLOSED (2026-07-18).** All four research deliverables shipped, plus the Koine
+**Project status: CLOSED (2026-07-19).** All four research deliverables shipped, plus the Koine
 Reader tool. The user deliberately closed the door on new modelling work. Nothing below is a
 pending task — treat the remaining items as documented non-goals, not a backlog:
 - **Edition-swap ablation** (T8) — never run. A designed robustness check that was not needed for
   the paper's conclusions.
 - M3 gates G1/G2/G4; M5 E1 — not run (E1 underpowered at N=17, itself a prereg outcome).
-- **Koine-T5-Omni** — trained (see below). Not required by any published result; `gloss` and
-  `normalize` are documented failures rather than pending work.
+- **Koine-T5-Omni** — trained and published to HF (2026-07-19). `gloss` and `normalize` are
+  documented failures, not pending work. Cross-model claims must use `compare`'s
+  convention-neutral scoring, never `run_test` alone.
 
 **Changelog (newest first)**
 - 2026-07-18 — **Koine-T5-Omni: multitask regression diagnosed, fixed, retrained.**
@@ -111,6 +113,11 @@ pending task — treat the remaining items as documented non-goals, not a backlo
   in particular measures convention alignment rather than tagging skill. Omni's own score is
   near-identical under both (0.9442 → 0.9419 pooled tok); Koine-T5's is not (0.8585 → 0.9097),
   which is the tell. Use `compare`, never `run_test` alone, for cross-model claims. 224 tests pass.
+  **Published 2026-07-19** to [`ainouche-abderahmane/koine-t5-omni`](https://huggingface.co/ainouche-abderahmane/koine-t5-omni)
+  (CC BY-NC-SA 4.0, public), with `morph_tags.json` and a card documenting both failed tasks.
+  Checkpoint step 64000/75000. Training config tagged `omni-v1-training`. Verified live from the
+  hub: the card's usage snippet reproduces its advertised output, and morphology decodes to the
+  exact MorphGNT gold for Luke 1:46.
 - 2026-07-13 — **Koine Reader built — the published models become a usable tool** (`synoptiq/reader/` +
   `spaces/koine-reader/`). A two-engine interlinear reading assistant: **gold mode** surfaces the on-disk
   Nestle-1904 GNT Text-Fabric data (per word: lemma, full morphology, BGVB gloss, Strong's) by reference
@@ -337,7 +344,7 @@ Run: `modal run modal/app_koine_hexapla.py::train` ·
 | Phase 7   | ○ Interpretability | Not started |
 | Koine-T5  | ✓ Published | 96.6 NT / 91.7 pooled POS; HF, CC BY-NC-SA 4.0 |
 | Koine-T5-Hexapla | ✗ Shelved | Generation-MAX strategy = **negative result**: 2 GPU revs, both < Koine-T5 (rev 1 POS-collapse 0.38; rev 2 too-slow). Ceiling is the GreTa-220M backbone, not the diet. Code kept; LXX TF reader salvageable (`docs/GENERATION_PLAN.md`) |
-| Koine-T5-Omni | ✓ Trained | 7 tasks. PROIEL **test** (convention-neutral): pooled POS tok **0.9419** / EM **0.7450**, vs Koine-T5's 0.9097 / 0.7085 (**+3.2 / +3.6 pp**). Also morphology 0.878 · lemma 0.878 · restore 0.717. `gloss`/`translate` removed (no English prior); `normalize` failed against its copy baseline |
+| Koine-T5-Omni | ✓ Published | 7 tasks. PROIEL **test** (convention-neutral): pooled POS tok **0.9419** / EM **0.7450**, vs Koine-T5's 0.9097 / 0.7085 (**+3.2 / +3.6 pp**). Also morphology 0.878 · lemma 0.878 · restore 0.717. `gloss`/`translate` removed (no English prior); `normalize` failed against its copy baseline |
 | Koine Reader | ✓ Built | `synoptiq/reader/` + `spaces/koine-reader/`; gold N1904 interlinear + synoptic parallels + neural mode |
 | Paper A   | ✓ Done | KoineFormer — **Overleaf only**, not in this repo |
 | Honest paper | ✓ Done | Negative result + corpus + Koine-T5 + E2 null — **Overleaf only**, not in this repo |
@@ -456,6 +463,35 @@ Best checkpoint (step 28000), LoRA r=64 α=128, 27.1M params, 104 MB. Task prefi
 `lemma: ` / `synoptic mark_to_matt: ` / `synoptic mark_to_luke: ` / **denoise = NO prefix**. POS
 preds must be `.upper()`'d (GreTa lowercases). Card uses `pipeline_tag: text-generation`.
 
+### Model: ainouche-abderahmane/koine-t5-omni (CC BY-NC-SA 4.0) — **published 2026-07-19**
+```python
+from peft import PeftModel
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+tokenizer = AutoTokenizer.from_pretrained("bowphs/GreTa")
+tokenizer.pad_token = "<pad>"; tokenizer.eos_token = "</s>"
+tokenizer.add_special_tokens({"additional_special_tokens": [f"<extra_id_{i}>" for i in range(100)]})
+base = AutoModelForSeq2SeqLM.from_pretrained("bowphs/GreTa")
+base.config.tie_word_embeddings = False; base.config.vocab_size = len(tokenizer)
+model = PeftModel.from_pretrained(base, "ainouche-abderahmane/koine-t5-omni")
+```
+Checkpoint **step 64000 of 75000** (it plateaued — best was *not* the final step, unlike the
+regressed run). LoRA r=64 α=128 on `q k v o wi wi_0 wi_1 wo`, 104 MB. Prefixes: `pos: ` ·
+`lemma: ` · `morphology: ` · `restore: ` · `synoptic mark_to_matt: ` / `mark_to_luke: ` ·
+denoise = NO prefix. POS/morphology preds must be `.upper()`'d. **Greedy decoding** for the tagging
+and restoration tasks — repetition penalties corrupt them.
+
+**`morph_tags.json` ships with the model and is required**: morphology is emitted in a compact
+encoding (`N-----NSF-` → `N-NSF`) that keeps targets inside the 256-token context. Injective over
+all 602 attested MorphGNT tags, so lossless, but undecodable without the table.
+
+**Working: pos · lemma · morphology · restore · synoptic · denoise. NOT working: `normalize`
+(learned an identity mapping — 0.886 against a ~0.90 copy baseline) and `gloss` (0.130; no English
+prior in the backbone).** Both prefixes exist in the checkpoint and return plausible-looking
+output; the card documents them with observed examples.
+
+Reproduce from tag **`omni-v1-training`** (commit `45958b6`) — `main` does NOT reproduce it (later
+commits drop gloss and rebuild normalize). Card kept at `release/hf_cards/koine-t5-omni.md`.
+
 ### Dataset: ainouche-abderahmane/synoptiq-corpus (CC-BY-SA 4.0)
 ```python
 from datasets import load_dataset
@@ -536,5 +572,6 @@ multi-edition sensitivity (NA28/TR/Majority/WH).
 - GitHub: [abderahmane-ai/SynoptiQ](https://github.com/abderahmane-ai/SynoptiQ)
 - HF: [koineformer](https://huggingface.co/ainouche-abderahmane/koineformer) ·
   [koine-t5](https://huggingface.co/ainouche-abderahmane/koine-t5) ·
+  [koine-t5-omni](https://huggingface.co/ainouche-abderahmane/koine-t5-omni) ·
   [synoptiq-corpus](https://huggingface.co/datasets/ainouche-abderahmane/synoptiq-corpus)
 ```
