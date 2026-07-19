@@ -84,3 +84,6 @@ emails/
 # LaTeX papers — drafts kept local, deliberately NOT published to GitHub
 paper/
 paper_limit/
+
+# Staged HuggingFace upload payloads (adapters are large; card is tracked in release/hf_cards/)
+release/hf_upload/
